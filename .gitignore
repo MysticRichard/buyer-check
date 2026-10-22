@@ -23,3 +23,7 @@ Thumbs.db
 .idea/
 .vscode/
 *.swp
+# IDE 本地文件（不参与 Skill 提交）
+.arts/
+.codegraph/
+.merkle-snapshot.json
