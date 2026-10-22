@@ -31,12 +31,25 @@ function loadCase(file) {
 const runners = {
   score(testCase) {
     const rules = loadRules();
-    const result = riskScore(testCase.input.flags || [], rules, Boolean(testCase.input.unverifiable));
+    const input = testCase.input || {};
+    const useCoverage = input.covered !== undefined && input.anchors !== undefined;
+    const result = riskScore(
+      input.flags || [],
+      rules,
+      Boolean(input.unverifiable),
+      useCoverage ? input.covered : null,
+      useCoverage ? input.anchors : null,
+    );
     const expect = testCase.expect;
     const checks = [];
     if (expect.level !== undefined) checks.push(result.level === expect.level);
     if (expect.total !== undefined) checks.push(result.total === expect.total);
-    return { ok: checks.every(Boolean), actual: { level: result.level, total: result.total } };
+    if (expect.risk_score !== undefined) checks.push(result.risk_score === expect.risk_score);
+    if (expect.confidence !== undefined) checks.push(result.confidence === expect.confidence);
+    return {
+      ok: checks.every(Boolean),
+      actual: { level: result.level, total: result.total, risk_score: result.risk_score, confidence: result.confidence },
+    };
   },
 
   domain(testCase) {
