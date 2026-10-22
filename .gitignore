@@ -15,6 +15,7 @@ npm-debug.log*
 # 生成的报告（按需保留，默认不提交）
 report_*.md
 !report_template.md
+report_mohammed-mustafa-libya_20261022.md
 
 # 系统
 .DS_Store
