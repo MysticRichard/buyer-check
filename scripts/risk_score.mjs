@@ -40,9 +40,9 @@ export function maskSensitive(text = '') {
 export function coverageGrade(covered, anchors) {
   const ratio = Math.round((covered / CHECKPOINT_COUNT) * 100) / 100;
   let confidence;
-  if (anchors < 1 || ratio < 0.5) confidence = '低';
-  else if (ratio >= 0.75) confidence = '高';
-  else confidence = '中';
+  if (anchors >= 2) confidence = '高';
+  else if (anchors === 1) confidence = '中';
+  else confidence = '低';
   return { ratio, confidence };
 }
 

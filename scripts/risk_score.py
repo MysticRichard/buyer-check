@@ -53,12 +53,12 @@ def mask_sensitive(text: str) -> str:
 def coverage_grade(covered: int, anchors: int) -> tuple:
     """Return (coverage ratio, confidence) from evaluated checkpoints and anchors."""
     ratio = round(covered / CHECKPOINT_COUNT, 2)
-    if anchors < 1 or ratio < 0.5:
-        confidence = "低"
-    elif ratio >= 0.75:
+    if anchors >= 2:
         confidence = "高"
-    else:
+    elif anchors == 1:
         confidence = "中"
+    else:
+        confidence = "低"
     return ratio, confidence
 
 
