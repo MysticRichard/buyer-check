@@ -1,12 +1,29 @@
 {
   "name": "buyer-check",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "levels": {
     "low": { "label": "低", "min": 0, "max": 3, "note": "总分 0–3，且无任何权重 5 的红旗" },
     "medium": { "label": "中", "min": 4, "max": 7, "note": "总分 4–7" },
     "high": { "label": "高", "min": 8, "note": "总分 ≥8，或命中任一权重 5 的红旗" },
-    "unverifiable": { "label": "需人工核实", "note": "关键信息无法检索，无法形成可靠判断" }
+    "unverifiable": { "label": "需人工核实", "note": "关键信息无法检索（身份锚点全缺或覆盖率过低），无法形成可靠判断" }
   },
+  "score_mapping": {
+    "risk_score": "0–100，越高风险越大；等于 min(100, 红旗总分 × 7)",
+    "coverage": "信息覆盖率 = 已可评估检查点数 / 8（checkpoints）",
+    "confidence": "高（覆盖 ≥75% 且身份锚点 ≥1）/ 中（覆盖 ≥50% 且身份锚点 ≥1）/ 低（其余情形）",
+    "note": "等级仍由 levels 规则决定，风险分与覆盖率并列展示；置信度为低时等级强制「需人工核实」，分数仅供参考"
+  },
+  "checkpoints": [
+    "公司注册信息",
+    "官网域名",
+    "企业邮箱",
+    "电话归属",
+    "负面记录",
+    "制裁名单",
+    "询盘行为",
+    "联系渠道"
+  ],
+  "identity_anchors": ["公司注册信息", "官网域名", "企业邮箱"],
   "flags": [
     { "id": "RF-PAY-001", "category": "PAY", "name": "要求先付款", "weight": 5, "criteria": "让业务员先付样品快递费、验厂费、保证金、清关费，或垫付物流费" },
     { "id": "RF-ACC-001", "category": "ACC", "name": "要求更换收款账户", "weight": 5, "criteria": "邮件中途通知银行账户变更，典型商业邮件诈骗（BEC）" },
@@ -19,6 +36,11 @@
     { "id": "RF-DOM-002", "category": "DOM", "name": "域名过新", "weight": 3, "criteria": "官网域名注册不足 6 个月" },
     { "id": "RF-MAIL-002", "category": "MAIL", "name": "大买家用免费邮箱", "weight": 2, "criteria": "声称大公司或大订单，但使用 Gmail/Outlook 等免费邮箱" },
     { "id": "RF-BEH-002", "category": "BEH", "name": "不砍价、急下大单", "weight": 2, "criteria": "不问产品细节、不谈价格，急于下单或直接发付款水单" },
-    { "id": "RF-CORP-001", "category": "CORP", "name": "公司信息矛盾", "weight": 2, "criteria": "官网所在国、电话区号、注册地址、发件 IP 归属地互相对不上" }
+    { "id": "RF-CORP-001", "category": "CORP", "name": "公司信息矛盾", "weight": 2, "criteria": "官网所在国、电话区号、注册地址、发件 IP 归属地互相对不上" },
+    { "id": "RF-BEH-003", "category": "BEH", "name": "仅社交媒体/IM单一渠道", "weight": 2, "criteria": "仅能通过 WhatsApp/Telegram 等社交渠道联系，拒绝或不提供企业邮箱等正式渠道" }
+  ],
+  "context_risks": [
+    { "id": "CR-GEO-001", "name": "国家/地区风险背景", "note": "所在国存在定向制裁项目、外汇管制或支付渠道受限（不计红旗分，作背景提示列出）" },
+    { "id": "CR-NAME-001", "name": "主体唯一性风险", "note": "姓名/公司名高频常见，公开检索无法唯一定位（不计红旗分，作背景提示列出）" }
   ]
 }

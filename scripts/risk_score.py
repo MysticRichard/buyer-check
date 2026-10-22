@@ -2,8 +2,9 @@
 """Deterministic risk scoring for buyer-check (RF-* red flags).
 
 Sums the weights of the matched red flags defined in ``red_flags.json`` and
-maps the total to a risk level, so that the same input always yields the same
-level (reproducible scoring, acceptance case A6).
+maps the total to a risk level plus a 0-100 risk score, information coverage
+ratio and confidence grade, so that the same input always yields the same
+output (reproducible scoring, acceptance cases A6/A8).
 
 Also exposes a helper that redacts bank account / credential numbers used in
 reports (acceptance case A7).
@@ -11,6 +12,7 @@ reports (acceptance case A7).
 Usage:
     python risk_score.py --flags RF-PAY-001 RF-DOM-002
     python risk_score.py --flags RF-PAY-001 --unverifiable
+    python risk_score.py --flags RF-BEH-003 --anchors 0 --covered 3
     python risk_score.py --mask "4111 1111 1111 1234"
 
 Output is JSON on stdout.
@@ -23,10 +25,13 @@ import json
 import os
 import re
 import sys
+from typing import Optional
 
 RULES_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "red_flags.json")
 
-LEVEL_ORDER = {"低": 0, "中": 1, "高": 2, "需人工核实": 3}
+CHECKPOINT_COUNT = 8
+RISK_SCORE_FACTOR = 7
+RISK_SCORE_MAX = 100
 
 
 def load_rules(path: str = RULES_FILE) -> dict:
@@ -45,8 +50,26 @@ def mask_sensitive(text: str) -> str:
     return "*" * (len(digits) - 4) + "".join(digits[-4:])
 
 
-def score(flag_ids, rules: dict, unverifiable: bool = False) -> dict:
-    """Compute the risk level from matched red flag ids."""
+def coverage_grade(covered: int, anchors: int) -> tuple:
+    """Return (coverage ratio, confidence) from evaluated checkpoints and anchors."""
+    ratio = round(covered / CHECKPOINT_COUNT, 2)
+    if anchors < 1 or ratio < 0.5:
+        confidence = "低"
+    elif ratio >= 0.75:
+        confidence = "高"
+    else:
+        confidence = "中"
+    return ratio, confidence
+
+
+def score(
+    flag_ids,
+    rules: dict,
+    unverifiable: bool = False,
+    covered: Optional[int] = None,
+    anchors: Optional[int] = None,
+) -> dict:
+    """Compute risk level, 0-100 risk score, coverage and confidence."""
     index = {flag["id"]: flag for flag in rules["flags"]}
     matched, unknown, total = [], [], 0
 
@@ -59,8 +82,14 @@ def score(flag_ids, rules: dict, unverifiable: bool = False) -> dict:
         total += item["weight"]
 
     has_high_weight = any(item["weight"] == 5 for item in matched)
+    risk_score_value = min(RISK_SCORE_MAX, total * RISK_SCORE_FACTOR)
 
-    if unverifiable:
+    if covered is None or anchors is None:
+        ratio, confidence = None, None
+    else:
+        ratio, confidence = coverage_grade(covered, anchors)
+
+    if unverifiable or (confidence == "低" and covered is not None):
         level = "需人工核实"
     elif total >= 8 or has_high_weight:
         level = "高"
@@ -74,6 +103,9 @@ def score(flag_ids, rules: dict, unverifiable: bool = False) -> dict:
         "unknown": unknown,
         "total": total,
         "high_weight_hit": has_high_weight,
+        "risk_score": risk_score_value,
+        "coverage": ratio,
+        "confidence": confidence,
         "level": level,
     }
 
@@ -82,6 +114,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Deterministic buyer-check risk scoring.")
     parser.add_argument("--flags", nargs="*", default=[], help="matched red flag ids, e.g. RF-PAY-001")
     parser.add_argument("--unverifiable", action="store_true", help="key information could not be retrieved")
+    parser.add_argument("--covered", type=int, help="number of checkpoints that could be evaluated (0-8)")
+    parser.add_argument("--anchors", type=int, help="number of identity anchors available (0-3)")
     parser.add_argument("--mask", metavar="TEXT", help="redact sensitive digits in TEXT")
     parser.add_argument("--rules", default=RULES_FILE, help="path to red_flags.json")
     return parser
@@ -99,7 +133,14 @@ def main(argv=None) -> int:
         print(json.dumps({"status": "unavailable", "error": str(exc)}, ensure_ascii=False))
         return 1
 
-    result = score(args.flags, rules, args.unverifiable)
+    use_coverage = args.covered is not None and args.anchors is not None
+    result = score(
+        args.flags,
+        rules,
+        args.unverifiable,
+        args.covered if use_coverage else None,
+        args.anchors if use_coverage else None,
+    )
     result["status"] = "ok"
     print(json.dumps(result, ensure_ascii=False))
     return 0
