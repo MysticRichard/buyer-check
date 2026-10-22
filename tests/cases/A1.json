@@ -1,0 +1,14 @@
+{
+  "id": "A1",
+  "title": "含“先付验厂费”的询盘命中 RF-PAY-001",
+  "type": "score",
+  "input": {
+    "inquiry": "We are very interested in your products and plan a large order. Before we proceed, please pay the factory audit fee of USD 500 to our agent, we will refund it after the first order.",
+    "flags": ["RF-PAY-001"],
+    "note": "模型按 red_flags.md 判定命中 RF-PAY-001，并引用询盘原文作为证据"
+  },
+  "expect": {
+    "level": "高",
+    "total": 5
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "id": "A5",
+  "title": "样例报告每条事实性结论都带来源与检索时间，并含免责声明",
+  "type": "report_structure",
+  "input": {
+    "file": "examples/sample-report.md",
+    "note": "检查报告是否满足「来源：https://…」与「检索时间：YYYY-MM-DD」以及免责声明三项硬要求"
+  },
+  "expect": {
+    "hasSource": true,
+    "hasTimestamp": true,
+    "hasDisclaimer": true
+  }
+}

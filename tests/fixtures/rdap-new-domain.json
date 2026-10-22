@@ -1,0 +1,16 @@
+{
+  "objectClassName": "domain",
+  "ldhName": "NORDIC-IMPORT-2026.COM",
+  "status": ["client transfer prohibited"],
+  "events": [
+    { "eventAction": "registration", "eventDate": "2026-09-25T00:00:00Z" },
+    { "eventAction": "last changed", "eventDate": "2026-09-25T00:00:00Z" }
+  ],
+  "entities": [
+    {
+      "roles": ["registrar"],
+      "vcardArray": ["vcard", [["version", {}, "text", "4.0"], ["fn", {}, "text", "Example Registrar Inc."]]]
+    }
+  ],
+  "nameservers": [{ "ldhName": "NS1.EXAMPLE-DNS.COM" }, { "ldhName": "NS2.EXAMPLE-DNS.COM" }]
+}

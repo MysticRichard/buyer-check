@@ -1,0 +1,12 @@
+{
+  "id": "A6",
+  "title": "同一输入多次评分结果完全一致（可复现）",
+  "type": "deterministic",
+  "input": {
+    "flags": ["RF-ACC-001", "RF-DOM-002"],
+    "note": "评分只依据 red_flags.json，连续运行 3 次等级与总分必须一致"
+  },
+  "expect": {
+    "identical": true
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "id": "A3",
+  "title": "注册不足 6 个月的域名命中 RF-DOM-002 并给出注册日期",
+  "type": "whois_fixture",
+  "input": {
+    "domain": "nordic-import-2026.com",
+    "fixture": "rdap-new-domain.json",
+    "days_ago": 20,
+    "note": "fixture 的注册日期被设为当前时间前 20 天，用于离线验证「域名过新」判定"
+  },
+  "expect": {
+    "is_new_domain": true
+  }
+}

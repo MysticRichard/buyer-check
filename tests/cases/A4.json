@@ -1,0 +1,15 @@
+{
+  "id": "A4",
+  "title": "查不到任何信息的公司输出「需人工核实」，不编造",
+  "type": "score",
+  "input": {
+    "subject": "Global Trade Solutions Ltd",
+    "flags": [],
+    "unverifiable": true,
+    "note": "关键信息无法检索时等级为「需人工核实」，优先级高于分数；报告中不得编造公司信息"
+  },
+  "expect": {
+    "level": "需人工核实",
+    "total": 0
+  }
+}

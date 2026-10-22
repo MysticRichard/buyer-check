@@ -1,0 +1,24 @@
+{
+  "name": "buyer-check",
+  "version": "0.1.0",
+  "levels": {
+    "low": { "label": "低", "min": 0, "max": 3, "note": "总分 0–3，且无任何权重 5 的红旗" },
+    "medium": { "label": "中", "min": 4, "max": 7, "note": "总分 4–7" },
+    "high": { "label": "高", "min": 8, "note": "总分 ≥8，或命中任一权重 5 的红旗" },
+    "unverifiable": { "label": "需人工核实", "note": "关键信息无法检索，无法形成可靠判断" }
+  },
+  "flags": [
+    { "id": "RF-PAY-001", "category": "PAY", "name": "要求先付款", "weight": 5, "criteria": "让业务员先付样品快递费、验厂费、保证金、清关费，或垫付物流费" },
+    { "id": "RF-ACC-001", "category": "ACC", "name": "要求更换收款账户", "weight": 5, "criteria": "邮件中途通知银行账户变更，典型商业邮件诈骗（BEC）" },
+    { "id": "RF-SAN-001", "category": "SAN", "name": "命中制裁名单", "weight": 5, "criteria": "公司或人员出现在 OFAC、EU、UN 等制裁名单" },
+    { "id": "RF-PAY-002", "category": "PAY", "name": "指定对方货代或第三方收款", "weight": 4, "criteria": "要求使用其指定货代，或把款项汇给与买家无关的第三方" },
+    { "id": "RF-DOM-001", "category": "DOM", "name": "仿冒域名", "weight": 4, "criteria": "域名与知名公司仅有字符差异（l/1、o/0、加连字符、换后缀）" },
+    { "id": "RF-NEG-001", "category": "NEG", "name": "检索到负面记录", "weight": 4, "criteria": "搜到针对该公司/域名/邮箱的诈骗、欺诈、投诉记录" },
+    { "id": "RF-BEH-001", "category": "BEH", "name": "引导离开平台或点击可疑链接", "weight": 3, "criteria": "要求转 Telegram/WhatsApp、下载文件、扫码、点击陌生链接" },
+    { "id": "RF-MAIL-001", "category": "MAIL", "name": "邮件头不一致", "weight": 3, "criteria": "Reply-To 与发件人不一致，或发件域名与官网域名不一致" },
+    { "id": "RF-DOM-002", "category": "DOM", "name": "域名过新", "weight": 3, "criteria": "官网域名注册不足 6 个月" },
+    { "id": "RF-MAIL-002", "category": "MAIL", "name": "大买家用免费邮箱", "weight": 2, "criteria": "声称大公司或大订单，但使用 Gmail/Outlook 等免费邮箱" },
+    { "id": "RF-BEH-002", "category": "BEH", "name": "不砍价、急下大单", "weight": 2, "criteria": "不问产品细节、不谈价格，急于下单或直接发付款水单" },
+    { "id": "RF-CORP-001", "category": "CORP", "name": "公司信息矛盾", "weight": 2, "criteria": "官网所在国、电话区号、注册地址、发件 IP 归属地互相对不上" }
+  ]
+}

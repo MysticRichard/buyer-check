@@ -1,0 +1,14 @@
+{
+  "id": "A2",
+  "title": "字符替换域名被识别为仿冒（app1e.com）",
+  "type": "domain",
+  "input": {
+    "domain": "app1e.com",
+    "threshold": 0.5
+  },
+  "expect": {
+    "is_lookalike": true,
+    "best_type": "homoglyph",
+    "best_brand": "Apple"
+  }
+}
