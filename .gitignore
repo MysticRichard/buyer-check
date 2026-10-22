@@ -28,3 +28,4 @@ Thumbs.db
 .arts/
 .codegraph/
 .merkle-snapshot.json
+examples/e2e-verification-report.md
