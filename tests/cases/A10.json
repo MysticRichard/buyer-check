@@ -1,0 +1,17 @@
+{
+  "id": "A10",
+  "title": "分数区间与等级一致：中档 T=6 得 51 分落黄区",
+  "type": "score",
+  "input": {
+    "flags": ["RF-BEH-001", "RF-DOM-002"],
+    "covered": 7,
+    "anchors": 2,
+    "note": "T=6 无权重5 → 中档公式 35+8×2=51（黄区 30–59），与等级「中」一致；V5 已遍历 2^20 全组合"
+  },
+  "expect": {
+    "level": "中",
+    "total": 6,
+    "risk_score": 51,
+    "confidence": "高"
+  }
+}

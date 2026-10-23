@@ -1,6 +1,6 @@
 {
   "name": "buyer-check",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "levels": {
     "low": { "label": "低", "min": 0, "max": 3, "note": "总分 0–3，且无任何权重 5 的红旗" },
     "medium": { "label": "中", "min": 4, "max": 7, "note": "总分 4–7" },
@@ -53,7 +53,15 @@
     { "id": "RF-MAIL-002", "category": "MAIL", "name": "大买家用免费邮箱", "weight": 2, "criteria": "声称大公司或大订单，但使用 Gmail/Outlook 等免费邮箱" },
     { "id": "RF-BEH-002", "category": "BEH", "name": "不砍价、急下大单", "weight": 2, "criteria": "不问产品细节、不谈价格，急于下单或直接发付款水单" },
     { "id": "RF-CORP-001", "category": "CORP", "name": "公司信息矛盾", "weight": 2, "criteria": "官网所在国、电话区号、注册地址、发件 IP 归属地互相对不上" },
-    { "id": "RF-BEH-003", "category": "BEH", "name": "仅社交媒体/IM单一渠道", "weight": 2, "criteria": "仅能通过 WhatsApp/Telegram 等社交渠道联系，拒绝或不提供企业邮箱等正式渠道" }
+    { "id": "RF-BEH-003", "category": "BEH", "name": "仅社交媒体/IM单一渠道", "weight": 2, "criteria": "仅能通过 WhatsApp/Telegram 等社交渠道联系，拒绝或不提供企业邮箱等正式渠道" },
+    { "id": "RF-ID-001", "category": "ID", "name": "头像盗用", "weight": 3, "criteria": "头像反向搜索命中另一个身份（积极矛盾；查不到反搜结果不计分）" },
+    { "id": "RF-ID-002", "category": "ID", "name": "职业资料与自称不符", "weight": 3, "criteria": "LinkedIn 显示的公司或职位与对方自称不一致（积极矛盾）" },
+    { "id": "RF-ID-003", "category": "ID", "name": "账号新建且无活动", "weight": 2, "criteria": "社交账号创建不足 30 天且无实质内容（积极矛盾）" },
+    { "id": "RF-CORP-002", "category": "CORP", "name": "地址与自称不符", "weight": 2, "criteria": "地图地址为住宅或空地，而对方自称工厂或大公司（积极矛盾）" },
+    { "id": "RF-CORP-003", "category": "CORP", "name": "商家电话不一致", "weight": 2, "criteria": "地图商家资料中的电话与询盘电话不一致（积极矛盾）" },
+    { "id": "RF-CORP-004", "category": "CORP", "name": "海关记录与询盘不符", "weight": 2, "criteria": "海关数据量充足，且品类、角色或规模与询盘明显不符（积极矛盾；无海关数据国家跳过不计分）" },
+    { "id": "RF-CORP-005", "category": "CORP", "name": "号码国家与自称不符", "weight": 2, "criteria": "号码的国家区号与对方自称所在国不一致（积极矛盾；无法解析类型时不计分）" },
+    { "id": "RF-NEG-002", "category": "NEG", "name": "询盘话术指纹命中", "weight": 3, "criteria": "询盘中的特征句在至少两个独立来源被报告为骗局模板（积极矛盾）" }
   ],
   "context_risks": [
     { "id": "CR-GEO-001", "name": "国家/地区风险背景", "note": "所在国存在定向制裁项目、外汇管制或支付渠道受限（不计红旗分，作背景提示列出）" },
