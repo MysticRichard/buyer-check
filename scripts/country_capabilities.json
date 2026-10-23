@@ -1,0 +1,143 @@
+{
+  "comment": "Country capability matrix for buyer-check (D10/D11/D12). Unknown fields are null and never guessed; verification status must be filled for every entry (F5). registry entries are link+checklist only — never auto-scraped.",
+  "schema_version": "0.5.0",
+  "countries": {
+    "sg": {
+      "registry": {
+        "name": "ACRA BizFile+",
+        "url": "https://www.bizfile.gov.sg/",
+        "free_basic_search": true,
+        "paid_profile": "SGD 5.50",
+        "english": true,
+        "automation_allowed": null
+      },
+      "customs_free_company_level": null,
+      "map": "google",
+      "last_verified": "2026-10-23",
+      "verification": "secondary-source"
+    },
+    "my": {
+      "registry": {
+        "name": "SSM (Companies Commission)",
+        "url": "https://www.ssm.com.my/",
+        "search_portal": "https://mydata-ssm.com.my/",
+        "free_basic_search": false,
+        "fees": "company profile RM 10 + service fee + 8% SST",
+        "english": true,
+        "automation_allowed": false
+      },
+      "customs_free_company_level": null,
+      "map": "google",
+      "last_verified": "2026-10-23",
+      "verification": "secondary-source"
+    },
+    "th": {
+      "registry": {
+        "name": "DBD (Department of Business Development)",
+        "url": "https://www.dbd.go.th/",
+        "free_basic_search": null,
+        "fees": null,
+        "english": "partial",
+        "automation_allowed": false
+      },
+      "customs_free_company_level": null,
+      "map": "google",
+      "last_verified": "2026-10-23",
+      "verification": "secondary-source"
+    },
+    "vn": {
+      "registry": {
+        "name": "National Business Registration Portal",
+        "url": "https://dangkykinhdoanh.gov.vn/",
+        "free_basic_search": null,
+        "fees": null,
+        "english": false,
+        "automation_allowed": false
+      },
+      "customs_free_company_level": null,
+      "map": "google",
+      "last_verified": "2026-10-23",
+      "verification": "secondary-source"
+    },
+    "ae": {
+      "registry": {
+        "name": "No unified national registry; emirate-level DED + 45+ free zones",
+        "abu_dhabi_license_check": {
+          "name": "Tahaqaq",
+          "url": "https://tahaqaq.abudhabi/"
+        },
+        "free_basic_search": null,
+        "english": null,
+        "automation_allowed": false
+      },
+      "customs_free_company_level": null,
+      "map": "google",
+      "last_verified": "2026-10-23",
+      "verification": "mixed (Tahaqaq: official page; rest: secondary-source)"
+    },
+    "sa": {
+      "registry": {
+        "name": "Commercial Register (CR); data gateway Wathq",
+        "url": "https://developer.wathq.sa/",
+        "free_basic_search": false,
+        "fees": "API subscription, pricing unpublished",
+        "english": null,
+        "automation_allowed": null,
+        "user_supplied_key_optional": true
+      },
+      "customs_free_company_level": null,
+      "map": "google",
+      "last_verified": "2026-10-23",
+      "verification": "secondary-source"
+    },
+    "us": {
+      "registry": {
+        "name": "State-level Secretary of State registries (varies by state)",
+        "url": null,
+        "free_basic_search": true,
+        "fees": null,
+        "english": true,
+        "automation_allowed": null
+      },
+      "customs_free_company_level": true,
+      "customs_note": "ImportYeti / ImportGenius / PortExaminer report US bills of lading; free tier unverified",
+      "map": "google",
+      "last_verified": "2026-10-23",
+      "verification": "secondary-source"
+    },
+    "mx": {
+      "registry": {
+        "name": "SAT / SIEM",
+        "url": null,
+        "free_basic_search": null,
+        "english": false,
+        "automation_allowed": null
+      },
+      "customs_free_company_level": true,
+      "customs_note": "ImportYeti reports Mexico customs data; free tier unverified",
+      "map": "google",
+      "last_verified": "2026-10-23",
+      "verification": "secondary-source"
+    },
+    "cn": {
+      "registry": {
+        "name": "National Enterprise Credit Information Publicity System",
+        "url": "https://www.gsxt.gov.cn/",
+        "free_basic_search": true,
+        "english": false,
+        "automation_allowed": false
+      },
+      "customs_free_company_level": false,
+      "customs_note": "China customs statistics are aggregated only, no company-level free data",
+      "map": "amap",
+      "last_verified": "2026-10-23",
+      "verification": "secondary-source"
+    }
+  },
+  "not_yet_surveyed": ["qa", "om", "kw", "bh", "id", "ph", "kh"],
+  "rules": {
+    "no_coverage": "dimensions with null or absent country data are skipped, marked not-covered, and never scored (D10)",
+    "unverified": "entries marked secondary-source or unverified provide link + checklist only, never conclusions",
+    "registry": "registries are never auto-scraped; link + manual checklist only (exceptions: official API with user-supplied key, e.g. Saudi Wathq)"
+  }
+}

@@ -94,7 +94,7 @@ node scripts/privacy_scan.mjs
 
 - **新增骗局套路**：在 `red_flags.md` 追加「编号、红旗、判断标准、权重」，同步更新 `scripts/red_flags.json` 与 `CHANGELOG.md`，并在 `tests/cases/` 增加用例。
 - **新增品牌**：在 `scripts/brands.json` 的 `brands` 数组追加条目。
-- **新增数据源**：在 `data_sources.md` 登记入口与降级做法。
+- **新增数据源**：全球通用入口登记在 `data-sources/global.md`；新增国家在 `data-sources/countries/<iso2>.md` 加文件并同步 `scripts/country_capabilities.json`（新增国家只需加一个文件，不改主流程）。
 
 ## 八、路线图
 
