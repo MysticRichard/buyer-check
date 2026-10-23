@@ -10,7 +10,7 @@
  * country. Must stay output-identical with phone_check.py.
  *
  * Usage:
- *   node phone_check.mjs "+971 52 115 9918" --country AE
+ *   node phone_check.mjs "+971 52 555 0100" --country AE
  *   node phone_check.mjs "008618812345678"
  */
 

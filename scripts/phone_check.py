@@ -8,7 +8,7 @@ reported when the table carries them; otherwise "unknown" — never guessed), an
 whether the number matches the claimed country. Feeds RF-CORP-005 style checks.
 
 Usage:
-    python phone_check.py "+971 52 115 9918" --country AE
+    python phone_check.py "+971 52 555 0100" --country AE
     python phone_check.py "008618812345678"
 
 Output is JSON on stdout. Errors return status "unavailable".
