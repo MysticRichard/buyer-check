@@ -1,0 +1,43 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Acceptance cases (A1-A14)
+        run: node tests/run_cases.mjs
+
+      - name: Score consistency (V5/V6, python/node parity)
+        run: node tests/consistency.mjs
+
+      - name: Script consistency (E3, python/node parity)
+        run: node tests/consistency_scripts.mjs
+
+      - name: account_check acceptance (F2)
+        run: node tests/account_check_cases.mjs
+
+      - name: check_sources acceptance (F3)
+        run: node tests/check_sources_cases.mjs
+
+      - name: Behavior eval self-check (E4)
+        run: node tests/eval/score_eval.mjs --self
+
+      - name: Privacy scan (V2)
+        run: node scripts/privacy_scan.mjs
