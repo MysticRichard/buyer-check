@@ -65,6 +65,26 @@ const runners = {
     };
   },
 
+  invariance(testCase) {
+    // Skipped dimensions (skipped-login / not-covered) must never change the
+    // risk score or the level — they only reduce coverage (D8/D10).
+    const rules = loadRules();
+    const input = testCase.input || {};
+    const runA = riskScore(input.flags || [], rules, false, input.covered_a, input.anchors);
+    const runB = riskScore(input.flags || [], rules, false, input.covered_b, input.anchors);
+    const expect = testCase.expect || {};
+    const checks = [];
+    if (expect.risk_score_equal) checks.push(runA.risk_score === runB.risk_score);
+    if (expect.level_equal) checks.push(runA.level === runB.level);
+    return {
+      ok: checks.every(Boolean),
+      actual: {
+        a: { risk_score: runA.risk_score, level: runA.level, coverage: runA.coverage },
+        b: { risk_score: runB.risk_score, level: runB.level, coverage: runB.coverage },
+      },
+    };
+  },
+
   async whois_fixture(testCase) {
     const fixture = JSON.parse(readFileSync(join(FIXTURES_DIR, testCase.input.fixture), 'utf8'));
     const daysAgo = testCase.input.days_ago ?? 20;

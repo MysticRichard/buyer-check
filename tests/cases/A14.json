@@ -1,0 +1,16 @@
+{
+  "id": "A14",
+  "title": "国家无覆盖维度跳过：标注 not-covered，风险分与等级不变（D10）",
+  "type": "invariance",
+  "input": {
+    "flags": ["RF-MAIL-002"],
+    "covered_a": 8,
+    "covered_b": 6,
+    "anchors": 2,
+    "note": "同一输入两次评分：一次海关+注册库有覆盖（8/8），一次该国无免费公司级海关数据且注册库未核实（降至 6/8、标 not-covered）——断言风险分与等级完全一致；null 不被当作结论使用"
+  },
+  "expect": {
+    "risk_score_equal": true,
+    "level_equal": true
+  }
+}

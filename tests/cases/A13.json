@@ -1,0 +1,16 @@
+{
+  "id": "A13",
+  "title": "未登录跳过 LinkedIn/Facebook：标注 skipped-login，风险分与等级不变",
+  "type": "invariance",
+  "input": {
+    "flags": ["RF-BEH-003"],
+    "covered_a": 7,
+    "covered_b": 5,
+    "anchors": 1,
+    "note": "同一输入两次评分：一次 7 检查点全做，一次 LinkedIn/Facebook 未登录跳过（覆盖率降至 5/8、checks 标 skipped-login）——断言风险分与等级完全一致（跳过不扣分，D8）"
+  },
+  "expect": {
+    "risk_score_equal": true,
+    "level_equal": true
+  }
+}
