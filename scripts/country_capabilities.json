@@ -132,9 +132,100 @@
       "map": "amap",
       "last_verified": "2026-10-23",
       "verification": "secondary-source"
+    },
+    "qa": {
+      "registry": {
+        "name": "Ministry of Commerce and Industry (MOCI) - Commercial Registration",
+        "url": null,
+        "free_basic_search": null,
+        "english": null,
+        "automation_allowed": null
+      },
+      "customs_free_company_level": null,
+      "map": "google",
+      "last_verified": "2026-10-23",
+      "verification": "unverified"
+    },
+    "om": {
+      "registry": {
+        "name": "Ministry of Commerce, Industry and Investment Promotion - Business Registrar",
+        "url": null,
+        "free_basic_search": null,
+        "english": null,
+        "automation_allowed": null
+      },
+      "customs_free_company_level": null,
+      "map": "google",
+      "last_verified": "2026-10-23",
+      "verification": "unverified"
+    },
+    "kw": {
+      "registry": {
+        "name": "Ministry of Commerce and Industry - Commercial Registration",
+        "url": null,
+        "free_basic_search": null,
+        "english": null,
+        "automation_allowed": null
+      },
+      "customs_free_company_level": null,
+      "map": "google",
+      "last_verified": "2026-10-23",
+      "verification": "unverified"
+    },
+    "bh": {
+      "registry": {
+        "name": "Sijilat (national commercial registration portal)",
+        "url": null,
+        "free_basic_search": null,
+        "english": null,
+        "automation_allowed": null
+      },
+      "customs_free_company_level": null,
+      "map": "google",
+      "last_verified": "2026-10-23",
+      "verification": "unverified"
+    },
+    "id": {
+      "registry": {
+        "name": "AHU Online (Ministry of Law and Human Rights) / OSS business licensing",
+        "url": null,
+        "free_basic_search": null,
+        "english": false,
+        "automation_allowed": null
+      },
+      "customs_free_company_level": null,
+      "map": "google",
+      "last_verified": "2026-10-23",
+      "verification": "unverified"
+    },
+    "ph": {
+      "registry": {
+        "name": "Securities and Exchange Commission (SEC) for corporations; DTI for sole proprietorships",
+        "url": null,
+        "free_basic_search": null,
+        "english": true,
+        "automation_allowed": null
+      },
+      "customs_free_company_level": null,
+      "map": "google",
+      "last_verified": "2026-10-23",
+      "verification": "unverified"
+    },
+    "kh": {
+      "registry": {
+        "name": "Ministry of Commerce - business registration",
+        "url": null,
+        "free_basic_search": null,
+        "english": null,
+        "automation_allowed": null
+      },
+      "customs_free_company_level": null,
+      "map": "google",
+      "last_verified": "2026-10-23",
+      "verification": "unverified"
     }
   },
-  "not_yet_surveyed": ["qa", "om", "kw", "bh", "id", "ph", "kh"],
+  "not_yet_surveyed": [],
   "rules": {
     "no_coverage": "dimensions with null or absent country data are skipped, marked not-covered, and never scored (D10)",
     "unverified": "entries marked secondary-source or unverified provide link + checklist only, never conclusions",
