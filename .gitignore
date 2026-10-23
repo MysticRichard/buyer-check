@@ -12,21 +12,33 @@ npm-debug.log*
 .tmp/
 *.local.md
 
-# 生成的报告（按需保留，默认不提交）
+# 生成的报告与证据包（本地保留，不提交）
 report_*.md
 !report_template.md
-report_customer-b_20261022.md
+reports/
+*.evidence.json
 
-# 系统
-.DS_Store
-Thumbs.db
+# 敏感凭证与环境变量
+.env
+.env.*
+*.key
+*.pem
 
-# 编辑器
-.idea/
-.vscode/
-*.swp
+# 制裁名单缓存（运行时下载，不入仓库）
+.cache/
+
+# 发布产物
+buyer-check.zip
+*.zip
+
 # IDE 本地文件（不参与 Skill 提交）
 .arts/
 .codegraph/
 .merkle-snapshot.json
-examples/e2e-verification-report.md
+.idea/
+.vscode/
+*.swp
+
+# 系统
+.DS_Store
+Thumbs.db
