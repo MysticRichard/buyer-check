@@ -1,6 +1,6 @@
 {
   "name": "buyer-check",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "levels": {
     "low": { "label": "低", "min": 0, "max": 3, "note": "总分 0–3，且无任何权重 5 的红旗" },
     "medium": { "label": "中", "min": 4, "max": 7, "note": "总分 4–7" },
@@ -61,7 +61,8 @@
     { "id": "RF-CORP-003", "category": "CORP", "name": "商家电话不一致", "weight": 2, "criteria": "地图商家资料中的电话与询盘电话不一致（积极矛盾）" },
     { "id": "RF-CORP-004", "category": "CORP", "name": "海关记录与询盘不符", "weight": 2, "criteria": "海关数据量充足，且品类、角色或规模与询盘明显不符（积极矛盾；无海关数据国家跳过不计分）" },
     { "id": "RF-CORP-005", "category": "CORP", "name": "号码国家与自称不符", "weight": 2, "criteria": "号码的国家区号与对方自称所在国不一致（积极矛盾；无法解析类型时不计分）" },
-    { "id": "RF-NEG-002", "category": "NEG", "name": "询盘话术指纹命中", "weight": 3, "criteria": "询盘中的特征句在至少两个独立来源被报告为骗局模板（积极矛盾）" }
+    { "id": "RF-NEG-002", "category": "NEG", "name": "询盘话术指纹命中", "weight": 3, "criteria": "询盘中的特征句在至少两个独立来源被报告为骗局模板（积极矛盾）" },
+    { "id": "RF-ACC-002", "category": "ACC", "name": "收款账户国与买家国不一致且无合理解释", "weight": 3, "criteria": "IBAN/BIC 所在国与买家自称所在国不一致，且无集团财务集中、自贸区主体等合理解释（由 scripts/account_check 报告事实，模型衡量解释后计分）——建议权重，待负责人确认" }
   ],
   "context_risks": [
     { "id": "CR-GEO-001", "name": "国家/地区风险背景", "note": "所在国存在定向制裁项目、外汇管制或支付渠道受限（不计红旗分，作背景提示列出）" },
