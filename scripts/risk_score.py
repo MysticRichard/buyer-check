@@ -2,9 +2,10 @@
 """Deterministic risk scoring for buyer-check (RF-* red flags).
 
 Sums the weights of the matched red flags defined in ``red_flags.json`` and
-maps the total to a risk level plus a 0-100 risk score, information coverage
-ratio and confidence grade, so that the same input always yields the same
-output (reproducible scoring, acceptance cases A6/A8).
+maps the total to a risk level plus a 0-100 risk score whose bands align with
+the level (green 0-29, yellow 30-59, red 60-100), together with information
+coverage and confidence, so that the same input always yields the same output
+(reproducible scoring, acceptance cases A6/A8).
 
 Also exposes a helper that redacts bank account / credential numbers used in
 reports (acceptance case A7).
@@ -30,7 +31,7 @@ from typing import Optional
 RULES_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "red_flags.json")
 
 CHECKPOINT_COUNT = 8
-RISK_SCORE_FACTOR = 7
+
 RISK_SCORE_MAX = 100
 
 
@@ -69,7 +70,18 @@ def score(
     covered: Optional[int] = None,
     anchors: Optional[int] = None,
 ) -> dict:
-    """Compute risk level, 0-100 risk score, coverage and confidence."""
+    """Compute risk level, 0-100 risk score, coverage and confidence.
+
+    Score bands are aligned with levels (green 0-29, yellow 30-59, red 60-100):
+      low        T in 0-3 without weight-5 flags  -> 9 * T
+      medium     T in 4-7 without weight-5 flags  -> 35 + 8 * (T - 4)
+      high       T >= 8 or any weight-5 flag      -> max(70 if weight-5, min(100, 65 + 5 * max(0, T - 8)))
+      unverifiable                                   -> score computed from the same band, gray display
+
+    Level priority: a high-band result always shows "高" (even with low
+    confidence, annotated); only otherwise does a missing identity anchor
+    force "需人工核实".
+    """
     index = {flag["id"]: flag for flag in rules["flags"]}
     matched, unknown, total = [], [], 0
 
@@ -82,21 +94,31 @@ def score(
         total += item["weight"]
 
     has_high_weight = any(item["weight"] == 5 for item in matched)
-    risk_score_value = min(RISK_SCORE_MAX, total * RISK_SCORE_FACTOR)
+
+    if total >= 8 or has_high_weight:
+        band = "高"
+        risk_score_value = min(RISK_SCORE_MAX, 65 + 5 * max(0, total - 8))
+        if has_high_weight:
+            risk_score_value = max(70, risk_score_value)
+    elif total >= 4:
+        band = "中"
+        risk_score_value = 35 + 8 * (total - 4)
+    else:
+        band = "低"
+        risk_score_value = 9 * total
 
     if covered is None or anchors is None:
         ratio, confidence = None, None
     else:
         ratio, confidence = coverage_grade(covered, anchors)
 
-    if unverifiable or (confidence == "低" and covered is not None):
-        level = "需人工核实"
-    elif total >= 8 or has_high_weight:
+    anchor_missing = unverifiable or (confidence == "低" and covered is not None)
+    if band == "高":
         level = "高"
-    elif total >= 4:
-        level = "中"
+    elif anchor_missing:
+        level = "需人工核实"
     else:
-        level = "低"
+        level = band
 
     return {
         "matched": matched,
