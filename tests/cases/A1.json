@@ -1,14 +1,15 @@
 {
   "id": "A1",
-  "title": "含“先付验厂费”的询盘命中 RF-PAY-001",
+  "title": "含“先付验厂费”的询盘命中 RF-PAY-001（权重5红旗得70分落红区）",
   "type": "score",
   "input": {
     "inquiry": "We are very interested in your products and plan a large order. Before we proceed, please pay the factory audit fee of USD 500 to our agent, we will refund it after the first order.",
     "flags": ["RF-PAY-001"],
-    "note": "模型按 red_flags.md 判定命中 RF-PAY-001，并引用询盘原文作为证据"
+    "note": "模型按 red_flags.md 判定命中 RF-PAY-001，并引用询盘原文作为证据；权重5红旗分数不低于70，与等级「高」同色"
   },
   "expect": {
     "level": "高",
-    "total": 5
+    "total": 5,
+    "risk_score": 70
   }
 }

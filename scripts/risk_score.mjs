@@ -23,7 +23,7 @@ const DIR = dirname(fileURLToPath(import.meta.url));
 export const RULES_FILE = join(DIR, 'red_flags.json');
 
 export const CHECKPOINT_COUNT = 8;
-const RISK_SCORE_FACTOR = 7;
+
 const RISK_SCORE_MAX = 100;
 
 export function loadRules(path = RULES_FILE) {
@@ -63,7 +63,20 @@ export function score(flagIds = [], rules, unverifiable = false, covered = null,
   }
 
   const highWeightHit = matched.some((item) => item.weight === 5);
-  const riskScore = Math.min(RISK_SCORE_MAX, total * RISK_SCORE_FACTOR);
+
+  let band;
+  let riskScore;
+  if (total >= 8 || highWeightHit) {
+    band = '高';
+    riskScore = Math.min(RISK_SCORE_MAX, 65 + 5 * Math.max(0, total - 8));
+    if (highWeightHit) riskScore = Math.max(70, riskScore);
+  } else if (total >= 4) {
+    band = '中';
+    riskScore = 35 + 8 * (total - 4);
+  } else {
+    band = '低';
+    riskScore = 9 * total;
+  }
 
   let ratio = null;
   let confidence = null;
@@ -71,11 +84,11 @@ export function score(flagIds = [], rules, unverifiable = false, covered = null,
     ({ ratio, confidence } = coverageGrade(covered, anchors));
   }
 
+  const anchorMissing = unverifiable || (confidence === '低' && covered !== null);
   let level;
-  if (unverifiable || (confidence === '低' && covered !== null)) level = '需人工核实';
-  else if (total >= 8 || highWeightHit) level = '高';
-  else if (total >= 4) level = '中';
-  else level = '低';
+  if (band === '高') level = '高';
+  else if (anchorMissing) level = '需人工核实';
+  else level = band;
 
   return {
     matched,
