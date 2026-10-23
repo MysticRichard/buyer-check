@@ -51,7 +51,8 @@ Skill 会依次执行：采集信息 → 并行检索 → 交叉比对 → 按�
 buyer-check/
 ├── SKILL.md              # Skill 主文件：触发条件、流程、硬性约束、输出要求
 ├── red_flags.md          # 红旗清单与评分规则（唯一评分依据）
-├── data_sources.md       # 公开检索入口与查不到时的降级做法
+├── card_template.md      # 结论卡版式、证据包 Schema、追问话术规则
+├── data-sources/         # global.md 全球通用入口 + countries/<iso2>.md 国家资料 + 采集清单
 ├── report_template.md    # 报告固定结构与措辞模板
 ├── scripts/              # 域名查询、相似度、评分、隐私扫描（Python + Node 双实现）
 │   ├── whois_lookup.py / .mjs

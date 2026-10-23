@@ -2,6 +2,54 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与语义化版本。迭代方案见 [docs/iteration_plan.md](docs/iteration_plan.md)。
 
+## [0.5.0] - 2026-10-23
+
+可信度与全球化：七块交付物（E1–E8 验收全过）。
+
+### 新增：行为评测集（E4）
+
+- `tests/eval/inquiries.jsonl`：42 条合成询盘语料（11 条正常买家反例；每条文本可判红旗 ≥1 正例；全合成、无真实客户数据；英文为主含中文）。
+- `tests/eval/score_eval.mjs`：对照期望输出每条红旗召回率/精确率/误报率与正常条目误报率；`--self` 自检模式（回归保护）。
+- `tests/eval/predictions.example.json`：预测文件格式示例。
+
+### 新增：证据包与双模式输出（D4/D5/D6）
+
+- `card_template.md`：结论卡版式（首行颜色+等级+分数、10 格分数条、灰▒、≤5 风险点、≤3 话术英文+中文）、证据包 JSON Schema（checks[].result 含 not-covered/skipped-login；anchors.closure 四档）、追问话术规则与话术库（D6/D13：委婉含蓄、询盘期不索要执照）。
+- SKILL.md 输出改为双模式：结论卡默认只显示不落盘；完整报告按需写入 `reports/`；同一证据包渲染保证一致性（E1）；支持增量复核。
+
+### 新增：三个全球通用脚本（E3，Python + Node 双实现，tests/consistency_scripts.mjs 保证输出一致）
+
+- `phone_check.py/.mjs` + `phone_check_data.json`：本地 ITU E.164 区号表解析国别/有效性/线路类型/与自称国一致（零依赖，未知的线路类型输出 unknown 不猜测）。
+- `email_header_check.py/.mjs`：原始邮件头解析（From/Reply-To/Return-Path、Received 链、SPF/DKIM/DMARC、发送时区、来源 IP 隐藏时填 null），对应 RF-MAIL-001。
+- `sanctions_check.py/.mjs` + `update_sanctions.py/.mjs`：官方名单本地匹配（OFAC SDN 直链可下载至 .cache/；EU/UN/OFSI 标 not_configured 不猜测）；同名一律 requires_manual_review。
+
+### 新增：核实体系落地与采集清单（D7/D8/D9）
+
+- SKILL.md 工作流程改写：身份链四类节点与闭合度四档 → 置信度；能力探测三档（one-shot/semi-auto/manual）；登录规则与 LinkedIn 私密模式提醒；「名称+电话」起手流程 5 步（含回流与补一条信息）；防伪造规则（新注册官网不算验证）。
+- `data-sources/collection_checklists.md`：WhatsApp 商业资料/Facebook 透明度/LinkedIn/地图/海关五份「看什么、回传什么」清单。
+
+### 新增：新红旗 8 条（13→20，全部积极矛盾才计分，D7）
+
+- RF-ID-001 头像盗用(3)、RF-ID-002 职业资料与自称不符(3)、RF-ID-003 账号新建且无活动(2)、RF-CORP-002 地址与自称不符(2)、RF-CORP-003 商家电话不一致(2)、RF-CORP-004 海关记录与询盘不符(2)、RF-CORP-005 号码国家与自称不符(2)、RF-NEG-002 询盘话术指纹命中(3)；ID 类别登记；评测集同步补 8 条正例语料。
+
+### 新增：国家适配层与试点国家（D10/D11/D12）
+
+- `scripts/country_capabilities.json`：国家能力矩阵（注册库入口/免费情况/英文/自动化许可/海关/地图/last_verified/verification；未知填 null 不猜测；含 us/mx/cn 常用国）。
+- `data_sources.md` 拆分为 `data-sources/global.md`（全球通用入口）+ `data-sources/countries/<iso2>.md`（sg/my/th/vn/ae/sa 六国试点，均标注 secondary-source 待官方核实）；运行时先查矩阵再决定维度，无覆盖跳过、标注 not-covered、不扣分。
+
+### 新增：低成本通用核实手段（D9）
+
+- 图片反搜（链接+清单，业务员回传）、询盘话术指纹（特征句加引号联网检索）、证书透明度（whois_lookup 可选字段，不可用 null）、官网页脚税号/登记号（记入证据包供订单前核验）。
+
+### 验收用例
+
+- A10 中档分数区间与等级一致；A11 名称+电话起手 → 需人工核实（预期）；A12 权重5+锚点全缺 → 仍「高」附低置信度标注；A13 未登录跳过不扣分（invariance）；A14 国家无覆盖跳过不扣分（invariance）。runner 新增 invariance 类型。
+- 全量：A1–A14（14/14）+ V5 全组合区间不变式 + V6 评分双语言一致 + E3 三脚本双语言一致 + E4 评测集自检 + privacy_scan 全绿。
+
+### 文档
+
+- README/SKILL.md/development.md 同步 v0.5.0 结构与 20 条红旗口径；SKILL.md frontmatter version 0.5.0。
+
 ## [0.4.1] - 2026-10-23
 
 卫生版：隐私清理、分数口径修正、文档同步（不新增功能）。
