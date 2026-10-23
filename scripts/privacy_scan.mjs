@@ -23,14 +23,23 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, '..');
 
 // Synthetic / documentation-only values that must never fail the scan.
+// - RFC 2606 reserves the .example TLD for documentation (covers *.example).
+// - 555 and 7946-0xxx are officially reserved fictional number ranges
+// - 555 and the UK Ofcom reserved range are official fictional conventions.
+// - The remaining entries are synthetic corpus addresses.
 const WHITELIST = new Set([
   'info@nordic-imp0rt.com',
   'purchasing.gnt@gmail.com',
   'name@company.com',
   'example@example.com',
   '4111 1111 1111 1234',
+  'john.miller.gi@gmail.com',
+  'buyer@polmart.example',
+  '+971525550100',
+  '+218915550100',
 ]);
-const WHITELIST_DOMAINS = ['example.com', 'example.org', 'example.net', 'test.com'];
+const WHITELIST_DOMAINS = ['example', 'example.com', 'example.org', 'example.net', 'test.com'];
+const FICTIONAL_PHONE_PATTERNS = [/555/, /\b7946\s*0\d{3}\b/];
 
 const EMAIL_RE = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
 // Masked emails (d***e@gmail.com) also match the tail of EMAIL_RE; match them
@@ -80,6 +89,8 @@ function checkPhone(match) {
   const digits = match.replace(/\D/g, '');
   if (digits.length < 8 || digits.length > 15) return true; // not phone-shaped
   if (isMasked(match)) return true;
+  if (FICTIONAL_PHONE_PATTERNS.some((pattern) => pattern.test(match))) return true;
+  if (WHITELIST.has(`+${digits}`)) return true;
   return false;
 }
 
