@@ -3,7 +3,7 @@ name: buyer-check
 description: 外贸客户背景调查与诈骗风险筛查（BuyerCheck）。当用户提到客户背调、询盘真伪、外贸客户风险、判断客户是不是骗子、核实某公司/邮箱/域名/收款账户可信度，或收到陌生询盘想评估风险、交易中途对方要求更换收款账户或要求先付款时使用。基于公开信息做多维度风险信号筛查与证据整理，输出带来源链接与检索时间的固定结构风险报告，不判定对方是不是骗子。Use for foreign-trade buyer background checks and scam-risk screening.
 license: MIT
 metadata:
-  version: 0.5.0
+  version: 0.6.0
   tags: [foreign-trade, buyer-check, due-diligence, fraud-screening, scam-detection, osint, risk-assessment]
 ---
 
@@ -108,7 +108,20 @@ metadata:
 | 4. 询盘与交易行为红旗 | 按 `red_flags.md`（20 条）逐条判断，引用原文依据句；话术指纹检索 | 用户提供 + 联网检索 | V1/v0.5.0 |
 | 5. 负面信息与制裁 | 公司名/域名/邮箱/号码 + scam/fraud；黑名单、论坛、ScamAdviser；`sanctions_check` 本地名单匹配 | 网页检索、制裁名单缓存 | v0.5.0 |
 | 6. 身份链与地图/海关（积极矛盾） | 头像反搜、LinkedIn 比对、账号新旧、地图地址/电话、海关品类（按国家能力矩阵） | 链接 + 采集清单，业务员回传 | v0.5.0 |
-| 7. 订单前复核与材料核验 | 执照编号反查注册库；收款主体一致性；PDF 元数据/水单提示 | 用户订单前提供的材料 | v0.6.0 |
+| 7. 订单前复核与收款安全（二阶段，进入 PO/收款环节触发） | 见下方「订单前复核流程」 | 用户订单前提供的材料 + `scripts/account_check` | v0.6.0 |
+
+### 订单前复核流程（v0.6.0，F1）
+
+触发：客户进入 PO 确认或提供收款账户时（此时才索要执照——询盘期不索要）。
+
+1. **执照核验**：按对方国家查 `scripts/country_capabilities.json` → 注册库「链接 + 检索清单」（不自动抓取；官方 API 且用户自带密钥的除外，如沙特 Wathq）。核对执照编号、公司名、状态与询盘主体一致。
+2. **官网税号与执照一致性**：把官网页脚公示的增值税号/商业登记号（询盘期已记入证据包）与执照编号比对——不一致列为积极矛盾。
+3. **收款账户校验**：`scripts/account_check`（IBAN mod-97 + BIC 国别 + 与买家国比对，账号脱敏不落盘）。mismatches 中的 account_vs_claimed 需按 RF-ACC-002 细则追问合理解释（集团财务/自贸区主体 + 授权文件）后再计分。
+4. **收款安全建议输出**（按等级）：
+   - **优先推荐平台担保订单**（信保/阿里一达通等）、**信用证（L/C）** 或**第三方托管（escrow）**；
+   - 账户变更必须电话+视频双确认（RF-ACC-001 话术）；
+   - 不接受第三方收款无授权证明（RF-PAY-002）；
+   - 材料真伪辅助：证书编号反查、PDF 元数据异常、付款水单仅作提示（不作结论）。
 
 **设计原则**：每个模块独立运行，查不到只标「未查到 / 未覆盖 / 未登录跳过」，不阻塞整份报告；每项发现带来源链接 + 检索时间。**低成本通用核实手段**：图片反搜（业务员）、询盘话术指纹（模型联网，特征句加引号检索）、证书透明度（whois_lookup 可选字段，不可用填 null）、官网页脚税号/登记号（记入证据包供订单前核验）。
 
@@ -188,6 +201,8 @@ metadata:
 | `scripts/email_header_check.py/.mjs` | 原始邮件头解析：From/Reply-To/Return-Path、Received 链、SPF/DKIM/DMARC、发送时区、来源 IP（对应 RF-MAIL-001） |
 | `scripts/sanctions_check.py/.mjs` | 官方制裁名单本地匹配（OFAC SDN 已配置；EU/UN/OFSI 待核实）——同名需人工排除 |
 | `scripts/update_sanctions.py/.mjs` | 下载官方名单到 `.cache/sanctions/`（不入仓库） |
+| `scripts/account_check.py/.mjs` | 订单前收款账户校验：IBAN mod-97（自实现不引库）+ BIC 国别 + 与买家国比对；账号脱敏不落盘（对应 RF-ACC-002） |
+| `scripts/check_sources.mjs` | 数据源保鲜：低频检测各入口可达性与重定向，输出失效清单 |
 | `scripts/risk_score.py/.mjs` | 确定性评分与脱敏 |
 | `scripts/privacy_scan.mjs` | 提交前隐私扫描 |
 
