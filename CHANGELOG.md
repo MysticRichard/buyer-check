@@ -2,6 +2,39 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与语义化版本。迭代方案见 [docs/iteration_plan.md](docs/iteration_plan.md)。
 
+## [0.6.0] - 2026-10-23
+
+订单前复核与可持续运营（F1–F5 验收全过）。
+
+### 新增：收款账户校验 account_check（F2）
+
+- `scripts/account_check.py/.mjs`：IBAN 结构与 **mod-97 校验位自实现**（ISO 13616 公开算法，不引入第三方库）+ 常用国外贸国 IBAN 长度表（未知国家长度输出 unknown 不猜测）+ BIC/SWIFT 解析（银行代码/国家/地点/分支）+ 三重国别链比对（IBAN 国 vs BIC 国 vs 买家自称国）。
+- **账号永不存储、输出只含脱敏形式**（前 4 + 后 4）；`tests/account_check_cases.mjs` 覆盖经典合法样例（GB82）、篡改校验位、错误长度、运行时构造合法 AE 样例、BIC/IBAN 国不一致、账户国 vs 自称国不一致（RF-ACC-002 输入），全部 Py/Node 一致。
+
+### 新增：RF-ACC-002 红旗（21 条）
+
+- 收款账户国与买家国不一致且无合理解释（建议权重 3，**待负责人确认**）：account_check 报告事实，模型衡量合理解释（集团财务集中/自贸区主体 + 授权文件）后才计分；无解释或含糊其辞按无解释处理。评测集同步补 1 正例 2 反例（含可验证合理解释的反例）。
+
+### 新增：订单前复核流程（F1，SKILL.md 模块 7 落地）
+
+- 四步：执照核验（按国家能力矩阵给链接+清单，不自动抓取）→ 官网税号/登记号与执照一致性比对 → `account_check` 收款账户校验 → 收款安全建议（**优先平台担保订单 / L/C / 第三方托管**；账户变更双确认；第三方收款需授权证明）。report_template 收款建议同步更新。
+
+### 新增：数据源保鲜 check_sources（F3）
+
+- `scripts/check_sources.mjs`：从国家能力矩阵与 data-sources/*.md 收集 URL，串行 + 延迟做**可达性探测**（单次请求、不读正文、遵守 robots.txt 保守精神；429 容忍）；非 2xx/3xx 列入失效清单。`tests/check_sources_cases.mjs` 用本地临时 HTTP 服务验证 200/404/拒连三分支与收集器（注：跨进程回环 fetch 在沙箱环境被拦截，测试采用同进程 probe 调用）。
+
+### 新增：CI（F4）
+
+- `.github/workflows/ci.yml`：push/PR 上自动运行全部用例（A1–A14、V5/V6、E3、F2、F3、E4、privacy_scan），Python 3.12 + Node 20 双环境。
+
+### 新增：国家扩展至 16 国（F5）
+
+- 卡塔尔/阿曼/科威特/巴林/印尼/菲律宾/柬埔寨 7 国以**骨架条目**加入（机构名 + URL null + verification: unverified——本轮检索未定位官方入口，按「未知不猜测」纪律处理）；`data-sources/countries/<iso2>.md` 同步建页。矩阵 16/16 条目全部标注核实来源（F5 通过）；not_yet_surveyed 清空。
+
+### 文档
+
+- SKILL.md frontmatter version 0.6.0、脚本表补 account_check/check_sources；red_flags.md 21 条；README/development.md 同步。
+
 ## [0.5.0] - 2026-10-23
 
 可信度与全球化：七块交付物（E1–E8 验收全过）。
