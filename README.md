@@ -43,7 +43,7 @@ Skill 会依次执行：采集信息 → 并行检索 → 交叉比对 → 按�
 
 等级优先级：已达高分档时永远显示「高」（置信度低时附加标注）；其余情况身份锚点全缺才显示「需人工核实」。
 
-完整红旗清单（13 条）见 [`red_flags.md`](red_flags.md)。
+完整红旗清单（21 条）见 [`red_flags.md`](red_flags.md)。
 
 ## 目录结构
 
@@ -59,9 +59,14 @@ buyer-check/
 │   ├── domain_similarity.py / .mjs
 │   ├── risk_score.py / .mjs
 │   ├── privacy_scan.mjs  # 提交前隐私扫描
+│   ├── account_check.py / .mjs  # 订单前 IBAN/BIC 校验（mod-97 自实现）
+│   ├── check_sources.mjs # 数据源可达性保鲜
+│   ├── phone_check.py / .mjs + phone_check_data.json
+│   ├── email_header_check.py / .mjs
+│   ├── sanctions_check.py / .mjs + update_sanctions
 │   ├── red_flags.json    # 机器可读红旗表
 │   └── brands.json       # 知名公司域名清单
-├── tests/                # 验收用例 A1–A9、运行器、一致性测试
+├── tests/                # 验收用例 A1–A14、一致性测试、行为评测集
 ├── examples/             # 脱敏样例报告
 ├── reports/              # 生成的报告（本地保留，不入仓库）
 └── docs/                 # development.md 开发文档、iteration_plan.md 迭代方案
@@ -87,6 +92,8 @@ buyer-check/
 node tests/run_cases.mjs        # 验收用例 A1–A9
 node tests/consistency.mjs      # V5 分数区间遍历 + V6 Python/Node 一致性
 node scripts/privacy_scan.mjs   # 提交前隐私扫描
+node tests/account_check_cases.mjs  # F2 收款账户校验
+node tests/check_sources_cases.mjs  # F3 数据源保鲜
 ```
 
 ## 脚本用法
