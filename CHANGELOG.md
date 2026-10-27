@@ -28,6 +28,14 @@
 - 验收 G1–G6：`tests/ip_check_cases.mjs` + `tests/fixtures/ip-rdap-sample.json`；Python/Node 一致性加入 `tests/consistency_scripts.mjs`；CI 增加对应步骤。
 - `SKILL.md` 接入邮件头步骤与证据包可选 `ip_origin`；`red_flags.md` 的 `RF-CORP-001` 细则补充「至少 2 个独立字段」与排除条件；`card_template.md` 增加字段说明。
 
+### 增强：phone_check 可选号码类型/运营商/时区（功能 B）
+
+- 可选依赖 `phonenumbers`（Python，Apache-2.0，9.0.41）与 `libphonenumber-js`（Node，MIT，1.13.15），**不列为必需依赖**；未安装时输出与 v0.6.0 完全一致。
+- 安装后增加 `number_type`、`carrier`、`carrier_note`、`timezones`、`enriched_by`；运营商标注「携号转网后可能不同，仅供参考」。
+- 虚拟号（VOIP）、高费率、免费号码只作线索，**不新增红旗、不改评分与等级**；`RF-CORP-005` 不变。
+- 修正基础解析：输入不带 `+` 或 `00` 时不再按 ITU 表猜测国家，统一返回「international prefix required；不猜国家」（H3）。
+- 验收 H1–H5：`tests/phone_check_enrich_cases.mjs`；Py/Node 一致性只比较基础字段，增强字段按文档允许存在差异；CI 增加步骤。
+
 ## [0.6.0] - 2026-10-23
 
 订单前复核与可持续运营（F1–F5 验收全过）。

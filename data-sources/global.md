@@ -52,6 +52,7 @@
 | 检查项 | 做法 |
 | --- | --- |
 | 号码国别/类型/与自称国一致性 | `scripts/phone_check.py/.mjs`（本地 ITU 区号表） |
+| 号码类型/运营商/时区（可选增强） | 自装 `phonenumbers`（Python，Apache-2.0，9.0.41）或 `libphonenumber-js`（Node，MIT，1.13.15）时由 phone_check 输出；许可证 2026-10-27 核对，未装时回退本地表且输出不变 |
 | 号码负面检索 | 号码多格式 + scam/fraud |
 | 号码与名称强关联 | 号码与公司名出现在同一来源（官网联系页/地图商家/B2B 平台）才算 |
 

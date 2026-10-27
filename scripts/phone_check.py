@@ -66,6 +66,57 @@ def line_type(entry: Optional[dict], national: str) -> str:
     return "fixed_or_unknown"
 
 
+def _phonenumbers_version() -> str:
+    try:
+        import importlib.metadata as metadata
+
+        return metadata.version("phonenumbers")
+    except Exception:
+        return "unknown"
+
+
+def apply_enrichment(result: dict, had_plus: bool, used_00: bool) -> dict:
+    """Add optional fields only when phonenumbers is installed and input is E.164."""
+    if not (had_plus or used_00) or not result.get("normalized"):
+        return result
+    try:
+        import phonenumbers
+        from phonenumbers import PhoneNumberType, carrier, timezone
+    except Exception:
+        return result
+    try:
+        parsed = phonenumbers.parse(result["normalized"], None)
+        if not phonenumbers.is_possible_number(parsed):
+            return result
+        type_map = {
+            PhoneNumberType.MOBILE: "MOBILE",
+            PhoneNumberType.FIXED_LINE: "FIXED_LINE",
+            PhoneNumberType.FIXED_LINE_OR_MOBILE: "FIXED_LINE_OR_MOBILE",
+            PhoneNumberType.TOLL_FREE: "TOLL_FREE",
+            PhoneNumberType.PREMIUM_RATE: "PREMIUM_RATE",
+            PhoneNumberType.SHARED_COST: "SHARED_COST",
+            PhoneNumberType.VOIP: "VOIP",
+            PhoneNumberType.PERSONAL_NUMBER: "PERSONAL_NUMBER",
+            PhoneNumberType.PAGER: "PAGER",
+            PhoneNumberType.UAN: "UAN",
+            PhoneNumberType.VOICEMAIL: "VOICEMAIL",
+            PhoneNumberType.UNKNOWN: "UNKNOWN",
+        }
+        carrier_name = carrier.name_for_number(parsed, "en") or None
+        result["number_type"] = type_map.get(phonenumbers.number_type(parsed), "UNKNOWN")
+        result["carrier"] = carrier_name
+        result["carrier_note"] = (
+            "首次分配运营商，携号转网后可能与现运营商不同，仅供参考"
+            if carrier_name
+            else None
+        )
+        result["timezones"] = list(timezone.time_zones_for_number(parsed))
+        result["enriched_by"] = "phonenumbers " + _phonenumbers_version()
+    except Exception:
+        return result
+    return result
+
+
 def analyse(raw: str, claimed: Optional[str], data: dict) -> dict:
     digits, used_00, had_plus = normalize(raw)
     result = {
@@ -84,6 +135,10 @@ def analyse(raw: str, claimed: Optional[str], data: dict) -> dict:
 
     if not digits:
         result["invalid_reason"] = "no digits found"
+        return result
+
+    if not had_plus and not used_00:
+        result["invalid_reason"] = "international prefix required (+ or 00); country not guessed"
         return result
 
     entry = match_country(digits, data)
@@ -123,6 +178,7 @@ def analyse(raw: str, claimed: Optional[str], data: dict) -> dict:
             result["matches_claimed_country"] = result["claimed_country"] in NANP_ISO2
         else:
             result["matches_claimed_country"] = result["claimed_country"] == entry["iso2"]
+    apply_enrichment(result, had_plus, used_00)
     return result
 
 

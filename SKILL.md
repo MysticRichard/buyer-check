@@ -97,7 +97,7 @@ metadata:
 
 ### 名称 + 电话的起手流程（首个询盘常只有这两项）
 
-1. **电话号码**：`scripts/phone_check` 解析国家区号、有效性、线路类型，与自称国家比对（纯本地计算）。
+1. **电话号码**：`scripts/phone_check` 解析国家区号、有效性、线路类型，与自称国家比对（纯本地计算）。若环境自行安装了 `phonenumbers`（Python）或 `libphonenumber-js`（Node），会额外输出 `number_type`、`carrier`、`carrier_note`、`timezones`、`enriched_by`；这些是**可选依赖，不写入必要安装步骤**，未安装时输出与 v0.6.0 完全一致。号码类型（VOIP / 高费率）与运营商只作线索，**不新增红旗、不计分**（D7）；输入不带 `+` 或 `00` 时仍不猜国家。
 2. **社媒资料**：按 `collection_checklists.md` 的 WhatsApp/Facebook 清单采集（商业资料/头像/简介/页面创建时间/管理员国家）。
 3. **公开检索**：号码多格式 + scam/fraud；号码是否出现在 B2B 平台、地图商家页、官网联系页；公司名查名录或 LinkedIn 公开摘要。**号码与名称出现在同一来源，才算强关联。**
 4. **回流**：一旦查到官网或邮箱域名，现有的域名与邮箱检查全部启用。

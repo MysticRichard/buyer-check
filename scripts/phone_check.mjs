@@ -15,11 +15,13 @@
  */
 
 import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const DIR = dirname(fileURLToPath(import.meta.url));
 const DATA_FILE = join(DIR, 'phone_check_data.json');
+const require = createRequire(import.meta.url);
 
 const NANP_ISO2 = ['US', 'CA'];
 
@@ -58,8 +60,40 @@ export function lineType(entry, national) {
   return 'fixed_or_unknown';
 }
 
+function loadEnricher() {
+  try {
+    const lib = require('libphonenumber-js');
+    let version = 'unknown';
+    try {
+      version = require('libphonenumber-js/package.json').version;
+    } catch {
+      // package.json export not exposed; version stays unknown
+    }
+    return { lib, version };
+  } catch {
+    return null;
+  }
+}
+
+function enrichResult(result, hadPlus, used00) {
+  if (!(hadPlus || used00) || !result.normalized) return;
+  const enricher = loadEnricher();
+  if (!enricher) return;
+  try {
+    const parsed = enricher.lib.parsePhoneNumberFromString(result.normalized);
+    if (!parsed || !parsed.isPossible()) return;
+    result.number_type = parsed.getType() || 'UNKNOWN';
+    result.carrier = null;
+    result.carrier_note = null;
+    result.timezones = [];
+    result.enriched_by = `libphonenumber-js ${enricher.version}`;
+  } catch {
+    // optional enrichment failed; keep the base output unchanged
+  }
+}
+
 export function analyse(raw, claimed, data) {
-  const { digits, used00 } = normalize(raw);
+  const { digits, used00, hadPlus } = normalize(raw);
   const result = {
     input: raw,
     normalized: null,
@@ -76,6 +110,11 @@ export function analyse(raw, claimed, data) {
 
   if (!digits) {
     result.invalid_reason = 'no digits found';
+    return result;
+  }
+
+  if (!hadPlus && !used00) {
+    result.invalid_reason = 'international prefix required (+ or 00); country not guessed';
     return result;
   }
 
@@ -120,6 +159,7 @@ export function analyse(raw, claimed, data) {
       result.matches_claimed_country = result.claimed_country === entry.iso2;
     }
   }
+  enrichResult(result, hadPlus, used00);
   return result;
 }
 

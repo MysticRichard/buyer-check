@@ -63,9 +63,10 @@ function runScript(python, base, args) {
 
 let failures = 0;
 
-function compare(label, py, js) {
+function compare(label, py, js, onlyKeys = null) {
   const keys = new Set([...Object.keys(py), ...Object.keys(js)]);
   for (const key of keys) {
+    if (onlyKeys && !onlyKeys.includes(key)) continue;
     if (JSON.stringify(py[key]) !== JSON.stringify(js[key])) {
       failures += 1;
       console.log(`✗ ${label} key=${key}: python=${JSON.stringify(py[key])} node=${JSON.stringify(js[key])}`);
@@ -118,10 +119,18 @@ function main() {
     process.exit(0);
   }
 
-  let checked = 0;
+  // Only the base fields are compared: optional enrichment (phonenumbers vs
+// libphonenumber-js) can differ by library and data version by design.
+const PHONE_BASE_KEYS = [
+  'status', 'input', 'normalized', 'valid', 'invalid_reason', 'country_code',
+  'country', 'country_name', 'line_type', 'claimed_country',
+  'matches_claimed_country', 'format_hint',
+];
+
+let checked = 0;
   for (const [number, extra] of phoneCases) {
     const [py, js] = runScript(python, 'phone_check', [number, ...extra]);
-    compare(`phone_check ${number}`, py, js);
+    compare(`phone_check ${number}`, py, js, PHONE_BASE_KEYS);
     checked += 1;
   }
   console.log(`✓ phone_check: ${checked}/${phoneCases.length} cases identical`);
