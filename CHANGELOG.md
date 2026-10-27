@@ -43,6 +43,13 @@
 - `SKILL.md` 输出章节与工作流程同步强制覆盖行；`examples/sample-report.md` 增加覆盖矩阵示例。
 - `tests/consistency.mjs` 增加模板回归校验：缺少覆盖行/未覆盖项时 CI 直接失败。
 
+### 修复：地图/海关/社媒改为实际查询，不再直接标未覆盖
+
+- `data-sources/global.md` 新增第六节「地图/海关/社媒的实际查询通道」：Google Maps embed / OpenStreetMap Nominatim、ImportGenius 公共搜索、Brave/Bing `site:` 搜索；同名不同公司（名称/电话/网站任一不同）不得合并。
+- `SKILL.md` 要求先执行上述通道，只有执行后仍无结果才标 `not-covered`，并在卡片写实际结果（如「按电话搜索返回找不到」）。
+- `card_template.md` / `report_template.md` 增加 `no-public-record`、`login-wall`、`no-company-level-data` 原因标签，禁止只写 `not-covered`。
+- `tests/consistency.mjs` 增加对应回归校验。
+
 ## [0.6.0] - 2026-10-23
 
 订单前复核与可持续运营（F1–F5 验收全过）。

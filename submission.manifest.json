@@ -202,6 +202,10 @@
       {
         "from": "| `scripts/build_submission.mjs` | 精简提交包构建：按 `submission.manifest.json` 合并数据源与用例，校验文件数、体积与相对路径 |",
         "to": "| （仓库内）build_submission | 精简提交包构建：按包清单合并数据源与用例，校验文件数、体积与相对路径（精简包不含） |"
+      },
+      {
+        "from": "`data-sources/global.md`",
+        "to": "`data_sources.md`"
       }
     ],
     "README.md": [

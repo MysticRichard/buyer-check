@@ -56,7 +56,17 @@
 | 号码负面检索 | 号码多格式 + scam/fraud |
 | 号码与名称强关联 | 号码与公司名出现在同一来源（官网联系页/地图商家/B2B 平台）才算 |
 
-## 六、降级做法（查不到时）
+## 六、地图 / 海关 / 社媒的实际查询通道（v0.7.0 起）
+
+| 维度 | 先查（免费、可自动） | 查不到时的写法 | 禁止 |
+| --- | --- | --- | --- |
+| 地图 | Google Maps embed：`https://maps.google.com/maps?q=<公司名>&output=embed`（解析 POI）；OpenStreetMap Nominatim：`https://nominatim.openstreetmap.org/search?q=<公司名>&format=json` | 分别用公司名、电话、域名各搜一次；写明「Google Maps 按电话 +90… 返回找不到；按域名仅返回无关公司」 | 把同名不同公司（名称/电话/网站任一不同）当客户 |
+| 海关 | ImportGenius 公共搜索：`https://www.importgenius.com/search?q=<公司名>`（美国进口库，免费摘要）；Trademo/ExportGenius 需订阅 | 写明「ImportGenius 美国库无记录；土耳其无公开公司级海关数据」 | 用国家宏观进出口统计冒充公司记录；把「无记录」写成「已确认无贸易」 |
+| 社媒 | Brave/Bing：`site:linkedin.com "<公司名>"`、`site:facebook.com ...`、`site:instagram.com ...`；公共页能读则读 | 写明「无公开索引」或「登录墙，需人工登录核对」并给链接 | 把同名别家账号当客户；绕过登录 |
+
+**判定纪律**：先执行上述通道，只有通道都执行且无结果才标 `not-covered`；未覆盖原因必须写**实际查询结果**（不是一句「未覆盖」）。同名不同公司不得合并。
+
+## 七、降级做法（查不到时）
 
 - **域名无法解析**：whois CLI → Wayback；仍无 → 「未查到，域名无法解析」。
 - **公司名搜不到痕迹**：以身份锚点全缺为准判「需人工核实」，不得编造；询盘期不索要执照，用委婉话术只要官网/企业邮箱。

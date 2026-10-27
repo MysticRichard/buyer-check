@@ -63,7 +63,7 @@
 - 社媒 `social`（LinkedIn / Facebook / WhatsApp）为附加项，不计入 8 个分母，但必须出现在 `coverage.uncovered` 与结论卡覆盖行。
 - `coverage.uncovered` 为**必填数组**，列出所有未执行/未覆盖项，格式 `"<checkpoint>:<result>:<reason>"`：
   - `result`：`not-covered`（该国/该维度无覆盖）/ `unverifiable`（工具或检索受限）/ `skipped-login`（未登录跳过）。
-  - `reason`：`needs-browser`（地图需浏览器/JS）/ `no-matrix`（该国不在能力矩阵）/ `no-free-data`（无免费公司级数据）/ `login-required`（社媒需登录）/ `not-provided`（用户未提供，如邮件头/电话）/ `search-blocked`（检索被验证码或限流拦截）。
+  - `reason`：`needs-browser`（地图需浏览器/JS）/ `no-matrix`（该国不在能力矩阵）/ `no-free-data`（无免费公司级数据）/ `login-required`（社媒需登录）/ `not-provided`（用户未提供，如邮件头/电话）/ `search-blocked`（检索被验证码或限流拦截）/ `no-public-record`（已实际查询但公开无记录）/ `login-wall`（公共页被登录墙拦截）/ `no-company-level-data`（该国无公开公司级数据）。
   - 没有未覆盖项时为空数组 `[]`；**不得省略字段**。
 
 ## 三、结论卡版式（硬性规则）

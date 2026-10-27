@@ -84,9 +84,10 @@ if (failures === 0) console.log(`✓ doc red-flag counts consistent with red_fla
 
 // ---------- Card/report templates must always render coverage + uncovered items ----------
 const templateSpecs = [
-  ['card_template.md', ['置信度：', '覆盖：', '未覆盖：', 'coverage.uncovered', 'needs-browser']],
-  ['report_template.md', ['检查点覆盖矩阵', '未覆盖项必须逐项写原因', '社媒（LinkedIn/Facebook/WhatsApp）']],
-  ['SKILL.md', ['覆盖行（强制）', 'coverage.uncovered']],
+  ['card_template.md', ['置信度：', '覆盖：', '未覆盖：', 'coverage.uncovered', 'needs-browser', 'no-public-record']],
+  ['report_template.md', ['检查点覆盖矩阵', '未覆盖项必须逐项写原因', '社媒（LinkedIn/Facebook/WhatsApp）', '实际查询结果']],
+  ['SKILL.md', ['覆盖行（强制）', 'coverage.uncovered', '地图 / 海关 / 社媒不直接标未覆盖']],
+  ['data-sources/global.md', ['Google Maps embed', 'OpenStreetMap Nominatim', 'ImportGenius', '同名不同公司']],
 ];
 const beforeTemplate = failures;
 for (const [file, needles] of templateSpecs) {
