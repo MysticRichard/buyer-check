@@ -126,6 +126,22 @@ function main() {
   }
   console.log(`✓ phone_check: ${checked}/${phoneCases.length} cases identical`);
 
+  // ---------- ip_check ----------
+  const ipCases = [
+    ['', ['--claimed-country', 'AE']],
+    ['203.0.113.7', ['--claimed-country', 'AE']],
+    ['10.0.0.1', ['--claimed-country', 'AE']],
+    ['not-an-ip', []],
+    ['203.0.113.7', ['--claimed-country', 'AE', '--rdap-json', join(ROOT, 'tests', 'fixtures', 'ip-rdap-sample.json')]],
+  ];
+  let ipChecked = 0;
+  for (const [ip, extra] of ipCases) {
+    const [py, js] = runScript(python, 'ip_check', ['--ip', ip, ...extra]);
+    compare(`ip_check "${ip}"`, py, js);
+    ipChecked += 1;
+  }
+  console.log(`✓ ip_check: ${ipChecked}/${ipCases.length} cases identical`);
+
   const headerAPath = join(ROOT, '.tmp_header_a.txt');
   const headerBPath = join(ROOT, '.tmp_header_b.txt');
   writeFileSync(headerAPath, headerA, 'utf8');

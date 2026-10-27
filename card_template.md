@@ -46,6 +46,7 @@
 **字段规则**：
 - `subject` 中人名、电话、邮箱一律脱敏（`d***e`、`+971 5* *** 1234`）。
 - `checks[].result` 取值：`normal` / `suspicious` / `unverifiable` / `not-covered`（该国无覆盖，跳过不扣分）/ `skipped-login`（未登录 LinkedIn/Facebook，跳过不扣分）。
+- 可选检查 `ip_origin`（v0.7.0）：`result` 取 `consistent` / `inconsistent` / `skipped` / `not-covered`；只写脱敏网段（IPv4 /24、IPv6 /48）、分配国、ASN 与网络类型，**不写完整 IP**；不纳入 8 个覆盖率检查点，旧证据包可以不含此项。
 - `anchors.closure` 取值：`none`（未锚定）/ `single`（单点线索）/ `bidirectional`（双向闭合）/ `independent`（独立来源确认，标注「已独立验证」）。
 - `capability_tier`：`one-shot`（一步到位）/ `semi-auto`（半自动）/ `manual`（纯人工），按能力探测三档写入。
 - `stage`：`inquiry` / `pre-order`。

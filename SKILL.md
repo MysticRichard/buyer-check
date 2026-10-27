@@ -77,6 +77,24 @@ metadata:
 4. **打分与定级**：严格按 `red_flags.md`（22 条）累加权重定等级，**不临场发挥**。
 5. **出卡**：从证据包渲染结论卡（`card_template.md`）；用户要完整报告时按 `report_template.md` 渲染并落盘 `reports/`。
 
+### 邮件来源 IP 分类（v0.7.0，功能 A）
+
+`email_header_check` 取出 `originating_ip` 后，按需调用 `scripts/ip_check`（默认离线，只做本地分类）：
+
+| 情况 | 输出 | 处理 |
+| --- | --- | --- |
+| 无 IP / 私网 / 回环 / 保留地址 | `skipped`（no_ip / non_public） | 不计分 |
+| 网页邮箱等大型邮件服务商中继 | `mail_provider` | 不比对国家，说明看到的是服务商 |
+| 机房 / 云服务商 / 匿名化网络 | `hosting_or_anonymized` | 不推断国家，不计分 |
+| 公网 IP，未开启联网 | `offline` | 提示用户可显式开启 |
+| 分配国与自称国一致 | `consistent: true` | 记入证据包，不计分 |
+| 分配国与自称国不一致，仅此一项 | `consistent: false` | 只作线索，委婉追问行程，不计分 |
+| 不一致，且另有独立字段矛盾（电话区号 / 官网国 / 注册地址） | `consistent: false` | 才按 `RF-CORP-001`（权重 2）计分 |
+
+- 联网默认关闭：只有用户显式同意后才加 `--online`，且只发送 IP，不发送姓名、邮箱、公司名。
+- 输出与证据包只保存脱敏网段（IPv4 /24、IPv6 /48）、国家、ASN、网络类型；完整 IP 只在当次会话显示。
+- 证据包 `checks[]` 可选 `ip_origin`（consistent / inconsistent / skipped / not-covered），**不新增覆盖率检查点**（分母仍为 8）。
+
 ### 名称 + 电话的起手流程（首个询盘常只有这两项）
 
 1. **电话号码**：`scripts/phone_check` 解析国家区号、有效性、线路类型，与自称国家比对（纯本地计算）。
@@ -104,7 +122,7 @@ metadata:
 | --- | --- | --- | --- |
 | 1. 公司名公开痕迹 | 以公司名检索官网/LinkedIn 公司页/行业名录/海关痕迹——询盘期身份锚定的主手段 | 公开网页检索 | V1 |
 | 2. 域名与官网 | 注册时间、WHOIS、邮件 DNS；官网是否抄袭；是否仿冒知名公司域名 | WHOIS/RDAP、网页检索、域名相似度 | V1 |
-| 3. 联系方式一致性 | 免费邮箱 vs 企业域名；`email_header_check` 邮件头；`phone_check` 区号与自称国 | 脚本 + 公开检索 | v0.5.0 |
+| 3. 联系方式一致性 | 免费邮箱 vs 企业域名；`email_header_check` 邮件头；`phone_check` 区号与自称国；`ip_check` 来源 IP 分类（默认离线） | 脚本 + 公开检索 | v0.5.0/v0.7.0 |
 | 4. 询盘与交易行为红旗 | 按 `red_flags.md`（22 条）逐条判断，引用原文依据句；话术指纹检索 | 用户提供 + 联网检索 | V1/v0.5.0 |
 | 5. 负面信息与制裁 | 公司名/域名/邮箱/号码 + scam/fraud；黑名单、论坛、ScamAdviser；`sanctions_check` 本地名单匹配 | 网页检索、制裁名单缓存 | v0.5.0 |
 | 6. 身份链与地图/海关（积极矛盾） | 头像反搜、LinkedIn 比对、账号新旧、地图地址/电话、海关品类（按国家能力矩阵） | 链接 + 采集清单，业务员回传 | v0.5.0 |
@@ -160,6 +178,12 @@ metadata:
 
 - 检索与报告都在用户自己的环境完成；不收集、不上传用户数据，不做遥测。
 
+**IP 与追踪**：
+
+- 不使用 Seeker 一类诱导点击、获取对方位置的工具；不向客户发送任何追踪链接或追踪像素。
+- IP 只用于国家级归属与网络类型判断，不显示城市、经纬度、街道；不保存完整 IP，输出只用脱敏网段（IPv4 /24、IPv6 /48）。
+- 联网查询默认关闭，需用户显式开启；查询只发送 IP，不发送姓名、邮箱、公司名。
+
 **平台与登录**：
 
 - 不绕过登录、验证码、付费墙，不批量抓取。
@@ -198,6 +222,7 @@ metadata:
 | `scripts/whois_lookup.py/.mjs` | 域名注册时间、注册商、DNS 记录（RDAP 优先） |
 | `scripts/domain_similarity.py/.mjs` | 与知名品牌域名比对，识别字符替换/连字符/换后缀仿冒 |
 | `scripts/phone_check.py/.mjs` | 号码国别/有效性/线路类型/与自称国一致（本地 ITU 区号表） |
+| `scripts/ip_check.py/.mjs` | 邮件来源 IP 分类：非公网 / 邮件服务商中继 / 机房 / 分配国；默认离线，联网只发 IP，输出脱敏网段（对应 RF-CORP-001 线索） |
 | `scripts/email_header_check.py/.mjs` | 原始邮件头解析：From/Reply-To/Return-Path、Received 链、SPF/DKIM/DMARC、发送时区、来源 IP（对应 RF-MAIL-001） |
 | `scripts/sanctions_check.py/.mjs` | 官方制裁名单本地匹配（OFAC SDN 已配置；EU/UN/OFSI 待核实）——同名需人工排除 |
 | `scripts/update_sanctions.py/.mjs` | 下载官方名单到 `.cache/sanctions/`（不入仓库） |
@@ -228,6 +253,7 @@ metadata:
 - [ ] 未给出「是/不是骗子」的定性结论
 - [ ] 矛盾项已如实列出
 - [ ] 个人姓名、邮箱、电话默认脱敏显示
+- [ ] IP 只保留脱敏网段与国家/ASN/网络类型，未保存完整 IP
 - [ ] 敏感信息已脱敏、未写入文件
 - [ ] 报告末尾含免责声明
 - [ ] 报告已保存到 `reports/report_<slug>_<YYYYMMDD>.md`
@@ -242,7 +268,8 @@ metadata:
 - `data-sources/countries/<iso2>.md` — 国家资料（sg/my/th/vn/ae/sa 等）
 - `data-sources/collection_checklists.md` — WhatsApp/Facebook/LinkedIn/地图/海关采集清单
 - `scripts/country_capabilities.json` — 国家能力矩阵（null 不猜测）
-- `scripts/` — 域名、号码、邮件头、制裁、评分、隐私扫描脚本（Python + Node）
+- `scripts/` — 域名、号码、邮件头、IP 分类、制裁、评分、隐私扫描脚本（Python + Node）
+- `scripts/ip_check.py/.mjs` — 邮件来源 IP 分类（默认离线，输出脱敏网段）
 - `tests/cases/` — 验收用例 A1–A14
 - `tests/eval/` — 行为评测集（45 条合成询盘 + 评分器）
 - `examples/` — 脱敏样例报告

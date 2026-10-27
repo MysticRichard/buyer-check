@@ -1,0 +1,23 @@
+{
+  "handle": "TEST-NET-3",
+  "name": "TEST-NET-3",
+  "startAddress": "203.0.113.0",
+  "endAddress": "203.0.113.255",
+  "country": "AE",
+  "type": "ASSIGNED",
+  "retrieved_at": "2026-10-27T00:00:00Z",
+  "entities": [
+    {
+      "handle": "ORG-TEST",
+      "roles": ["registrant"],
+      "vcardArray": [
+        "vcard",
+        [
+          ["version", {}, "text", "4.0"],
+          ["fn", {}, "text", "Example Telecom FZE"],
+          ["kind", {}, "text", "org"]
+        ]
+      ]
+    }
+  ]
+}

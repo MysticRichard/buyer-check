@@ -20,6 +20,14 @@
 - 红旗总数统一为 22 条（`red_flags.md`、README、`SKILL.md`），并加入 `tests/consistency.mjs` 校验，文档数字不一致时 CI 直接失败。
 - CI 增加精简包构建（S1）、包内测试（S2）与包内隐私扫描（S3）。
 
+### 新增：ip_check 邮件来源 IP 分类（功能 A）
+
+- `scripts/ip_check.py/.mjs`：无 IP / 私网 / 回环 / 保留地址跳过；网页邮箱等邮件服务商中继与机房 / 云 / 匿名化网络不做国家比对；公网 IP 默认离线，仅用户显式 `--online` 时查询公开 RIR RDAP。
+- 输出只含脱敏网段（IPv4 /24、IPv6 /48）、分配国、ASN、组织与网络类型，**不保存完整 IP**；国家不一致只作线索，至少两个独立字段矛盾才计入 `RF-CORP-001`。
+- `scripts/ip_ranges.json` 只收录 2026-10-27 经 RIR RDAP autnum 核实的邮件服务商与云网络 ASN；查不到保持 unknown。
+- 验收 G1–G6：`tests/ip_check_cases.mjs` + `tests/fixtures/ip-rdap-sample.json`；Python/Node 一致性加入 `tests/consistency_scripts.mjs`；CI 增加对应步骤。
+- `SKILL.md` 接入邮件头步骤与证据包可选 `ip_origin`；`red_flags.md` 的 `RF-CORP-001` 细则补充「至少 2 个独立字段」与排除条件；`card_template.md` 增加字段说明。
+
 ## [0.6.0] - 2026-10-23
 
 订单前复核与可持续运营（F1–F5 验收全过）。

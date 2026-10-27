@@ -36,6 +36,9 @@ jobs:
       - name: check_sources acceptance (F3)
         run: node tests/check_sources_cases.mjs
 
+      - name: ip_check acceptance (G1-G6)
+        run: node tests/ip_check_cases.mjs
+
       - name: Behavior eval self-check (E4)
         run: node tests/eval/score_eval.mjs --self
 

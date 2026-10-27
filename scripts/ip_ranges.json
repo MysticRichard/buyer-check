@@ -1,0 +1,15 @@
+{
+  "verified_at": "2026-10-27",
+  "source": "https://rdap.org/autnum/<asn>",
+  "note": "Only widely known mail providers and hosting/cloud networks verified against RIR RDAP autnum records on the date above. Unknown networks stay unknown; never guessed.",
+  "mail_providers": [
+    { "asn": "AS15169", "name": "GOOGLE", "org": "Google LLC", "match": ["google"] },
+    { "asn": "AS8075", "name": "MICROSOFT-CORP-MSN-AS-BLOCK", "org": "Microsoft Corporation", "match": ["microsoft"] },
+    { "asn": "AS10310", "name": "YAHOO-1", "org": "Yahoo Holdings Inc.", "match": ["yahoo"] }
+  ],
+  "hosting": [
+    { "asn": "AS16509", "name": "AMAZON-02", "org": "Amazon.com, Inc.", "match": ["amazon"] },
+    { "asn": "AS14061", "name": "DIGITALOCEAN-ASN", "org": "DigitalOcean, LLC", "match": ["digitalocean"] },
+    { "asn": "AS13335", "name": "CLOUDFLARENET", "org": "Cloudflare, Inc.", "match": ["cloudflare"] }
+  ]
+}
