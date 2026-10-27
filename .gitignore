@@ -30,6 +30,7 @@ reports/
 # 发布产物
 buyer-check.zip
 *.zip
+dist/
 
 # IDE 本地文件（不参与 Skill 提交）
 .arts/
