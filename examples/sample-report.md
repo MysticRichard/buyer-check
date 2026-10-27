@@ -115,6 +115,22 @@
 - 不接受任何预付款、垫付物流费或第三方收款
 - 若对方补齐材料，改用 L/C 或第三方担保，并核实注册信息后再议
 
+## 附录：本次调查链接清单
+
+| # | 用途 | 链接 | 访问时间 | 结果摘要 |
+| --- | --- | --- | --- | --- |
+| 1 | 域名 RDAP | https://rdap.org/domain/nordic-imp0rt.com | 2026-10-21 10:05 | 注册 2026-09-28，距今 23 天 |
+| 2 | DNS MX | https://dns.google/resolve?name=nordic-imp0rt.com&type=MX | 2026-10-21 10:06 | 无 MX，企业邮箱无法收信 |
+| 3 | 公司名检索 | https://www.bing.com/search?q=%22NORDIC+IMPORT+AB%22 | 2026-10-21 10:07 | 未找到登记记录 |
+| 4 | 负面检索 | https://www.bing.com/search?q=%22nordic-imp0rt.com%22+scam | 2026-10-21 10:07 | 未查到既有投诉 |
+| 5 | 制裁（OFAC） | https://www.treasury.gov/ofac/downloads/sdn.csv | 2026-10-21 10:07 | 无同名命中 |
+| 6 | 地图（按电话） | https://www.google.com/maps/search/?api=1&query=... | 2026-10-21 10:07 | 未提供电话，未执行 |
+| 7 | 地图（按公司名） | https://www.google.com/maps/search/?api=1&query=NORDIC+IMPORT+AB | 2026-10-21 10:07 | 无商家页（未覆盖） |
+| 8 | 海关（ImportGenius） | https://www.importgenius.com/search?q=NORDIC+IMPORT+AB | 2026-10-21 10:07 | 无记录（未覆盖） |
+| 9 | 社媒（LinkedIn） | https://search.brave.com/search?q=site%3Alinkedin.com+%22NORDIC+IMPORT+AB%22 | 2026-10-21 10:07 | 无结果（未登录） |
+
+> 注：本样例未执行地图/海关/社媒的完整核验，相关行标「未执行/未覆盖」，与报告覆盖矩阵一致。
+
 ## 七、免责声明
 
 本报告是基于公开信息的风险提示，不构成法律意见，也不代表对该公司的最终评价。报告中银行账号等敏感信息已脱敏显示（如 ****1234），且不写入任何持久化文件。
