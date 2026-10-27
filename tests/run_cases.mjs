@@ -10,7 +10,7 @@
  *   node tests/run_cases.mjs
  */
 
-import { readdirSync, readFileSync, writeFileSync, mkdtempSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, writeFileSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -22,10 +22,24 @@ import { analyse as whoisAnalyse } from '../scripts/whois_lookup.mjs';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, '..');
 const CASES_DIR = join(HERE, 'cases');
+const CASES_FILE = join(HERE, 'cases.json');
 const FIXTURES_DIR = join(HERE, 'fixtures');
 
 function loadCase(file) {
   return JSON.parse(readFileSync(join(CASES_DIR, file), 'utf8'));
+}
+
+// The repository keeps one file per case (tests/cases/A*.json). The lean
+// submission bundle ships the merged tests/cases.json instead, so both layouts
+// are supported by the same runner.
+function loadAllCases() {
+  if (existsSync(CASES_FILE)) {
+    return JSON.parse(readFileSync(CASES_FILE, 'utf8'));
+  }
+  return readdirSync(CASES_DIR)
+    .filter((name) => name.endsWith('.json'))
+    .sort()
+    .map((name) => loadCase(name));
 }
 
 const runners = {
@@ -128,13 +142,12 @@ const runners = {
 };
 
 async function main() {
-  const files = readdirSync(CASES_DIR).filter((name) => name.endsWith('.json')).sort();
+  const cases = loadAllCases();
   let passed = 0;
   let failed = 0;
   let skipped = 0;
 
-  for (const file of files) {
-    const testCase = loadCase(file);
+  for (const testCase of cases) {
     const runner = runners[testCase.type];
     if (!runner) {
       console.log(`✗ ${testCase.id} ${testCase.title} — unknown type ${testCase.type}`);
@@ -159,7 +172,7 @@ async function main() {
     }
   }
 
-  console.log(`\n${passed} passed, ${failed} failed, ${skipped} skipped (of ${files.length})`);
+  console.log(`\n${passed} passed, ${failed} failed, ${skipped} skipped (of ${cases.length})`);
   return failed === 0 ? 0 : 1;
 }
 

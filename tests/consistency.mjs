@@ -13,6 +13,7 @@
  */
 
 import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -59,6 +60,27 @@ function fail(message) {
   failures += 1;
   console.log(`✗ ${message}`);
 }
+
+// ---------- Documentation red-flag count consistency ----------
+const docRoot = join(HERE, '..');
+const expectedFlags = loadRules().flags.length;
+const countSpecs = [
+  ['red_flags.md', /红旗清单（(\d+) 条）/g],
+  ['README.md', /红旗清单（(\d+) 条）/g],
+  ['SKILL.md', /`red_flags\.md`（(\d+) 条）/g],
+  ['SKILL.md', /红旗清单（(\d+) 条）/g],
+];
+for (const [file, pattern] of countSpecs) {
+  const text = readFileSync(join(docRoot, file), 'utf8');
+  const counts = [...text.matchAll(pattern)].map((match) => Number(match[1]));
+  if (counts.length === 0) fail(`docs ${file}: red-flag count pattern not found`);
+  for (const count of counts) {
+    if (count !== expectedFlags) fail(`docs ${file}: red-flag count ${count} != ${expectedFlags}`);
+  }
+}
+const addedCount = readFileSync(join(docRoot, 'red_flags.md'), 'utf8').match(/v0\.5\.0 新增 (\d+) 条/);
+if (!addedCount || Number(addedCount[1]) !== 8) fail('docs red_flags.md: v0.5.0 added count must be 8');
+if (failures === 0) console.log(`✓ doc red-flag counts consistent with red_flags.json (${expectedFlags})`);
 
 // ---------- V5: enumerate all combinations, assert band invariants ----------
 const rules = loadRules();

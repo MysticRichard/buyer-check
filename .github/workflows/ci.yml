@@ -41,3 +41,13 @@ jobs:
 
       - name: Privacy scan (V2)
         run: node scripts/privacy_scan.mjs
+
+      - name: Build lean submission bundle (P1)
+        run: node scripts/build_submission.mjs
+
+      - name: Submission bundle tests (S2)
+        run: node tests/run_cases.mjs
+        working-directory: dist/submission
+
+      - name: Submission bundle privacy scan (S3)
+        run: node scripts/privacy_scan.mjs dist/submission

@@ -1,0 +1,89 @@
+{
+  "skill": "buyer-check",
+  "version": "0.7.0",
+  "outputDir": "dist/submission",
+  "limits": {
+    "maxFiles": 28,
+    "maxTotalBytes": 41943040
+  },
+  "copy": [
+    { "from": "SKILL.md", "to": "SKILL.md" },
+    { "from": "red_flags.md", "to": "red_flags.md" },
+    { "from": "card_template.md", "to": "card_template.md" },
+    { "from": "report_template.md", "to": "report_template.md" },
+    { "from": "README.md", "to": "README.md" },
+    { "from": "LICENSE", "to": "LICENSE" },
+    { "from": "CHANGELOG.md", "to": "CHANGELOG.md" },
+    { "from": "scripts/whois_lookup.py", "to": "scripts/whois_lookup.py" },
+    { "from": "scripts/domain_similarity.py", "to": "scripts/domain_similarity.py" },
+    { "from": "scripts/phone_check.py", "to": "scripts/phone_check.py" },
+    { "from": "scripts/email_header_check.py", "to": "scripts/email_header_check.py" },
+    { "from": "scripts/sanctions_check.py", "to": "scripts/sanctions_check.py" },
+    { "from": "scripts/account_check.py", "to": "scripts/account_check.py" },
+    { "from": "scripts/risk_score.py", "to": "scripts/risk_score.py" },
+    { "from": "scripts/red_flags.json", "to": "scripts/red_flags.json" },
+    { "from": "scripts/phone_check_data.json", "to": "scripts/phone_check_data.json" },
+    { "from": "scripts/country_capabilities.json", "to": "scripts/country_capabilities.json" },
+    { "from": "scripts/brands.json", "to": "scripts/brands.json" },
+    { "from": "scripts/risk_score.mjs", "to": "scripts/risk_score.mjs" },
+    { "from": "scripts/domain_similarity.mjs", "to": "scripts/domain_similarity.mjs" },
+    { "from": "scripts/whois_lookup.mjs", "to": "scripts/whois_lookup.mjs" },
+    { "from": "tests/run_cases.mjs", "to": "tests/run_cases.mjs" },
+    { "from": "tests/eval/inquiries.jsonl", "to": "tests/eval/inquiries.jsonl" },
+    { "from": "tests/fixtures/rdap-new-domain.json", "to": "tests/fixtures/rdap-new-domain.json" },
+    { "from": "examples/sample-report.md", "to": "examples/sample-report.md" }
+  ],
+  "merge": [
+    {
+      "to": "data_sources.md",
+      "type": "markdown",
+      "title": "# 数据源与采集清单（合并版）",
+      "sources": ["data-sources/global.md", "data-sources/collection_checklists.md"],
+      "glob": "data-sources/countries/*.md"
+    },
+    {
+      "to": "tests/cases.json",
+      "type": "json-array",
+      "glob": "tests/cases/*.json"
+    }
+  ],
+  "rewrites": {
+    "SKILL.md": [
+      {
+        "from": "- `data-sources/global.md` — 全球通用检索入口与降级做法\n- `data-sources/countries/<iso2>.md` — 国家资料（sg/my/th/vn/ae/sa 等）\n- `data-sources/collection_checklists.md` — WhatsApp/Facebook/LinkedIn/地图/海关采集清单\n- `scripts/country_capabilities.json` — 国家能力矩阵（null 不猜测）\n- `scripts/` — 域名、号码、邮件头、制裁、评分、隐私扫描脚本（Python + Node）\n- `tests/cases/` — 验收用例 A1–A14\n- `tests/eval/` — 行为评测集（45 条合成询盘 + 评分器）\n- `examples/` — 脱敏样例报告\n- `docs/development.md` — 开发文档\n- `docs/iteration_plan.md` — 迭代方案（v0.4.1–v0.6.0）",
+        "to": "- `data_sources.md` — 全球通用检索入口、16 国资料与采集清单（合并版）\n- `scripts/country_capabilities.json` — 国家能力矩阵（null 不猜测）\n- `scripts/` — 域名、号码、邮件头、制裁、账户与评分脚本（Python；域名/相似度/评分另有 Node 对照）\n- `tests/cases.json` — 验收用例 A1–A14（合并）\n- `tests/eval/inquiries.jsonl` — 行为评测集（45 条合成询盘）\n- `examples/sample-report.md` — 脱敏样例报告\n- 开发文档与迭代方案见公开仓库（不随精简包分发）"
+      },
+      { "from": "`data-sources/collection_checklists.md`", "to": "`data_sources.md`" },
+
+      { "from": "`collection_checklists.md`", "to": "`data_sources.md`" },
+      { "from": "| `scripts/update_sanctions.py/.mjs` | 下载官方名单到 `.cache/sanctions/`（不入仓库） |", "to": "| （仓库内）update_sanctions | 下载官方名单到 `.cache/sanctions/`（不入仓库；精简包不含） |" },
+      { "from": "| `scripts/check_sources.mjs` | 数据源保鲜：低频检测各入口可达性与重定向，输出失效清单 |", "to": "| （仓库内）check_sources | 数据源保鲜：低频检测各入口可达性与重定向，输出失效清单（精简包不含） |" },
+      { "from": "| `scripts/privacy_scan.mjs` | 提交前隐私扫描 |", "to": "| （仓库内）privacy_scan | 提交前隐私扫描（精简包不含） |" },
+      { "from": "`scripts/whois_lookup.py/.mjs`", "to": "`scripts/whois_lookup.py`" },
+      { "from": "`scripts/domain_similarity.py/.mjs`", "to": "`scripts/domain_similarity.py`" },
+      { "from": "`scripts/phone_check.py/.mjs`", "to": "`scripts/phone_check.py`" },
+      { "from": "`scripts/email_header_check.py/.mjs`", "to": "`scripts/email_header_check.py`" },
+      { "from": "`scripts/sanctions_check.py/.mjs`", "to": "`scripts/sanctions_check.py`" },
+      { "from": "`scripts/account_check.py/.mjs`", "to": "`scripts/account_check.py`" },
+      { "from": "`scripts/risk_score.py/.mjs`", "to": "`scripts/risk_score.py`" },
+      { "from": "所有脚本 Python + Node 双实现，输出 JSON、提供 `--help`；失败时返回 `status: \"unavailable\"`", "to": "所有脚本输出 JSON、提供 `--help`；核心查询与评分另提供 Node 对照实现；失败时返回 `status: \"unavailable\"`" },
+      { "from": "`tests/consistency_scripts.mjs` 保证双实现输出一致。", "to": "仓库内双实现一致性测试保证双实现输出一致。" },
+      { "from": "（详见 docs/iteration_plan.md）", "to": "（详见公开仓库迭代方案）" }
+    ],
+    "README.md": [
+      {
+        "from": "```text\nbuyer-check/\n├── SKILL.md              # Skill 主文件：触发条件、流程、硬性约束、输出要求\n├── red_flags.md          # 红旗清单与评分规则（唯一评分依据）\n├── card_template.md      # 结论卡版式、证据包 Schema、追问话术规则\n├── data-sources/         # global.md 全球通用入口 + countries/<iso2>.md 国家资料 + 采集清单\n├── report_template.md    # 报告固定结构与措辞模板\n├── scripts/              # 域名查询、相似度、评分、隐私扫描（Python + Node 双实现）\n│   ├── whois_lookup.py / .mjs\n│   ├── domain_similarity.py / .mjs\n│   ├── risk_score.py / .mjs\n│   ├── privacy_scan.mjs  # 提交前隐私扫描\n│   ├── account_check.py / .mjs  # 订单前 IBAN/BIC 校验（mod-97 自实现）\n│   ├── check_sources.mjs # 数据源可达性保鲜\n│   ├── phone_check.py / .mjs + phone_check_data.json\n│   ├── email_header_check.py / .mjs\n│   ├── sanctions_check.py / .mjs + update_sanctions\n│   ├── red_flags.json    # 机器可读红旗表\n│   └── brands.json       # 知名公司域名清单\n├── tests/                # 验收用例 A1–A14、一致性测试、行为评测集\n├── examples/             # 脱敏样例报告\n├── reports/              # 生成的报告（本地保留，不入仓库）\n└── docs/                 # development.md 开发文档、iteration_plan.md 迭代方案\n```",
+        "to": "```text\nbuyer-check/\n├── SKILL.md              # Skill 主文件\n├── red_flags.md          # 红旗清单与评分规则\n├── card_template.md      # 结论卡版式、证据包 Schema、追问话术\n├── report_template.md    # 报告固定结构与措辞模板\n├── data_sources.md       # 合并版数据源与采集清单（16 国）\n├── scripts/              # Python 实现 + 3 个 Node 对照脚本\n├── tests/                # cases.json（A1–A14）、run_cases.mjs、评测集\n├── examples/             # 脱敏样例报告\n├── README.md\n├── LICENSE\n└── CHANGELOG.md\n```"
+      },
+      {
+        "from": "```bash\nnode tests/run_cases.mjs        # 验收用例 A1–A14\nnode tests/consistency.mjs      # V5 分数区间遍历 + V6 Python/Node 一致性\nnode scripts/privacy_scan.mjs   # 提交前隐私扫描\nnode tests/account_check_cases.mjs  # F2 收款账户校验\nnode tests/check_sources_cases.mjs  # F3 数据源保鲜\n```",
+        "to": "```bash\nnode tests/run_cases.mjs   # 验收用例 A1–A14（离线）\n```"
+      }
+    ]
+  },
+  "linkCheck": {
+    "files": ["SKILL.md", "README.md"],
+    "ignorePrefixes": ["reports/"],
+    "ignoreContains": ["<", ">", "*"]
+  }
+}

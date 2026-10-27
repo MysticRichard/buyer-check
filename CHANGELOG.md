@@ -13,6 +13,13 @@
 
 - `RF-ACC-002`（收款账户国与买家自称国不一致且无合理解释）权重固化为 3，移除「待确认」标注。单独命中为 27 分（绿区上沿），与其他红旗组合才进黄区。
 
+### 提交包精简（P1）
+
+- 新增 `scripts/build_submission.mjs` 与 `submission.manifest.json`，生成 `dist/submission/` 精简提交包：27 个文件、约 213 KB（限制 ≤28 文件 / ≤40 MB），构建时自动检查文件数、体积与相对路径有效性。
+- 数据源合并为 `data_sources.md`（全球通用入口 + 采集清单 + 16 国资料），A1–A14 合并为 `tests/cases.json`；`tests/run_cases.mjs` 同时支持仓库分文件用例与精简包 `cases.json`。
+- 红旗总数统一为 22 条（`red_flags.md`、README、`SKILL.md`），并加入 `tests/consistency.mjs` 校验，文档数字不一致时 CI 直接失败。
+- CI 增加精简包构建（S1）、包内测试（S2）与包内隐私扫描（S3）。
+
 ## [0.6.0] - 2026-10-23
 
 订单前复核与可持续运营（F1–F5 验收全过）。

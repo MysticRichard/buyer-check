@@ -43,7 +43,7 @@ Skill 会依次执行：采集信息 → 并行检索 → 交叉比对 → 按�
 
 等级优先级：已达高分档时永远显示「高」（置信度低时附加标注）；其余情况身份锚点全缺才显示「需人工核实」。
 
-完整红旗清单（21 条）见 [`red_flags.md`](red_flags.md)。
+完整红旗清单（22 条）见 [`red_flags.md`](red_flags.md)。
 
 ## 目录结构
 
@@ -89,7 +89,7 @@ buyer-check/
 ## 验证
 
 ```bash
-node tests/run_cases.mjs        # 验收用例 A1–A9
+node tests/run_cases.mjs        # 验收用例 A1–A14
 node tests/consistency.mjs      # V5 分数区间遍历 + V6 Python/Node 一致性
 node scripts/privacy_scan.mjs   # 提交前隐私扫描
 node tests/account_check_cases.mjs  # F2 收款账户校验
