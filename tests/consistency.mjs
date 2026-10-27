@@ -82,6 +82,23 @@ const addedCount = readFileSync(join(docRoot, 'red_flags.md'), 'utf8').match(/v0
 if (!addedCount || Number(addedCount[1]) !== 8) fail('docs red_flags.md: v0.5.0 added count must be 8');
 if (failures === 0) console.log(`✓ doc red-flag counts consistent with red_flags.json (${expectedFlags})`);
 
+// ---------- Card/report templates must always render coverage + uncovered items ----------
+const templateSpecs = [
+  ['card_template.md', ['置信度：', '覆盖：', '未覆盖：', 'coverage.uncovered', 'needs-browser']],
+  ['report_template.md', ['检查点覆盖矩阵', '未覆盖项必须逐项写原因', '社媒（LinkedIn/Facebook/WhatsApp）']],
+  ['SKILL.md', ['覆盖行（强制）', 'coverage.uncovered']],
+];
+const beforeTemplate = failures;
+for (const [file, needles] of templateSpecs) {
+  const text = readFileSync(join(docRoot, file), 'utf8');
+  for (const needle of needles) {
+    if (!text.includes(needle)) fail(`docs ${file}: missing "${needle}"`);
+  }
+}
+if (failures === beforeTemplate) {
+  console.log('✓ card/report templates require confidence + coverage + uncovered items');
+}
+
 // ---------- V5: enumerate all combinations, assert band invariants ----------
 const rules = loadRules();
 const flagIds = rules.flags.map((flag) => flag.id);
