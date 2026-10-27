@@ -1,5 +1,6 @@
 BuyerCheck 迭代规划 v0.4.1–v0.6.0
 
+> 本文档为 v0.4.1–v0.6.0 的历史方案；v0.7.0 方案见 [iteration_plan_v0.7.md](iteration_plan_v0.7.md)。
 > 注：入库时已将文中涉及真实客户的报告文件名脱敏为占位符；原稿见产品负责人存档。
 
 Oct 23, 2026 · @Daniel

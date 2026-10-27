@@ -3,7 +3,7 @@ name: buyer-check
 description: 外贸客户背景调查与诈骗风险筛查（BuyerCheck）。当用户提到客户背调、询盘真伪、外贸客户风险、判断客户是不是骗子、核实某公司/邮箱/域名/收款账户可信度，或收到陌生询盘想评估风险、交易中途对方要求更换收款账户或要求先付款时使用。基于公开信息做多维度风险信号筛查与证据整理，输出带来源链接与检索时间的固定结构风险报告，不判定对方是不是骗子。Use for foreign-trade buyer background checks and scam-risk screening.
 license: MIT
 metadata:
-  version: 0.6.0
+  version: 0.7.0
   tags: [foreign-trade, buyer-check, due-diligence, fraud-screening, scam-detection, osint, risk-assessment]
 ---
 
@@ -230,6 +230,7 @@ metadata:
 | `scripts/check_sources.mjs` | 数据源保鲜：低频检测各入口可达性与重定向，输出失效清单 |
 | `scripts/risk_score.py/.mjs` | 确定性评分与脱敏 |
 | `scripts/privacy_scan.mjs` | 提交前隐私扫描 |
+| `scripts/build_submission.mjs` | 精简提交包构建：按 `submission.manifest.json` 合并数据源与用例，校验文件数、体积与相对路径 |
 
 所有脚本 Python + Node 双实现，输出 JSON、提供 `--help`；失败时返回 `status: "unavailable"`，按「未查到」处理，**不要编造**。`tests/consistency_scripts.mjs` 保证双实现输出一致。
 

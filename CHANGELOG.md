@@ -1,8 +1,8 @@
 # 更新日志
 
-本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与语义化版本。迭代方案见 [docs/iteration_plan.md](docs/iteration_plan.md)。
+本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与语义化版本。迭代方案见 [docs/iteration_plan.md](docs/iteration_plan.md)（v0.4.1–v0.6.0）与 [docs/iteration_plan_v0.7.md](docs/iteration_plan_v0.7.md)（v0.7.0）。
 
-## [Unreleased]
+## [0.7.0] - 2026-10-27
 
 ### 隐私与仓库卫生（P0）
 

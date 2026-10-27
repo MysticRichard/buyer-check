@@ -153,8 +153,8 @@ function main() {
 
   // ---------- H3: no international prefix -> no guessed country ----------
   for (const [label, run, parser] of [
-    ['Python', runPython(python, ['phone_check.py', '13800138000']), 'python'],
-    ['Node', runNode(['13800138000']), 'node'],
+    ['Python', runPython(python, ['phone_check.py', '15555550100']), 'python'],
+    ['Node', runNode(['15555550100']), 'node'],
   ]) {
     const result = parse(run, `${parser} no-prefix`);
     check(
@@ -179,10 +179,10 @@ function main() {
   check('H4 special numbers keep the score at 0', emptyScore.risk_score === 0 && emptyScore.level === '低', JSON.stringify(observed));
 
   // ---------- H5: examples only use reserved fictional ranges ----------
-  const examples = ['+971 52 555 0100', '+1 800 555 0100', '+44 900 7946 0000', '13800138000'];
+  const examples = ['+971 52 555 0100', '+1 800 555 0100', '+44 900 7946 0000', '15555550100'];
   check(
     'H5 examples use reserved ranges',
-    examples.filter((number) => number !== '13800138000').every((number) => /555|7946/.test(number)),
+    examples.every((number) => /555|7946/.test(number)),
     examples.join(', '),
   );
 

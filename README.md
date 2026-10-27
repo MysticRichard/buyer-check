@@ -94,6 +94,9 @@ node tests/consistency.mjs      # V5 分数区间遍历 + V6 Python/Node 一致�
 node scripts/privacy_scan.mjs   # 提交前隐私扫描
 node tests/account_check_cases.mjs  # F2 收款账户校验
 node tests/check_sources_cases.mjs  # F3 数据源保鲜
+node tests/ip_check_cases.mjs       # G1–G6 来源 IP 分类
+node tests/phone_check_enrich_cases.mjs  # H1–H5 电话可选增强
+node scripts/build_submission.mjs   # 生成 27 文件精简提交包
 ```
 
 ## 脚本用法
@@ -110,6 +113,10 @@ node scripts/domain_similarity.mjs app1e.com
 # 确定性评分 / 脱敏
 python scripts/risk_score.py --flags RF-PAY-001 RF-DOM-002
 node scripts/risk_score.mjs --mask "4111 1111 1111 1234"
+
+# 邮件来源 IP 分类（默认离线；--online 才查询公开 RDAP，只发送 IP）
+python scripts/ip_check.py --ip 203.0.113.7 --claimed-country AE
+node scripts/ip_check.mjs --ip 203.0.113.7 --claimed-country AE --online
 ```
 
 脚本输出均为 JSON；查询失败时返回 `status: "unavailable"`，调用方按「未查到」处理。
