@@ -2,6 +2,13 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与语义化版本。迭代方案见 [docs/iteration_plan.md](docs/iteration_plan.md)。
 
+## [Unreleased]
+
+### 隐私与仓库卫生（P0）
+
+- 清理 git 历史中的敏感文件，提交哈希已变更（`main` 已强制更新）。
+- `.gitignore` 增加 `dist/`，提交包构建产物不入库。
+
 ## [0.6.0] - 2026-10-23
 
 订单前复核与可持续运营（F1–F5 验收全过）。
