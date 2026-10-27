@@ -50,6 +50,13 @@
 - `card_template.md` / `report_template.md` 增加 `no-public-record`、`login-wall`、`no-company-level-data` 原因标签，禁止只写 `not-covered`。
 - `tests/consistency.mjs` 增加对应回归校验。
 
+### 增强：地图双向、海关多平台、社媒双匹配（负责人判定规则）
+
+- 地图：按电话 + 按公司名**双向**搜索；名称匹配但电话不同不合并，两者都无写「按电话/名称均无商家页」。
+- 海关：**免费优先多平台**（ImportGenius、Volza、Panjiva/Trademo、52wmb/ExportGenius），逐平台记录；无记录写「多平台无记录」，不写「无贸易」。
+- 社媒：**名称 + 电话（或域名）双匹配**，再核对主页是否绑定公司名/域名；仅同名记 `name-only-match`，不算真实。
+- `data-sources/global.md`、`SKILL.md`、`card_template.md`、`report_template.md` 同步；`tests/consistency.mjs` 增加回归校验。
+
 ## [0.6.0] - 2026-10-23
 
 订单前复核与可持续运营（F1–F5 验收全过）。

@@ -58,13 +58,13 @@
 
 ## 六、地图 / 海关 / 社媒的实际查询通道（v0.7.0 起）
 
-| 维度 | 先查（免费、可自动） | 查不到时的写法 | 禁止 |
+| 维度 | 先查（免费、可自动） | 判定规则 | 禁止 |
 | --- | --- | --- | --- |
-| 地图 | Google Maps embed：`https://maps.google.com/maps?q=<公司名>&output=embed`（解析 POI）；OpenStreetMap Nominatim：`https://nominatim.openstreetmap.org/search?q=<公司名>&format=json` | 分别用公司名、电话、域名各搜一次；写明「Google Maps 按电话 +90… 返回找不到；按域名仅返回无关公司」 | 把同名不同公司（名称/电话/网站任一不同）当客户 |
-| 海关 | ImportGenius 公共搜索：`https://www.importgenius.com/search?q=<公司名>`（美国进口库，免费摘要）；Trademo/ExportGenius 需订阅 | 写明「ImportGenius 美国库无记录；土耳其无公开公司级海关数据」 | 用国家宏观进出口统计冒充公司记录；把「无记录」写成「已确认无贸易」 |
-| 社媒 | Brave/Bing：`site:linkedin.com "<公司名>"`、`site:facebook.com ...`、`site:instagram.com ...`；公共页能读则读 | 写明「无公开索引」或「登录墙，需人工登录核对」并给链接 | 把同名别家账号当客户；绕过登录 |
+| 地图 | **双向**（Google Maps embed）：① 按电话 `https://maps.google.com/maps?q=<E.164>&output=embed`；② 按公司名 `https://maps.google.com/maps?q=<公司名>&output=embed`；补充 OpenStreetMap Nominatim `https://nominatim.openstreetmap.org/search?q=<公司名>&format=json` | 电话与名称**分别**搜索；只有名称匹配且电话一致（或官网/地址可对应）才算同一实体；名称匹配但电话不同 → 不合并，写「同名不同公司」；两者都无 → 「按电话/名称均无商家页」 | 把同名不同公司（名称/电话/网站任一不同）当客户 |
+| 海关 | **多平台、免费优先**：① ImportGenius `https://www.importgenius.com/search?q=<公司名>`（美国库，免费摘要）② Volza `https://www.volza.com/search/?q=<公司名>`（免费预览）③ Panjiva `https://panjiva.com/search?q=<公司名>` / Trademo（可达时）④ 52wmb / ExportGenius（可达时）；逐平台记录 | 至少查 2 个可达平台并逐平台写结果；无记录写「多平台无记录」，不写「无贸易」；土耳其无公开公司级数据时注明 | 用国家宏观进出口统计冒充公司记录；只查一个平台就下结论 |
+| 社媒 | **名称 + 电话双匹配**：`"<公司名>" "<E.164>"`、`"<公司名>" "<域名>"`、`site:linkedin.com/facebook.com/instagram.com "<公司名>"`；公共页能读则看绑定信息 | 只有「名称 + 电话（或域名）+ 主页绑定公司名/域名」同时匹配，才记「社媒已验证」；仅同名 → `name-only-match`，不算真实；无结果 → `no-double-match`；登录墙 → `login-wall` | 把同名别家账号当客户；仅凭名称相同就判定真实；绕过登录 |
 
-**判定纪律**：先执行上述通道，只有通道都执行且无结果才标 `not-covered`；未覆盖原因必须写**实际查询结果**（不是一句「未覆盖」）。同名不同公司不得合并。
+**判定纪律**：地图双向、海关多平台、社媒双匹配都执行后，才允许标 `not-covered`；未覆盖原因必须写**实际查询结果**（如「按电话找不到」「Volza 只返回同名别家」），不是一句「未覆盖」。同名不同公司不得合并。
 
 ## 七、降级做法（查不到时）
 
