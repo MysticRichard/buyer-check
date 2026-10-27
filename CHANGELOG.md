@@ -57,6 +57,13 @@
 - 社媒：**名称 + 电话（或域名）双匹配**，再核对主页是否绑定公司名/域名；仅同名记 `name-only-match`，不算真实。
 - `data-sources/global.md`、`SKILL.md`、`card_template.md`、`report_template.md` 同步；`tests/consistency.mjs` 增加回归校验。
 
+### 增强：官网画像（公司名/邮箱域名 → 官网 → 主营/市场/联系人匹配）
+
+- 优先从工作邮箱后缀取域名，但**邮箱域名不一定是官网**；用公司名 + 国家/城市搜官网并检查变体（实例：`unitytechelectronic.com.tr` → 实际官网 `unitytech.com.tr`）。
+- 抓主页 / About / Products / Contact，提取公司简介、主营产品、目标市场、成立年份、地址、电话、邮箱。
+- 官网 Contact 的**姓名 + 电话**与客户交叉验证；一致 → 置信度提升；邮箱域名不同但姓名/电话/公司名一致 → 标「邮箱域名待确认」，不直接判伪。
+- `report_template.md` 增加 1.3 公司画像；`card_template.md` 增加官网匹配正向证据；`tests/consistency.mjs` 增加回归校验。
+
 ## [0.6.0] - 2026-10-23
 
 订单前复核与可持续运营（F1–F5 验收全过）。
