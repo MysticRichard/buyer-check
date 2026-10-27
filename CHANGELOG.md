@@ -36,6 +36,13 @@
 - 修正基础解析：输入不带 `+` 或 `00` 时不再按 ITU 表猜测国家，统一返回「international prefix required；不猜国家」（H3）。
 - 验收 H1–H5：`tests/phone_check_enrich_cases.mjs`；Py/Node 一致性只比较基础字段，增强字段按文档允许存在差异；CI 增加步骤。
 
+### 修复：结论卡固定显示覆盖率与未覆盖项
+
+- `card_template.md` 新增强制第二行「置信度｜覆盖 X/8｜未覆盖（地图/海关/社媒/负面/邮件头）」；证据包 `coverage.uncovered` 改为必填，定义 8 个检查点与原因标签（需浏览器/无矩阵/无免费数据/需登录/未提供/检索受限）。
+- `report_template.md` 2.2 改为固定 8 行「检查点覆盖矩阵」+ 社媒附加行，未覆盖项必须写原因；红旗计分表 13→22。
+- `SKILL.md` 输出章节与工作流程同步强制覆盖行；`examples/sample-report.md` 增加覆盖矩阵示例。
+- `tests/consistency.mjs` 增加模板回归校验：缺少覆盖行/未覆盖项时 CI 直接失败。
+
 ## [0.6.0] - 2026-10-23
 
 订单前复核与可持续运营（F1–F5 验收全过）。
