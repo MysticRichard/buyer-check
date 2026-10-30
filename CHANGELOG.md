@@ -1,6 +1,28 @@
 # 更新日志
 
-本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与语义化版本。迭代方案见 [docs/iteration_plan.md](docs/iteration_plan.md)（v0.4.1–v0.6.0）与 [docs/iteration_plan_v0.7.md](docs/iteration_plan_v0.7.md)（v0.7.0）。
+本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与语义化版本。迭代方案见 [docs/iteration_plan.md](docs/iteration_plan.md)（v0.4.1–v0.6.0）、[docs/iteration_plan_v0.7.md](docs/iteration_plan_v0.7.md)（v0.7.0）与 [docs/iteration_plan_v0.8.md](docs/iteration_plan_v0.8.md)（v0.8.0）。
+
+## [0.8.0] - 2026-10-30
+
+### 新增：三层核实模型（公司层 → 链接层 → 人物层）
+
+- 公司层：官网画像、主营一致性对比、地图规模判断、官方社媒互指、LinkedIn 公司页、海关、负面/制裁；公司可信度分高/中/低/未知。
+- 链接层：S1–S4 强证据、M1–M3 中证据、弱/无/矛盾；只查买家一人，不枚举公司其他员工。
+- 人物层：头像只做同图/近似图（SHA-256/dHash），不做人脸识别；账号时长只用公开可见字段，厚度看多年内容与互动；新号不扣分，只有「新且空」命中 RF-ID-003。
+- 置信度规则 R1–R5：R2 链接强且公司层非低 → 至少高；R3 公司层低 → 封顶中并标「公司层存疑」；R4 人物高 → 至少中、单独不能到高；R5 风险分只由红旗决定。评分公式、等级色带、覆盖率分母（8）不变。
+
+### 新增：RF-CORP-006 与 RF-CORP-002 扩写
+
+- 新增 `RF-CORP-006` 主营不一致（权重 2，负责人 2026-10-30 确认）；红旗总数 22 → **23**，同步 `red_flags.md`、`red_flags.json`、README、`SKILL.md`。
+- `RF-CORP-002` 判定细则增加「体量明显偏小」，并明确贸易商/小公司体量小、单独住宅型地址不计分。
+
+### 新增：identity_check 与验收 A15–A22
+
+- `scripts/identity_check.py/.mjs`：`site` 提取官网画像、`backlink` 判断社媒回链、`image` 同图/近似图比对；默认离线，`site --online` 才访问官网（≤4 页、串行、保守 robots）。
+- 无 Pillow/ sharp 时 `image` 只做 SHA-256 完全一致判断，其余 `not-comparable`；不保存头像/哈希，不做人脸识别。
+- 可选依赖许可证：Pillow 13.0.0（MIT-CMU）、sharp 0.35.5（Apache-2.0）。
+- 新增 A15–A22；一致性测试覆盖 **8,388,608** 种红旗组合，耗时在 CI 可接受范围。
+- 精简包：27 → **28 个文件**（上限 28），约 283 KB（上限 40MB）。
 
 ## [0.7.0] - 2026-10-27
 
