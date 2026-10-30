@@ -151,7 +151,9 @@ const runners = {
   },
 
   async whois_fixture(testCase) {
-    const fixture = JSON.parse(readFileSync(join(FIXTURES_DIR, testCase.input.fixture), 'utf8'));
+    const fixture = testCase.input.fixture_data
+      ? JSON.parse(JSON.stringify(testCase.input.fixture_data))
+      : JSON.parse(readFileSync(join(FIXTURES_DIR, testCase.input.fixture), 'utf8'));
     const daysAgo = testCase.input.days_ago ?? 20;
     const stamp = new Date(Date.now() - daysAgo * 86400000).toISOString();
     for (const event of fixture.events || []) {

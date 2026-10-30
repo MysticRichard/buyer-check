@@ -100,10 +100,6 @@
       "to": "tests/eval/inquiries.jsonl"
     },
     {
-      "from": "tests/fixtures/rdap-new-domain.json",
-      "to": "tests/fixtures/rdap-new-domain.json"
-    },
-    {
       "from": "examples/sample-report.md",
       "to": "examples/sample-report.md"
     },
