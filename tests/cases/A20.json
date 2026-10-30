@@ -1,0 +1,18 @@
+{
+  "id": "A20",
+  "title": "地图匹配但体量小，官网自称就是贸易商：只提示、不计分",
+  "type": "layers",
+  "input": {
+    "flags": [],
+    "covered": 7,
+    "anchors": 2,
+    "company_level": "medium",
+    "link_strength": "medium",
+    "person_level": "unknown"
+  },
+  "expect": {
+    "level": "低",
+    "risk_score": 0,
+    "confidence": "高"
+  }
+}

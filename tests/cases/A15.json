@@ -1,0 +1,18 @@
+{
+  "id": "A15",
+  "title": "官网团队页列出买家且企业邮箱对得上（仅1个锚点）：链接强，置信度升为高（R2）",
+  "type": "layers",
+  "input": {
+    "flags": [],
+    "covered": 7,
+    "anchors": 1,
+    "company_level": "high",
+    "link_strength": "strong",
+    "person_level": "unknown"
+  },
+  "expect": {
+    "level": "低",
+    "risk_score": 0,
+    "confidence": "高"
+  }
+}

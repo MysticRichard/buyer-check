@@ -1,0 +1,20 @@
+{
+  "id": "A16",
+  "title": "官网与官方社媒主营明显不同：命中 RF-CORP-006，风险分18，公司层低，置信度封顶中（R3）",
+  "type": "layers",
+  "input": {
+    "flags": ["RF-CORP-006"],
+    "covered": 7,
+    "anchors": 2,
+    "company_level": "low",
+    "link_strength": "weak",
+    "person_level": "unknown"
+  },
+  "expect": {
+    "level": "低",
+    "total": 2,
+    "risk_score": 18,
+    "confidence": "中",
+    "company_flag": true
+  }
+}

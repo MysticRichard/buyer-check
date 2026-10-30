@@ -1,0 +1,18 @@
+{
+  "id": "A19",
+  "title": "未登录跳过 LinkedIn 与 Facebook：链接层未核实，风险分和等级不变",
+  "type": "layers",
+  "input": {
+    "flags": [],
+    "covered": 5,
+    "anchors": 1,
+    "company_level": "high",
+    "link_strength": "none",
+    "person_level": "unknown"
+  },
+  "expect": {
+    "level": "低",
+    "risk_score": 0,
+    "confidence": "中"
+  }
+}

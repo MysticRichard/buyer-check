@@ -1,0 +1,18 @@
+{
+  "id": "A17",
+  "title": "多平台同图、反搜无命中、账号厚实：人物真实度高，风险分不变",
+  "type": "layers",
+  "input": {
+    "flags": [],
+    "covered": 7,
+    "anchors": 1,
+    "company_level": "high",
+    "link_strength": "weak",
+    "person_level": "high"
+  },
+  "expect": {
+    "level": "低",
+    "risk_score": 0,
+    "confidence": "中"
+  }
+}

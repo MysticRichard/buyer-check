@@ -1,0 +1,20 @@
+{
+  "id": "A21",
+  "title": "自称工厂、地图为住宅型：命中 RF-CORP-002，风险分18，公司层低封顶中",
+  "type": "layers",
+  "input": {
+    "flags": ["RF-CORP-002"],
+    "covered": 7,
+    "anchors": 2,
+    "company_level": "low",
+    "link_strength": "medium",
+    "person_level": "unknown"
+  },
+  "expect": {
+    "level": "低",
+    "total": 2,
+    "risk_score": 18,
+    "confidence": "中",
+    "company_flag": true
+  }
+}

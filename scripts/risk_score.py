@@ -69,6 +69,9 @@ def score(
     unverifiable: bool = False,
     covered: Optional[int] = None,
     anchors: Optional[int] = None,
+    company_level: Optional[str] = None,
+    link_strength: Optional[str] = None,
+    person_level: Optional[str] = None,
 ) -> dict:
     """Compute risk level, 0-100 risk score, coverage and confidence.
 
@@ -107,10 +110,24 @@ def score(
         band = "低"
         risk_score_value = 9 * total
 
+    base_confidence = None
+    company_flag = False
     if covered is None or anchors is None:
         ratio, confidence = None, None
     else:
-        ratio, confidence = coverage_grade(covered, anchors)
+        ratio, base_confidence = coverage_grade(covered, anchors)
+        confidence = base_confidence
+        if company_level == "low":
+            company_flag = True
+        # R2: strong link + company not low -> at least high
+        if link_strength == "strong" and company_level != "low":
+            confidence = "高"
+        # R3: low company caps confidence at medium
+        if company_level == "low" and confidence == "高":
+            confidence = "中"
+        # R4: high person authenticity lifts low to medium, never alone to high
+        if person_level == "high" and confidence == "低":
+            confidence = "中"
 
     anchor_missing = unverifiable or (confidence == "低" and covered is not None)
     if band == "高":
@@ -120,7 +137,7 @@ def score(
     else:
         level = band
 
-    return {
+    result = {
         "matched": matched,
         "unknown": unknown,
         "total": total,
@@ -130,6 +147,15 @@ def score(
         "confidence": confidence,
         "level": level,
     }
+    if any(value is not None for value in (company_level, link_strength, person_level)):
+        result["base_confidence"] = base_confidence
+        result["company_flag"] = company_flag
+        result["layers"] = {
+            "company": company_level,
+            "person_company_link": link_strength,
+            "person_authenticity": person_level,
+        }
+    return result
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -138,6 +164,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--unverifiable", action="store_true", help="key information could not be retrieved")
     parser.add_argument("--covered", type=int, help="number of checkpoints that could be evaluated (0-8)")
     parser.add_argument("--anchors", type=int, help="number of identity anchors available (0-3)")
+    parser.add_argument("--company-level", choices=["high", "medium", "low", "unknown"], help="company credibility")
+    parser.add_argument("--link-strength", choices=["strong", "medium", "weak", "none", "contradiction"], help="person-company link strength")
+    parser.add_argument("--person-authenticity", choices=["high", "medium", "low", "unknown"], help="person authenticity level")
     parser.add_argument("--mask", metavar="TEXT", help="redact sensitive digits in TEXT")
     parser.add_argument("--rules", default=RULES_FILE, help="path to red_flags.json")
     return parser
@@ -162,6 +191,9 @@ def main(argv=None) -> int:
         args.unverifiable,
         args.covered if use_coverage else None,
         args.anchors if use_coverage else None,
+        args.company_level,
+        args.link_strength,
+        args.person_authenticity,
     )
     result["status"] = "ok"
     print(json.dumps(result, ensure_ascii=False))
