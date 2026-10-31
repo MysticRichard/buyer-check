@@ -66,6 +66,11 @@
   - `reason`：`needs-browser`（地图需浏览器/JS）/ `no-matrix`（该国不在能力矩阵）/ `no-free-data`（无免费公司级数据）/ `login-required`（社媒需登录）/ `not-provided`（用户未提供，如邮件头/电话）/ `search-blocked`（检索被验证码或限流拦截）/ `no-public-record`（已实际查询但公开无记录）/ `login-wall`（公共页被登录墙拦截）/ `no-company-level-data`（该国无公开公司级数据）/ `no-double-match`（社媒名称+电话/域名未双匹配）/ `name-only-match`（仅同名，不能算真实）。
   - 没有未覆盖项时为空数组 `[]`；**不得省略字段**。
 - **官网匹配可作为 🟢 正向证据**（不占红旗、不计分）：写明官网域名、官网 Contact 的姓名/电话是否与客户一致；邮箱域名与官网不同时标「待确认」，不直接判伪。
+- 平台边界项（登录/验证码/付费）必须在卡片给**可点击链接 + 一次动作说明**；不能只写 `not-covered`。
+- 可选 `layers`（v0.8.0，旧证据包可不带）：
+  - `company`: `credibility`（high/medium/low/unknown）、`official_social[]`（platform/url/link_type=mutual|name-only）、`main_business_matrix[]`（source=website|facebook|linkedin_company|customs、keywords、verdict=consistent|partial|different|not-checked）、`map_scale`（verdict=matched|small|residential|unknown、street_view_date）。
+  - `person_company_link`: `strength`（strong/medium/weak/none/contradiction）、`evidence[]`（type=S1-S4|M1-M3、url、retrieved_at、method=auto|browser|user-reported）。
+  - `person_authenticity`: `level`（high/medium/low/unknown）、`avatar`（auto_result=same-image|near-duplicate|different|not-comparable|reverse-hit-other、human_verdict=same-person|different|unsure|null、links[]）、`account`（span_years、thickness=thick|normal|thin|unknown、recently_modified）。
 
 ## 三、结论卡版式（硬性规则）
 
@@ -77,6 +82,9 @@
    - 8 个核心检查点：公司名痕迹、域名/官网、邮箱/邮件头、电话、负面、制裁、地图、海关/注册；社媒（LinkedIn/Facebook/WhatsApp）为附加项，不计入 8 但必须显示。
    - 未覆盖项逐项带原因：`需浏览器` / `无矩阵` / `无免费数据` / `需登录` / `未提供` / `检索受限`；没有未覆盖项写「无」。
    - 未覆盖项放在本行，**不占用 ≤5 条风险点名额**；未覆盖不计分、不扣分，但**不得省略**。
+   - 第二行之后固定一行三层摘要（**不占风险点名额**）：
+     `三层｜公司 高（官网+地图+官方社媒互指）｜链接 强（官网团队页）｜人物 中（头像同图，账号 6 年）`
+     公司层低时标「公司层存疑」；地图规模偏小、账号近期改动等线索用括号标注，必要时才占一条风险点。
 3. **分数条 10 格**：按 `round(分数 / 10)` 用 ▓ 填充、░ 留空；**灰色状态用 ▒ 填充全部 10 格**。
 4. 需人工核实时，分数旁固定标注：「低置信度，分数仅供参考，还需要更多信息实际核实」；并给出信息增益最大的一项（如「补充企业邮箱，置信度可从低提升到中」）。
 5. **整卡 ≤ 25 行**；风险点 ≤ 5 条，按严重程度排序；每条只有「符号 + 红旗名（编号）+ 一句证据」。
@@ -90,6 +98,8 @@
 ## 🔴 高风险 · 70 / 100 ▓▓▓▓▓▓▓░░░
 
 置信度：低（锚点 0/3）｜覆盖：6/8 ｜ 未覆盖：地图（需浏览器）、社媒（未登录）
+
+三层｜公司 低（官网新+域名仿冒）｜链接 中（企业邮箱，官网无此人）｜人物 未知（未登录）
 
 建议：先不要寄样，也不要垫付任何费用。客户：ACME TRADING LTD
 
@@ -125,6 +135,9 @@
 | 仅用聊天软件联系（RF-BEH-003） | To keep all specs and quotations in one file for our team, could you also send the inquiry to my email? Our system files it by company email. | 为了让团队统一建档，方便您也把询盘发到我邮箱吗？我们按公司邮箱归档。 |
 | 没有官网或域名可疑 | Could you share your company website so I can recommend the right product line for your market? | 方便分享贵司官网吗？我可以针对贵地市场推荐合适的产品线。 |
 | 订单前，要求更换收款账户（RF-ACC-001） | Our finance team confirms any change in beneficiary details by phone, using the number we already have on file. Could you let us know a good time for a quick call? | 我们财务对任何收款信息变更都用留档电话回拨确认。什么时间方便简短通话？ |
+| 要公司资料（链接层弱） | Could you share your company profile so I can pass it to our sales manager? | 能发一下贵公司简介吗？我转给销售经理。 |
+| 确认职位/部门（对照 LinkedIn） | Which department are you in? I will arrange the right colleague for you. | 您在哪个部门？我帮您安排对接同事。 |
+| 客户主动分享 LinkedIn | Do you have a LinkedIn page? I would like to connect with you there. | 您有 LinkedIn 主页吗？我想和您在那里联系。 |
 
 **业务员提示（只给业务员看）**：
 - 验厂费话术：把话题拉回报价。正常买家会回答型号和数量；骗子会继续追着验厂费。

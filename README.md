@@ -15,7 +15,9 @@
 - **解决什么**：骗样品费/验厂费/保证金，以及邮箱被仿冒后的货款损失（BEC）。
 - **怎么用**：默认 10 秒结论卡（等级 + 分数 + ≤5 条风险点 + ≤3 条英文追问话术）；需要时再出完整尽调报告。
 - **两阶段**：询盘期用公开信息锚定身份（不要求营业执照）→ 订单前核验执照、税号与 IBAN/BIC 收款账户。
-- **可复现**：22 条红旗、固定权重、脚本计算，同一输入多次运行结果一致。
+- **可复现**：23 条红旗、固定权重、脚本计算，同一输入多次运行结果一致。
+- **三层核实**：公司层 → 人-公司链接 → 人物真实度；公司层最重，个人账号只辅助。
+- **免费优先**：OSM/Yandex、搜索引擎、官网、ImportGenius 免费摘要、OFAC 先跑；登录墙/验证码才交给人做一次动作。
 
 ## 解决什么问题
 
@@ -52,7 +54,7 @@ Skill 会依次执行：采集信息 → 并行检索 → 交叉比对 → 按�
 
 等级优先级：已达高分档时永远显示「高」（置信度低时附加标注）；其余情况身份锚点全缺才显示「需人工核实」。
 
-完整红旗清单（22 条）见 [`red_flags.md`](red_flags.md)。
+完整红旗清单（23 条）见 [`red_flags.md`](red_flags.md)。
 
 ## 目录结构
 
@@ -63,7 +65,7 @@ buyer-check/
 ├── card_template.md      # 结论卡版式、证据包 Schema、追问话术规则
 ├── data-sources/         # global.md 全球通用入口 + countries/<iso2>.md 国家资料 + 采集清单
 ├── report_template.md    # 报告固定结构与措辞模板
-├── scripts/              # 域名查询、相似度、评分、隐私扫描（Python + Node 双实现）
+├── scripts/              # 域名查询、相似度、画像/回链/头像比对、评分、隐私扫描（Python + Node 双实现）
 │   ├── whois_lookup.py / .mjs
 │   ├── domain_similarity.py / .mjs
 │   ├── risk_score.py / .mjs
@@ -74,8 +76,9 @@ buyer-check/
 │   ├── email_header_check.py / .mjs
 │   ├── sanctions_check.py / .mjs + update_sanctions
 │   ├── red_flags.json    # 机器可读红旗表
+│   ├── identity_check.py / .mjs  # 官网画像、社媒回链、头像同图/近似图比对（v0.8.0）
 │   └── brands.json       # 知名公司域名清单
-├── tests/                # 验收用例 A1–A14、一致性测试、行为评测集
+├── tests/                # 验收用例 A1–A22、一致性测试、行为评测集
 ├── examples/             # 脱敏样例报告
 ├── reports/              # 生成的报告（本地保留，不入仓库）
 └── docs/                 # development.md 开发文档、iteration_plan.md 迭代方案
@@ -98,7 +101,7 @@ buyer-check/
 ## 验证
 
 ```bash
-node tests/run_cases.mjs        # 验收用例 A1–A14
+node tests/run_cases.mjs        # 验收用例 A1–A22
 node tests/consistency.mjs      # V5 分数区间遍历 + V6 Python/Node 一致性
 node scripts/privacy_scan.mjs   # 提交前隐私扫描
 node tests/account_check_cases.mjs  # F2 收款账户校验

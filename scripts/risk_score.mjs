@@ -46,7 +46,16 @@ export function coverageGrade(covered, anchors) {
   return { ratio, confidence };
 }
 
-export function score(flagIds = [], rules, unverifiable = false, covered = null, anchors = null) {
+export function score(
+  flagIds = [],
+  rules,
+  unverifiable = false,
+  covered = null,
+  anchors = null,
+  companyLevel = null,
+  linkStrength = null,
+  personLevel = null,
+) {
   const index = new Map(rules.flags.map((flag) => [flag.id, flag]));
   const matched = [];
   const unknown = [];
@@ -80,8 +89,15 @@ export function score(flagIds = [], rules, unverifiable = false, covered = null,
 
   let ratio = null;
   let confidence = null;
+  let baseConfidence = null;
+  let companyFlag = false;
   if (covered !== null && anchors !== null) {
     ({ ratio, confidence } = coverageGrade(covered, anchors));
+    baseConfidence = confidence;
+    if (companyLevel === 'low') companyFlag = true;
+    if (linkStrength === 'strong' && companyLevel !== 'low') confidence = '高'; // R2
+    if (companyLevel === 'low' && confidence === '高') confidence = '中'; // R3
+    if (personLevel === 'high' && confidence === '低') confidence = '中'; // R4
   }
 
   const anchorMissing = unverifiable || (confidence === '低' && covered !== null);
@@ -90,7 +106,7 @@ export function score(flagIds = [], rules, unverifiable = false, covered = null,
   else if (anchorMissing) level = '需人工核实';
   else level = band;
 
-  return {
+  const result = {
     matched,
     unknown,
     total,
@@ -100,10 +116,20 @@ export function score(flagIds = [], rules, unverifiable = false, covered = null,
     confidence,
     level,
   };
+  if (companyLevel !== null || linkStrength !== null || personLevel !== null) {
+    result.base_confidence = baseConfidence;
+    result.company_flag = companyFlag;
+    result.layers = {
+      company: companyLevel,
+      person_company_link: linkStrength,
+      person_authenticity: personLevel,
+    };
+  }
+  return result;
 }
 
 function parseArgs(argv) {
-  const args = { flags: [], unverifiable: false, mask: null, rules: RULES_FILE, covered: null, anchors: null };
+  const args = { flags: [], unverifiable: false, mask: null, rules: RULES_FILE, covered: null, anchors: null, companyLevel: null, linkStrength: null, personLevel: null };
   for (let i = 0; i < argv.length; i += 1) {
     const token = argv[i];
     if (token === '--flags') {
@@ -118,6 +144,12 @@ function parseArgs(argv) {
       args.covered = Number(argv[++i]);
     } else if (token === '--anchors') {
       args.anchors = Number(argv[++i]);
+    } else if (token === '--company-level') {
+      args.companyLevel = argv[++i];
+    } else if (token === '--link-strength') {
+      args.linkStrength = argv[++i];
+    } else if (token === '--person-authenticity') {
+      args.personLevel = argv[++i];
     }
   }
   return args;
@@ -138,13 +170,16 @@ function main() {
   }
   const useCoverage = args.covered !== null && args.anchors !== null;
   const result = {
-    ...score(
-      args.flags,
-      rules,
-      args.unverifiable,
-      useCoverage ? args.covered : null,
-      useCoverage ? args.anchors : null,
-    ),
+...score(
+        args.flags,
+        rules,
+        args.unverifiable,
+        useCoverage ? args.covered : null,
+        useCoverage ? args.anchors : null,
+        args.companyLevel,
+        args.linkStrength,
+        args.personLevel,
+      ),
     status: 'ok',
   };
   console.log(JSON.stringify(result));

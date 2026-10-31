@@ -84,10 +84,10 @@ if (failures === 0) console.log(`✓ doc red-flag counts consistent with red_fla
 
 // ---------- Card/report templates must always render coverage + uncovered items ----------
 const templateSpecs = [
-  ['card_template.md', ['置信度：', '覆盖：', '未覆盖：', 'coverage.uncovered', 'needs-browser', 'no-public-record', 'no-double-match', 'name-only-match', '官网匹配可作为']],
-  ['report_template.md', ['检查点覆盖矩阵', '未覆盖项必须逐项写原因', '社媒（LinkedIn/Facebook/WhatsApp）', '实际查询结果', '双向', '双匹配', '公司画像', '附录 C：本次调查链接清单']],
-  ['SKILL.md', ['覆盖行（强制）', 'coverage.uncovered', '地图 / 海关 / 社媒不直接标未覆盖', '双向', '双匹配', '官网画像优先', '附录 C 本次调查链接清单']],
-  ['data-sources/global.md', ['Google Maps embed', 'OpenStreetMap Nominatim', 'ImportGenius', 'Volza', '双向', '多平台、免费优先', '双匹配', '同名不同公司', '官网画像', '邮箱域名不一定是官网', '姓名 + 电话']],
+  ['card_template.md', ['置信度：', '覆盖：', '未覆盖：', 'coverage.uncovered', 'needs-browser', 'no-public-record', 'no-double-match', 'name-only-match', '官网匹配可作为', '三层｜', 'layers', '平台边界项']],
+  ['report_template.md', ['检查点覆盖矩阵', '未覆盖项必须逐项写原因', '社媒（LinkedIn/Facebook/WhatsApp）', '实际查询结果', '双向', '双匹配', '公司画像', '附录 C：本次调查链接清单', '三层核实', '主营一致性', '地图规模判断', '链接层', 'Google Places', '平台边界项']],
+  ['SKILL.md', ['覆盖行（强制）', 'coverage.uncovered', '地图 / 海关 / 社媒不直接标未覆盖', '双向', '双匹配', '官网画像优先', '附录 C 本次调查链接清单', '三层核实模型', 'R2', 'R3', 'identity_check.py map', '免费优先与自动取证边界', '不引入无头浏览器']],
+  ['data-sources/global.md', ['Google Places', 'OpenStreetMap Nominatim', 'ImportGenius', 'Volza', '双向', '多平台、免费优先', '双匹配', '同名不同公司', '官网画像', '邮箱域名不一定是官网', '姓名 + 电话', '三层核实通道', 'Pillow', 'sharp', 'identity_check.py map', '免费优先顺序', '不引入无头浏览器']],
   ['examples/sample-report.md', ['本次调查链接清单']],
 ];
 const beforeTemplate = failures;
@@ -146,6 +146,9 @@ if (!python) {
     { flags: [], covered: 3, anchors: 0, unverifiable: true },
     { flags: ['RF-BEH-003'], covered: 3, anchors: 0, unverifiable: true },
     { flags: ['RF-PAY-001'], covered: 3, anchors: 0, unverifiable: true },
+    { flags: [], covered: 7, anchors: 1, company_level: 'high', link_strength: 'strong', person_level: 'unknown' },
+    { flags: ['RF-CORP-006'], covered: 7, anchors: 2, company_level: 'low', link_strength: 'weak', person_level: 'unknown' },
+    { flags: ['RF-ID-001'], covered: 7, anchors: 1, company_level: 'high', link_strength: 'medium', person_level: 'low' },
   ];
 
   let checked = 0;
@@ -154,11 +157,23 @@ if (!python) {
     if (c.covered !== undefined) args.push('--covered', String(c.covered));
     if (c.anchors !== undefined) args.push('--anchors', String(c.anchors));
     if (c.unverifiable) args.push('--unverifiable');
+    if (c.company_level) args.push('--company-level', c.company_level);
+    if (c.link_strength) args.push('--link-strength', c.link_strength);
+    if (c.person_level) args.push('--person-authenticity', c.person_level);
 
     const py = runPython(python, args);
-    const js = score(c.flags, rules, Boolean(c.unverifiable), c.covered ?? null, c.anchors ?? null);
+    const js = score(
+      c.flags,
+      rules,
+      Boolean(c.unverifiable),
+      c.covered ?? null,
+      c.anchors ?? null,
+      c.company_level ?? null,
+      c.link_strength ?? null,
+      c.person_level ?? null,
+    );
 
-    for (const key of ['total', 'risk_score', 'level', 'confidence', 'high_weight_hit']) {
+    for (const key of ['total', 'risk_score', 'level', 'confidence', 'high_weight_hit', 'company_flag', 'base_confidence', 'layers']) {
       if (JSON.stringify(py[key]) !== JSON.stringify(js[key])) {
         fail(`V6 mismatch [${c.flags.join(',') || 'none'}] ${key}: python=${JSON.stringify(py[key])} node=${JSON.stringify(js[key])}`);
       }

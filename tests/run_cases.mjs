@@ -11,9 +11,11 @@
  */
 
 import { existsSync, readdirSync, readFileSync, writeFileSync, mkdtempSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isDeepStrictEqual } from 'node:util';
 
 import { score as riskScore, maskSensitive, loadRules } from '../scripts/risk_score.mjs';
 import { analyse as domainAnalyse, loadBrands } from '../scripts/domain_similarity.mjs';
@@ -24,6 +26,22 @@ const ROOT = join(HERE, '..');
 const CASES_DIR = join(HERE, 'cases');
 const CASES_FILE = join(HERE, 'cases.json');
 const FIXTURES_DIR = join(HERE, 'fixtures');
+
+const PY_CANDIDATES = [
+  'C:/Users/JOEY/.agent-reach-venv/Scripts/python.exe',
+  'python',
+  'python3',
+  'py -3',
+];
+
+function findPython() {
+  for (const candidate of PY_CANDIDATES) {
+    const [cmd, ...rest] = candidate.split(' ');
+    const result = spawnSync(cmd, [...rest, '--version'], { encoding: 'utf8', timeout: 10000 });
+    if (result.status === 0) return candidate;
+  }
+  return null;
+}
 
 function loadCase(file) {
   return JSON.parse(readFileSync(join(CASES_DIR, file), 'utf8'));
@@ -66,6 +84,39 @@ const runners = {
     };
   },
 
+  layers(testCase) {
+    const rules = loadRules();
+    const input = testCase.input || {};
+    const result = riskScore(
+      input.flags || [],
+      rules,
+      false,
+      input.covered,
+      input.anchors,
+      input.company_level,
+      input.link_strength,
+      input.person_level,
+    );
+    const expect = testCase.expect || {};
+    const checks = [];
+    if (expect.level !== undefined) checks.push(result.level === expect.level);
+    if (expect.total !== undefined) checks.push(result.total === expect.total);
+    if (expect.risk_score !== undefined) checks.push(result.risk_score === expect.risk_score);
+    if (expect.confidence !== undefined) checks.push(result.confidence === expect.confidence);
+    if (expect.company_flag !== undefined) checks.push(result.company_flag === expect.company_flag);
+    return {
+      ok: checks.every(Boolean),
+      actual: {
+        level: result.level,
+        total: result.total,
+        risk_score: result.risk_score,
+        confidence: result.confidence,
+        company_flag: result.company_flag,
+        layers: result.layers,
+      },
+    };
+  },
+
   domain(testCase) {
     const brands = loadBrands();
     const result = domainAnalyse(testCase.input.domain, brands, testCase.input.threshold ?? 0.5);
@@ -100,7 +151,9 @@ const runners = {
   },
 
   async whois_fixture(testCase) {
-    const fixture = JSON.parse(readFileSync(join(FIXTURES_DIR, testCase.input.fixture), 'utf8'));
+    const fixture = testCase.input.fixture_data
+      ? JSON.parse(JSON.stringify(testCase.input.fixture_data))
+      : JSON.parse(readFileSync(join(FIXTURES_DIR, testCase.input.fixture), 'utf8'));
     const daysAgo = testCase.input.days_ago ?? 20;
     const stamp = new Date(Date.now() - daysAgo * 86400000).toISOString();
     for (const event of fixture.events || []) {
@@ -134,6 +187,79 @@ const runners = {
     const hasTimestamp = /检索时间：\s*\d{4}-\d{2}-\d{2}/.test(text);
     const hasDisclaimer = text.includes('不构成法律意见');
     return { ok: hasSource && hasTimestamp && hasDisclaimer, actual: { hasSource, hasTimestamp, hasDisclaimer } };
+  },
+
+  identity(testCase) {
+    const input = testCase.input || {};
+    const python = findPython();
+    if (!python) return { skipped: true, actual: 'python not found' };
+    const dir = mkdtempSync(join(tmpdir(), 'buyer-check-id-'));
+    const htmlPath = join(dir, 'site.html');
+    writeFileSync(htmlPath, input.html || '');
+    const png = Buffer.from(input.image_base64 || '', 'base64');
+    const a = join(dir, 'a.png');
+    const b = join(dir, 'b.png');
+    writeFileSync(a, png);
+    writeFileSync(b, png);
+    const pyScript = join(ROOT, 'scripts', 'identity_check.py');
+    const jsScript = join(ROOT, 'scripts', 'identity_check.mjs');
+    const [pyCmd, ...pyRest] = python.split(' ');
+    const run = (cmd, args) => {
+      const result = spawnSync(cmd, args, { encoding: 'utf8', timeout: 30000 });
+      if (!result.stdout) throw new Error(result.stderr || 'no output');
+      return JSON.parse(result.stdout);
+    };
+    const pySite = run(pyCmd, [...pyRest, pyScript, 'site', '--domain', input.domain, '--html-file', htmlPath]);
+    const pyBack = run(pyCmd, [...pyRest, pyScript, 'backlink', '--domain', input.domain, '--text', input.backlink_text || '']);
+    const pyImg = run(pyCmd, [...pyRest, pyScript, 'image', a, b]);
+    let pyMap = null;
+    if (input.map) {
+      const mapPath = join(dir, 'map.json');
+      writeFileSync(mapPath, JSON.stringify(input.map.fixture || {}));
+      pyMap = run(pyCmd, [...pyRest, pyScript, 'map', '--company', input.map.company, '--phone', input.map.phone, '--fixture-json', mapPath]);
+    }
+    const expect = testCase.expect || {};
+    const checks = [
+      (pySite.company_candidates || []).includes(expect.company),
+      pySite.description === expect.description,
+      (pySite.social_links || []).length === expect.social_count,
+      (pySite.emails || []).includes(expect.email),
+      (pySite.phones || []).includes(expect.phone),
+      pyBack.mutual === expect.mutual,
+      pyImg.result === expect.image_result,
+    ];
+    if (pyMap) {
+      checks.push(
+        pyMap.match?.name_match === expect.map_name_match,
+        pyMap.match?.phone_match === expect.map_phone_match,
+        pyMap.source === expect.map_source,
+      );
+    }
+    let parity = true;
+    if (existsSync(jsScript)) {
+      const jsSite = run('node', [jsScript, 'site', '--domain', input.domain, '--html-file', htmlPath]);
+      const jsBack = run('node', [jsScript, 'backlink', '--domain', input.domain, '--text', input.backlink_text || '']);
+      const jsImg = run('node', [jsScript, 'image', a, b]);
+      parity = isDeepStrictEqual(pySite, jsSite) && isDeepStrictEqual(pyBack, jsBack) && isDeepStrictEqual(pyImg, jsImg);
+      if (input.map) {
+        const mapPath = join(dir, 'map.json');
+        const jsMap = run('node', [jsScript, 'map', '--company', input.map.company, '--phone', input.map.phone, '--fixture-json', mapPath]);
+        parity = parity && isDeepStrictEqual(pyMap, jsMap);
+      }
+    }
+    checks.push(parity);
+    return {
+      ok: checks.every(Boolean),
+      actual: {
+        company: pySite.company_candidates,
+        description: pySite.description,
+        social: (pySite.social_links || []).length,
+        mutual: pyBack.mutual,
+        image: pyImg.result,
+        map: pyMap ? pyMap.match : null,
+        parity,
+      },
+    };
   },
 
   manual() {

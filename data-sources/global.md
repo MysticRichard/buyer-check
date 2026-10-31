@@ -60,7 +60,7 @@
 
 | 维度 | 先查（免费、可自动） | 判定规则 | 禁止 |
 | --- | --- | --- | --- |
-| 地图 | **双向**（Google Maps embed）：① 按电话 `https://maps.google.com/maps?q=<E.164>&output=embed`；② 按公司名 `https://maps.google.com/maps?q=<公司名>&output=embed`；补充 OpenStreetMap Nominatim `https://nominatim.openstreetmap.org/search?q=<公司名>&format=json` | 电话与名称**分别**搜索；只有名称匹配且电话一致（或官网/地址可对应）才算同一实体；名称匹配但电话不同 → 不合并，写「同名不同公司」；两者都无 → 「按电话/名称均无商家页」 | 把同名不同公司（名称/电话/网站任一不同）当客户 |
+| 地图 | **双向**（Google Places 优先 / OSM 回退）：`identity_check.py map --company <公司名> --phone <E.164>`；有 `GOOGLE_MAPS_API_KEY` 时用 Places Text Search + Details（名称/地址/电话/网站/评分/评论）；无 Key 用 OpenStreetMap Nominatim；Yandex Maps 可作区域级补充 | 电话与名称**分别**搜索；只有名称匹配且电话一致（或官网/地址可对应）才算同一实体；名称匹配但电话不同 → 不合并，写「同名不同公司」；两者都无 → 「按电话/名称均无商家页」 | 不抓取 Google Maps 页面（需 JS，违反 ToS）；Google 评论/照片需 Places API 或浏览器人工查看；同名不同公司不合并 |
 | 海关 | **多平台、免费优先**：① ImportGenius `https://www.importgenius.com/search?q=<公司名>`（美国库，免费摘要）② Volza `https://www.volza.com/search/?q=<公司名>`（免费预览）③ Panjiva `https://panjiva.com/search?q=<公司名>` / Trademo（可达时）④ 52wmb / ExportGenius（可达时）；逐平台记录 | 至少查 2 个可达平台并逐平台写结果；无记录写「多平台无记录」，不写「无贸易」；土耳其无公开公司级数据时注明 | 用国家宏观进出口统计冒充公司记录；只查一个平台就下结论 |
 | 社媒 | **名称 + 电话双匹配**：`"<公司名>" "<E.164>"`、`"<公司名>" "<域名>"`、`site:linkedin.com/facebook.com/instagram.com "<公司名>"`；公共页能读则看绑定信息 | 只有「名称 + 电话（或域名）+ 主页绑定公司名/域名」同时匹配，才记「社媒已验证」；仅同名 → `name-only-match`，不算真实；无结果 → `no-double-match`；登录墙 → `login-wall` | 把同名别家账号当客户；仅凭名称相同就判定真实；绕过登录 |
 
@@ -81,3 +81,32 @@
 4. **交叉验证**：官网联系页的**姓名 + 电话**是否与客户提供一致；一致 → 高置信度。邮箱域名不同但姓名/电话/公司名一致 → 标注「邮箱域名与官网不同，需确认」，**不直接判伪**。
 5. **不可达**：Wayback → 搜索引擎摘要 → 标未查到；不得编造简介或产品。
 6. **输出**：公司画像（主营/市场/地址/联系人匹配）写入报告与结论卡的正向证据。
+## 九、三层核实通道（v0.8.0）
+
+| 层 | 查什么 | 通道 | 记录 |
+| --- | --- | --- | --- |
+| 公司层 | 官网真实性/主营能力 | 官网首页/About/Products/Contact；Wayback；RDAP/DNS | 简介、主营关键词、成立年份、地址、电话、邮箱 |
+| 公司层 | 官方社媒互指 | 官网页脚/联系页的 Facebook/LinkedIn/Instagram/YouTube 链接；打开页面看简介/网站字段是否回指官网 | 互指=强；仅同名=名称匹配 |
+| 公司层 | LinkedIn 公司页 | 官网链接或搜索公司页；行业/规模/员工数与官网对比 | 互指/行业/规模 |
+| 公司层 | 地图规模 | 卫星/街景：建筑类型、周边、招牌、同址公司、商家页照片/评价 | 吻合/偏小/住宅型/无法判断 + 街景日期 |
+| 公司层 | 海关 | 第六节多平台 | 品类/角色/频次 |
+| 链接层 | 员工姓名/照片 | 官网团队/联系页；官方 Facebook 帖子/照片；LinkedIn 个人页（需登录） | S1–S4/M1–M3；只查买家一人，不枚举其他员工 |
+| 人物层 | 头像 | 各平台头像 URL；SHA-256/dHash 同图/近似图；Google Lens/TinEye 反搜 | 同图/近似图/不同/无法比对；业务员终判 |
+| 人物层 | 账号时长/厚度 | 页面创建时间、管理员国家、加入时间（仅公开可见）；活动跨度；内容厚度 | 厚实/一般/单薄；近期改动 |
+
+**许可证（可选依赖，2026-10-30 核对）**：Pillow 13.0.0（MIT-CMU，Python）、sharp 0.35.5（Apache-2.0，Node）。只作可选增强；未装时 `identity_check image` 只做 SHA-256 完全一致判断，其他返回 `not-comparable` / `no-image-library`。
+
+**边界**：不做人脸识别、人脸相似度或特征提取；不自动抓取 Facebook/Instagram/LinkedIn；不保存头像或哈希；不枚举公司其他员工。
+## 十、免费优先顺序与平台边界（v0.8.0）
+
+| 维度 | 1. 免费自动 | 2. 免费补充 | 3. 平台边界（给链接 + 一次动作） |
+| --- | --- | --- | --- |
+| 官网/域名 | 官网抓取、RDAP/DNS、Wayback、搜索引擎索引 | 母公司/行业协会/展会页 | 登录后的 B2B 名录 |
+| 地图 | OSM Nominatim（免费 API） | Yandex Maps 公开页 | Google 评论/照片（Places API 付费；或浏览器人工看） |
+| 海关 | ImportGenius 免费摘要 | Volza/Panjiva/Trademo 公开预览 | CAPTCHA/登录后的明细 |
+| 社媒 | `site:` 搜索结果/公开标题摘要 | 公共页能读则读 | LinkedIn/Facebook/Instagram 登录墙 |
+| 工商 | Sunbiz/Companies House/OpenCorporates 免费额度 | 商会/行业协会公开会员页 | 需验证码/付费注册库 |
+| 制裁 | OFAC SDN 官方 CSV | EU/UN/UK 官方检索 | 商用合规库 |
+| 人物 | 官网团队页/公开索引 | 头像同图/近似图比对 | 登录后的账号详情 |
+
+**纪律**：先跑 1/2；只有 1/2 无结果才标 `not-covered`；每条留 `source_url + retrieved_at` 与失败原因；不自动登录、不绕验证码、不抓 Google Maps 页面；**不引入无头浏览器/Chromium**（体积/ToS/版权/反爬）；平台边界项给可点击链接 + 一次人工动作，人只做这次动作和最终决策。

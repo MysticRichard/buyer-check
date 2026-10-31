@@ -1,0 +1,19 @@
+{
+  "id": "A18",
+  "title": "头像反搜命中另一身份：RF-ID-001 计分，人物真实度低",
+  "type": "layers",
+  "input": {
+    "flags": ["RF-ID-001"],
+    "covered": 7,
+    "anchors": 1,
+    "company_level": "high",
+    "link_strength": "medium",
+    "person_level": "low"
+  },
+  "expect": {
+    "level": "低",
+    "total": 3,
+    "risk_score": 27,
+    "confidence": "中"
+  }
+}
