@@ -97,3 +97,16 @@
 **许可证（可选依赖，2026-10-30 核对）**：Pillow 13.0.0（MIT-CMU，Python）、sharp 0.35.5（Apache-2.0，Node）。只作可选增强；未装时 `identity_check image` 只做 SHA-256 完全一致判断，其他返回 `not-comparable` / `no-image-library`。
 
 **边界**：不做人脸识别、人脸相似度或特征提取；不自动抓取 Facebook/Instagram/LinkedIn；不保存头像或哈希；不枚举公司其他员工。
+## 十、免费优先顺序与平台边界（v0.8.0）
+
+| 维度 | 1. 免费自动 | 2. 免费补充 | 3. 平台边界（给链接 + 一次动作） |
+| --- | --- | --- | --- |
+| 官网/域名 | 官网抓取、RDAP/DNS、Wayback、搜索引擎索引 | 母公司/行业协会/展会页 | 登录后的 B2B 名录 |
+| 地图 | OSM Nominatim（免费 API） | Yandex Maps 公开页 | Google 评论/照片（Places API 付费；或浏览器人工看） |
+| 海关 | ImportGenius 免费摘要 | Volza/Panjiva/Trademo 公开预览 | CAPTCHA/登录后的明细 |
+| 社媒 | `site:` 搜索结果/公开标题摘要 | 公共页能读则读 | LinkedIn/Facebook/Instagram 登录墙 |
+| 工商 | Sunbiz/Companies House/OpenCorporates 免费额度 | 商会/行业协会公开会员页 | 需验证码/付费注册库 |
+| 制裁 | OFAC SDN 官方 CSV | EU/UN/UK 官方检索 | 商用合规库 |
+| 人物 | 官网团队页/公开索引 | 头像同图/近似图比对 | 登录后的账号详情 |
+
+**纪律**：先跑 1/2；只有 1/2 无结果才标 `not-covered`；每条留 `source_url + retrieved_at` 与失败原因；不自动登录、不绕验证码、不抓 Google Maps 页面；**不引入无头浏览器/Chromium**（体积/ToS/版权/反爬）；平台边界项给可点击链接 + 一次人工动作，人只做这次动作和最终决策。

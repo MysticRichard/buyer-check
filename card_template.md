@@ -66,6 +66,7 @@
   - `reason`：`needs-browser`（地图需浏览器/JS）/ `no-matrix`（该国不在能力矩阵）/ `no-free-data`（无免费公司级数据）/ `login-required`（社媒需登录）/ `not-provided`（用户未提供，如邮件头/电话）/ `search-blocked`（检索被验证码或限流拦截）/ `no-public-record`（已实际查询但公开无记录）/ `login-wall`（公共页被登录墙拦截）/ `no-company-level-data`（该国无公开公司级数据）/ `no-double-match`（社媒名称+电话/域名未双匹配）/ `name-only-match`（仅同名，不能算真实）。
   - 没有未覆盖项时为空数组 `[]`；**不得省略字段**。
 - **官网匹配可作为 🟢 正向证据**（不占红旗、不计分）：写明官网域名、官网 Contact 的姓名/电话是否与客户一致；邮箱域名与官网不同时标「待确认」，不直接判伪。
+- 平台边界项（登录/验证码/付费）必须在卡片给**可点击链接 + 一次动作说明**；不能只写 `not-covered`。
 - 可选 `layers`（v0.8.0，旧证据包可不带）：
   - `company`: `credibility`（high/medium/low/unknown）、`official_social[]`（platform/url/link_type=mutual|name-only）、`main_business_matrix[]`（source=website|facebook|linkedin_company|customs、keywords、verdict=consistent|partial|different|not-checked）、`map_scale`（verdict=matched|small|residential|unknown、street_view_date）。
   - `person_company_link`: `strength`（strong/medium/weak/none/contradiction）、`evidence[]`（type=S1-S4|M1-M3、url、retrieved_at、method=auto|browser|user-reported）。
