@@ -60,7 +60,7 @@
 
 | 维度 | 先查（免费、可自动） | 判定规则 | 禁止 |
 | --- | --- | --- | --- |
-| 地图 | **双向**（Google Maps embed）：① 按电话 `https://maps.google.com/maps?q=<E.164>&output=embed`；② 按公司名 `https://maps.google.com/maps?q=<公司名>&output=embed`；补充 OpenStreetMap Nominatim `https://nominatim.openstreetmap.org/search?q=<公司名>&format=json` | 电话与名称**分别**搜索；只有名称匹配且电话一致（或官网/地址可对应）才算同一实体；名称匹配但电话不同 → 不合并，写「同名不同公司」；两者都无 → 「按电话/名称均无商家页」 | 把同名不同公司（名称/电话/网站任一不同）当客户 |
+| 地图 | **双向**（Google Places 优先 / OSM 回退）：`identity_check.py map --company <公司名> --phone <E.164>`；有 `GOOGLE_MAPS_API_KEY` 时用 Places Text Search + Details（名称/地址/电话/网站/评分/评论）；无 Key 用 OpenStreetMap Nominatim；Yandex Maps 可作区域级补充 | 电话与名称**分别**搜索；只有名称匹配且电话一致（或官网/地址可对应）才算同一实体；名称匹配但电话不同 → 不合并，写「同名不同公司」；两者都无 → 「按电话/名称均无商家页」 | 不抓取 Google Maps 页面（需 JS，违反 ToS）；Google 评论/照片需 Places API 或浏览器人工查看；同名不同公司不合并 |
 | 海关 | **多平台、免费优先**：① ImportGenius `https://www.importgenius.com/search?q=<公司名>`（美国库，免费摘要）② Volza `https://www.volza.com/search/?q=<公司名>`（免费预览）③ Panjiva `https://panjiva.com/search?q=<公司名>` / Trademo（可达时）④ 52wmb / ExportGenius（可达时）；逐平台记录 | 至少查 2 个可达平台并逐平台写结果；无记录写「多平台无记录」，不写「无贸易」；土耳其无公开公司级数据时注明 | 用国家宏观进出口统计冒充公司记录；只查一个平台就下结论 |
 | 社媒 | **名称 + 电话双匹配**：`"<公司名>" "<E.164>"`、`"<公司名>" "<域名>"`、`site:linkedin.com/facebook.com/instagram.com "<公司名>"`；公共页能读则看绑定信息 | 只有「名称 + 电话（或域名）+ 主页绑定公司名/域名」同时匹配，才记「社媒已验证」；仅同名 → `name-only-match`，不算真实；无结果 → `no-double-match`；登录墙 → `login-wall` | 把同名别家账号当客户；仅凭名称相同就判定真实；绕过登录 |
 

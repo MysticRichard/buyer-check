@@ -29,6 +29,9 @@ const SOCIAL_PATTERNS = {
   youtube: /https?:\/\/(?:www\.)?youtube\.com\/[^\s"'<>]+/gi,
   x: /https?:\/\/(?:www\.)?(?:x|twitter)\.com\/[^\s"'<>]+/gi,
 };
+const GOOGLE_TEXTSEARCH = 'https://maps.googleapis.com/maps/api/place/textsearch/json';
+const GOOGLE_DETAILS = 'https://maps.googleapis.com/maps/api/place/details/json';
+const OSM_SEARCH = 'https://nominatim.openstreetmap.org/search';
 
 function uniqueSorted(values) {
   return [...new Set(values.map((value) => String(value).trim()).filter(Boolean))].sort();
@@ -299,17 +302,203 @@ async function imageCommand(args) {
   }
 }
 
+function normalizePhone(value) {
+  return String(value || '').replace(/\D/g, '');
+}
+
+function normalizeName(value) {
+  return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+}
+
+async function fetchJson(url, timeoutMs) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, {
+      headers: { 'User-Agent': USER_AGENT, Accept: 'application/json' },
+      signal: controller.signal,
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return await response.json();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function phoneMatches(candidate, phone) {
+  const wanted = normalizePhone(phone);
+  const got = normalizePhone(candidate.phone);
+  if (!wanted || !got) return false;
+  return wanted === got || wanted.endsWith(got.slice(-8)) || got.endsWith(wanted.slice(-8));
+}
+
+function nameMatches(candidate, company) {
+  const wanted = normalizeName(company);
+  const got = normalizeName(candidate.name || candidate.address);
+  return Boolean(wanted && got && (wanted.includes(got) || got.includes(wanted)));
+}
+
+function mapResult(source, query, candidates, args) {
+  const result = {
+    status: candidates.length > 0 ? 'ok' : 'unavailable',
+    command: 'map',
+    source,
+    query,
+    candidates,
+    match: {
+      name_match: args.company ? candidates.some((item) => nameMatches(item, args.company)) : null,
+      phone_match: args.phone ? candidates.some((item) => phoneMatches(item, args.phone)) : null,
+    },
+  };
+  if (candidates.length === 0) result.error = 'no results';
+  return result;
+}
+
+async function googleCandidates(payload, args, key = null) {
+  const results = (payload.results || []).slice(0, args.limit);
+  const candidates = [];
+  for (const result of results) {
+    const location = (result.geometry || {}).location || {};
+    const item = {
+      name: result.name || null,
+      address: result.formatted_address || null,
+      phone: result.formatted_phone_number || result.international_phone_number || null,
+      website: result.website || null,
+      rating: result.rating ?? null,
+      reviews: result.user_ratings_total ?? null,
+      business_status: result.business_status || null,
+      place_id: result.place_id || null,
+      lat: location.lat ?? null,
+      lng: location.lng ?? null,
+    };
+    if (key && item.place_id && !args.fixtureJson) {
+      try {
+        const params = new URLSearchParams({
+          place_id: item.place_id,
+          fields: 'name,formatted_address,formatted_phone_number,international_phone_number,website,rating,user_ratings_total,business_status,geometry',
+          key,
+        });
+        const details = await fetchJson(`${GOOGLE_DETAILS}?${params.toString()}`, args.timeout * 1000);
+        if (details.status === 'OK') {
+          const detail = details.result || {};
+          if (detail.name) item.name = detail.name;
+          if (detail.formatted_address) item.address = detail.formatted_address;
+          const phone = detail.formatted_phone_number || detail.international_phone_number;
+          if (phone) item.phone = phone;
+          for (const field of ['website', 'rating', 'user_ratings_total', 'business_status']) {
+            if (detail[field] !== undefined && detail[field] !== null) item[field] = detail[field];
+          }
+          const detailLocation = (detail.geometry || {}).location || {};
+          if (detailLocation.lat !== undefined) item.lat = detailLocation.lat;
+          if (detailLocation.lng !== undefined) item.lng = detailLocation.lng;
+        }
+      } catch {
+        // keep text-search fields
+      }
+    }
+    candidates.push(item);
+  }
+  return candidates;
+}
+
+async function googleMap(args, key) {
+  const query = [args.company, args.phone, args.country].filter(Boolean).join(' ');
+  const params = new URLSearchParams({ query, key });
+  let payload;
+  try {
+    payload = await fetchJson(`${GOOGLE_TEXTSEARCH}?${params.toString()}`, args.timeout * 1000);
+  } catch {
+    return { status: 'unavailable', command: 'map', source: 'google_places', error: 'request-failed' };
+  }
+  const status = payload.status;
+  if (status !== 'OK' && status !== 'ZERO_RESULTS') {
+    return { status: 'unavailable', command: 'map', source: 'google_places', error: status || 'request-failed' };
+  }
+  return mapResult('google_places', query, await googleCandidates(payload, args, key), args);
+}
+
+async function osmMap(args) {
+  const query = [args.company, args.country].filter(Boolean).join(' ');
+  const params = new URLSearchParams({ q: query, format: 'jsonv2', addressdetails: '1', limit: String(args.limit) });
+  let payload;
+  try {
+    payload = await fetchJson(`${OSM_SEARCH}?${params.toString()}`, args.timeout * 1000);
+  } catch {
+    return { status: 'unavailable', command: 'map', source: 'osm_nominatim', error: 'request-failed' };
+  }
+  if (!Array.isArray(payload)) {
+    return { status: 'unavailable', command: 'map', source: 'osm_nominatim', error: 'request-failed' };
+  }
+  const candidates = payload.slice(0, args.limit).map((item) => {
+    const extra = item.extratags || {};
+    return {
+      name: item.name || item.display_name || null,
+      address: item.display_name || null,
+      phone: extra.phone || null,
+      website: extra.website || null,
+      rating: null,
+      reviews: null,
+      business_status: null,
+      place_id: String(item.place_id || ''),
+      lat: item.lat ?? null,
+      lng: item.lon ?? null,
+    };
+  });
+  return mapResult('osm_nominatim', query, candidates, args);
+}
+
+async function mapCommand(args) {
+  const query = [args.company, args.phone, args.country].filter(Boolean).join(' ');
+  if (args.fixtureJson) {
+    let payload;
+    try {
+      payload = JSON.parse(readFileSync(args.fixtureJson, 'utf8'));
+    } catch (error) {
+      return { status: 'unavailable', command: 'map', error: String(error) };
+    }
+    if (args.fixtureSource === 'osm_nominatim') {
+      if (!Array.isArray(payload)) {
+        return { status: 'unavailable', command: 'map', source: 'osm_nominatim', error: 'invalid fixture' };
+      }
+      const candidates = payload.slice(0, args.limit).map((item) => {
+        const extra = item.extratags || {};
+        return {
+          name: item.name || item.display_name || null,
+          address: item.display_name || null,
+          phone: extra.phone || null,
+          website: extra.website || null,
+          rating: null,
+          reviews: null,
+          business_status: null,
+          place_id: String(item.place_id || ''),
+          lat: item.lat ?? null,
+          lng: item.lon ?? null,
+        };
+      });
+      return mapResult('osm_nominatim', query, candidates, args);
+    }
+    return mapResult('google_places', query, await googleCandidates(payload, args), args);
+  }
+  if (!args.online) {
+    return { status: 'unavailable', command: 'map', error: 'pass --online or --fixture-json' };
+  }
+  const key = args.googleKey || process.env.GOOGLE_MAPS_API_KEY;
+  if (key) return googleMap(args, key);
+  return osmMap(args);
+}
+
 function usage() {
   return [
     'Usage: node identity_check.mjs site [--domain DOMAIN] [--html-file FILE] [--online]',
     '       node identity_check.mjs backlink --domain DOMAIN (--text TEXT | --html-file FILE)',
     '       node identity_check.mjs image PATH1 PATH2 [PATH3 ...]',
+    '       node identity_check.mjs map --company NAME [--phone PHONE] [--online | --fixture-json FILE]',
   ].join('\n');
 }
 
 function parseArgs(argv) {
   const command = argv[0];
-  const args = { command, domain: null, htmlFile: null, online: false, maxPages: 4, delay: 1, timeout: 10, text: '', paths: [] };
+  const args = { command, domain: null, htmlFile: null, online: false, maxPages: 4, delay: 1, timeout: 10, text: '', paths: [], company: null, phone: null, country: null, googleKey: null, fixtureJson: null, fixtureSource: 'google_places', limit: 5 };
   for (let i = 1; i < argv.length; i += 1) {
     const token = argv[i];
     if (token === '--domain') args.domain = argv[++i];
@@ -319,6 +508,13 @@ function parseArgs(argv) {
     else if (token === '--delay') args.delay = Number(argv[++i]);
     else if (token === '--timeout') args.timeout = Number(argv[++i]);
     else if (token === '--text') args.text = argv[++i];
+    else if (token === '--company') args.company = argv[++i];
+    else if (token === '--phone') args.phone = argv[++i];
+    else if (token === '--country') args.country = argv[++i];
+    else if (token === '--google-key') args.googleKey = argv[++i];
+    else if (token === '--fixture-json') args.fixtureJson = argv[++i];
+    else if (token === '--fixture-source') args.fixtureSource = argv[++i];
+    else if (token === '--limit') args.limit = Number(argv[++i]);
     else if (!token.startsWith('--')) args.paths.push(token);
   }
   return args;
@@ -326,13 +522,14 @@ function parseArgs(argv) {
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
-  if (!['site', 'backlink', 'image'].includes(args.command)) {
+  if (!['site', 'backlink', 'image', 'map'].includes(args.command)) {
     console.log(JSON.stringify({ status: 'unavailable', error: 'unknown or missing subcommand' }));
     return 2;
   }
   let result;
   if (args.command === 'site') result = await siteCommand(args);
   else if (args.command === 'backlink') result = backlinkCommand(args);
+  else if (args.command === 'map') result = await mapCommand(args);
   else result = await imageCommand(args);
   console.log(JSON.stringify(result));
   return result.status === 'ok' ? 0 : 1;

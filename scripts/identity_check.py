@@ -25,7 +25,7 @@ import re
 import sys
 import time
 import urllib.robotparser
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin, urlencode, urlparse
 from urllib.request import Request, urlopen
 
 try:  # optional dependency; never required
@@ -41,6 +41,9 @@ SOCIAL_PATTERNS = {
     "youtube": r"https?://(?:www\.)?youtube\.com/[^\s\"'<>]+",
     "x": r"https?://(?:www\.)?(?:x|twitter)\.com/[^\s\"'<>]+",
 }
+GOOGLE_TEXTSEARCH = "https://maps.googleapis.com/maps/api/place/textsearch/json"
+GOOGLE_DETAILS = "https://maps.googleapis.com/maps/api/place/details/json"
+OSM_SEARCH = "https://nominatim.openstreetmap.org/search"
 
 
 def unique_sorted(values):
@@ -291,6 +294,175 @@ def image_command(args):
     }
 
 
+def normalize_phone(value):
+    return re.sub(r"\D", "", value or "")
+
+
+def normalize_name(value):
+    return re.sub(r"[^a-z0-9]+", "", (value or "").lower())
+
+
+def fetch_json(url, timeout=10):
+    request = Request(url, headers={"User-Agent": USER_AGENT, "Accept": "application/json"})
+    with urlopen(request, timeout=timeout) as response:
+        return json.loads(response.read().decode("utf-8", errors="replace"))
+
+
+def phone_matches(candidate, phone):
+    wanted = normalize_phone(phone)
+    got = normalize_phone(candidate.get("phone"))
+    if not wanted or not got:
+        return False
+    return wanted == got or wanted.endswith(got[-8:]) or got.endswith(wanted[-8:])
+
+
+def name_matches(candidate, company):
+    wanted = normalize_name(company)
+    got = normalize_name(candidate.get("name") or candidate.get("address"))
+    return bool(wanted and got and (wanted in got or got in wanted))
+
+
+def map_result(source, query, candidates, args):
+    result = {
+        "status": "ok" if candidates else "unavailable",
+        "command": "map",
+        "source": source,
+        "query": query,
+        "candidates": candidates,
+        "match": {
+            "name_match": any(name_matches(item, args.company) for item in candidates) if args.company else None,
+            "phone_match": any(phone_matches(item, args.phone) for item in candidates) if args.phone else None,
+        },
+    }
+    if not candidates:
+        result["error"] = "no results"
+    return result
+
+
+def google_candidates(payload, args, key=None):
+    results = (payload.get("results") or [])[: args.limit]
+    candidates = []
+    for result in results:
+        location = (result.get("geometry") or {}).get("location") or {}
+        item = {
+            "name": result.get("name"),
+            "address": result.get("formatted_address"),
+            "phone": result.get("formatted_phone_number") or result.get("international_phone_number"),
+            "website": result.get("website"),
+            "rating": result.get("rating"),
+            "reviews": result.get("user_ratings_total"),
+            "business_status": result.get("business_status"),
+            "place_id": result.get("place_id"),
+            "lat": location.get("lat"),
+            "lng": location.get("lng"),
+        }
+        if key and item["place_id"] and not args.fixture_json:
+            try:
+                params = urlencode({
+                    "place_id": item["place_id"],
+                    "fields": "name,formatted_address,formatted_phone_number,international_phone_number,website,rating,user_ratings_total,business_status,geometry",
+                    "key": key,
+                })
+                details = fetch_json(f"{GOOGLE_DETAILS}?{params}", args.timeout)
+                if details.get("status") == "OK":
+                    detail = details.get("result") or {}
+                    if detail.get("name"):
+                        item["name"] = detail["name"]
+                    if detail.get("formatted_address"):
+                        item["address"] = detail["formatted_address"]
+                    phone = detail.get("formatted_phone_number") or detail.get("international_phone_number")
+                    if phone:
+                        item["phone"] = phone
+                    for field in ("website", "rating", "user_ratings_total", "business_status"):
+                        if detail.get(field) is not None:
+                            item[field] = detail[field]
+                    detail_location = (detail.get("geometry") or {}).get("location") or {}
+                    if detail_location.get("lat") is not None:
+                        item["lat"] = detail_location["lat"]
+                    if detail_location.get("lng") is not None:
+                        item["lng"] = detail_location["lng"]
+            except Exception:
+                pass
+        candidates.append(item)
+    return candidates
+
+
+def google_map(args, key):
+    query = " ".join(part for part in [args.company, args.phone, args.country] if part)
+    params = urlencode({"query": query, "key": key})
+    try:
+        payload = fetch_json(f"{GOOGLE_TEXTSEARCH}?{params}", args.timeout)
+    except Exception:
+        return {"status": "unavailable", "command": "map", "source": "google_places", "error": "request-failed"}
+    status = payload.get("status") if isinstance(payload, dict) else None
+    if status not in ("OK", "ZERO_RESULTS"):
+        return {"status": "unavailable", "command": "map", "source": "google_places", "error": status or "request-failed"}
+    return map_result("google_places", query, google_candidates(payload, args, key), args)
+
+
+def osm_map(args):
+    query = " ".join(part for part in [args.company, args.country] if part)
+    params = urlencode({"q": query, "format": "jsonv2", "addressdetails": 1, "limit": args.limit})
+    try:
+        payload = fetch_json(f"{OSM_SEARCH}?{params}", args.timeout)
+    except Exception:
+        return {"status": "unavailable", "command": "map", "source": "osm_nominatim", "error": "request-failed"}
+    if not isinstance(payload, list):
+        return {"status": "unavailable", "command": "map", "source": "osm_nominatim", "error": "request-failed"}
+    candidates = []
+    for item in payload[: args.limit]:
+        extra = item.get("extratags") or {}
+        candidates.append({
+            "name": item.get("name") or item.get("display_name"),
+            "address": item.get("display_name"),
+            "phone": extra.get("phone"),
+            "website": extra.get("website"),
+            "rating": None,
+            "reviews": None,
+            "business_status": None,
+            "place_id": str(item.get("place_id") or ""),
+            "lat": item.get("lat"),
+            "lng": item.get("lon"),
+        })
+    return map_result("osm_nominatim", query, candidates, args)
+
+
+def map_command(args):
+    query = " ".join(part for part in [args.company, args.phone, args.country] if part)
+    if args.fixture_json:
+        try:
+            with open(args.fixture_json, "r", encoding="utf-8") as handle:
+                payload = json.load(handle)
+        except (OSError, ValueError) as exc:
+            return {"status": "unavailable", "command": "map", "error": str(exc)}
+        if args.fixture_source == "osm_nominatim":
+            if not isinstance(payload, list):
+                return {"status": "unavailable", "command": "map", "source": "osm_nominatim", "error": "invalid fixture"}
+            candidates = []
+            for item in payload[: args.limit]:
+                extra = item.get("extratags") or {}
+                candidates.append({
+                    "name": item.get("name") or item.get("display_name"),
+                    "address": item.get("display_name"),
+                    "phone": extra.get("phone"),
+                    "website": extra.get("website"),
+                    "rating": None,
+                    "reviews": None,
+                    "business_status": None,
+                    "place_id": str(item.get("place_id") or ""),
+                    "lat": item.get("lat"),
+                    "lng": item.get("lon"),
+                })
+            return map_result("osm_nominatim", query, candidates, args)
+        return map_result("google_places", query, google_candidates(payload, args), args)
+    if not args.online:
+        return {"status": "unavailable", "command": "map", "error": "pass --online or --fixture-json"}
+    key = args.google_key or os.environ.get("GOOGLE_MAPS_API_KEY")
+    if key:
+        return google_map(args, key)
+    return osm_map(args)
+
+
 def build_parser():
     parser = argparse.ArgumentParser(description="buyer-check identity helpers (site/backlink/image).")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -310,6 +482,17 @@ def build_parser():
 
     image = sub.add_parser("image", help="compare avatars (exact / near-duplicate)")
     image.add_argument("paths", nargs="+")
+
+    map_cmd = sub.add_parser("map", help="look up a company POI via Google Places or OSM Nominatim")
+    map_cmd.add_argument("--company")
+    map_cmd.add_argument("--phone")
+    map_cmd.add_argument("--country")
+    map_cmd.add_argument("--google-key")
+    map_cmd.add_argument("--online", action="store_true")
+    map_cmd.add_argument("--fixture-json")
+    map_cmd.add_argument("--fixture-source", default="google_places")
+    map_cmd.add_argument("--limit", type=int, default=5)
+    map_cmd.add_argument("--timeout", type=int, default=10)
     return parser
 
 
@@ -319,6 +502,8 @@ def main(argv=None):
         result = site_command(args)
     elif args.command == "backlink":
         result = backlink_command(args)
+    elif args.command == "map":
+        result = map_command(args)
     else:
         result = image_command(args)
     print(json.dumps(result, ensure_ascii=False))

@@ -212,6 +212,12 @@ const runners = {
     const pySite = run(pyCmd, [...pyRest, pyScript, 'site', '--domain', input.domain, '--html-file', htmlPath]);
     const pyBack = run(pyCmd, [...pyRest, pyScript, 'backlink', '--domain', input.domain, '--text', input.backlink_text || '']);
     const pyImg = run(pyCmd, [...pyRest, pyScript, 'image', a, b]);
+    let pyMap = null;
+    if (input.map) {
+      const mapPath = join(dir, 'map.json');
+      writeFileSync(mapPath, JSON.stringify(input.map.fixture || {}));
+      pyMap = run(pyCmd, [...pyRest, pyScript, 'map', '--company', input.map.company, '--phone', input.map.phone, '--fixture-json', mapPath]);
+    }
     const expect = testCase.expect || {};
     const checks = [
       (pySite.company_candidates || []).includes(expect.company),
@@ -222,12 +228,24 @@ const runners = {
       pyBack.mutual === expect.mutual,
       pyImg.result === expect.image_result,
     ];
+    if (pyMap) {
+      checks.push(
+        pyMap.match?.name_match === expect.map_name_match,
+        pyMap.match?.phone_match === expect.map_phone_match,
+        pyMap.source === expect.map_source,
+      );
+    }
     let parity = true;
     if (existsSync(jsScript)) {
       const jsSite = run('node', [jsScript, 'site', '--domain', input.domain, '--html-file', htmlPath]);
       const jsBack = run('node', [jsScript, 'backlink', '--domain', input.domain, '--text', input.backlink_text || '']);
       const jsImg = run('node', [jsScript, 'image', a, b]);
       parity = isDeepStrictEqual(pySite, jsSite) && isDeepStrictEqual(pyBack, jsBack) && isDeepStrictEqual(pyImg, jsImg);
+      if (input.map) {
+        const mapPath = join(dir, 'map.json');
+        const jsMap = run('node', [jsScript, 'map', '--company', input.map.company, '--phone', input.map.phone, '--fixture-json', mapPath]);
+        parity = parity && isDeepStrictEqual(pyMap, jsMap);
+      }
     }
     checks.push(parity);
     return {
@@ -238,6 +256,7 @@ const runners = {
         social: (pySite.social_links || []).length,
         mutual: pyBack.mutual,
         image: pyImg.result,
+        map: pyMap ? pyMap.match : null,
         parity,
       },
     };

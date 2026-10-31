@@ -166,6 +166,7 @@ metadata:
 - 中 = 官网已验证但无独立佐证；未知 = 无官网且无公司痕迹。
 - **官方账号**：只把官网页脚/联系页链接的社媒页当官方候选；该页简介/网站字段回指官网才算「互指」（强）；仅按名称搜到记「名称匹配」（弱）。
 - **地图规模**：名称/地址/电话对上后，还要看建筑类型与体量、周边环境、招牌、同址公司、商家页信息、自称规模；只有「自称大/工厂」与「所见小/住宅型」同时成立才并入 RF-CORP-002；贸易商/小公司/单独住宅型不计分。
+- **地图通道**：优先 `identity_check.py map`（有 `GOOGLE_MAPS_API_KEY` 用 Places Text Search + Details；无 Key 用 OSM Nominatim）；Google Maps 页面需 JS，不抓取；评论/照片等 Google 特有字段需 Places API 或浏览器人工查看；Yandex Maps 可作区域级补充。
 - **主营一致性**：官网、官方 Facebook、LinkedIn 公司页、海关记录各取 ≤3 个关键词填入对比表；至少两个独立来源行业大类明确不同 → RF-CORP-006（权重 2）；综合贸易商多品类视为一致。
 
 **链接层**：S1 官网团队/联系页姓名（且邮箱/电话对得上）；S2 官方 Facebook 帖子/照片姓名+照片；S3 LinkedIn 个人页现任公司 + 公司页员工列表；S4 企业邮箱=官网域名且经官方总机/公共邮箱确认；M1 LinkedIn 现任公司；M2 企业邮箱域名=官网域名但官网无此人（不算矛盾）；M3 第三方名录/新闻/海关联系人；弱=仅自称或同名；无=查过没找到；矛盾=LinkedIn 与自称不一致（RF-ID-002）。只查买家一人，不枚举其他员工。
@@ -309,7 +310,7 @@ metadata:
 | `scripts/account_check.py/.mjs` | 订单前收款账户校验：IBAN mod-97（自实现不引库）+ BIC 国别 + 与买家国比对；账号脱敏不落盘（对应 RF-ACC-002） |
 | `scripts/check_sources.mjs` | 数据源保鲜：低频检测各入口可达性与重定向，输出失效清单 |
 | `scripts/risk_score.py/.mjs` | 确定性评分与脱敏 |
-| `scripts/identity_check.py` | 官网画像提取、社媒回链判断、头像同图/近似图比对（默认离线；Node 对照在仓库） |
+| `scripts/identity_check.py` | 官网画像提取、社媒回链判断、头像同图/近似图比对、地图 POI（Google Places 可选/OSM 回退；默认离线；Node 对照在仓库） |
 | `scripts/privacy_scan.mjs` | 提交前隐私扫描 |
 | `scripts/build_submission.mjs` | 精简提交包构建：按 `submission.manifest.json` 合并数据源与用例，校验文件数、体积与相对路径 |
 

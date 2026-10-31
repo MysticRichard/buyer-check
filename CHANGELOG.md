@@ -20,6 +20,7 @@
 
 - `scripts/identity_check.py/.mjs`：`site` 提取官网画像、`backlink` 判断社媒回链、`image` 同图/近似图比对；默认离线，`site --online` 才访问官网（≤4 页、串行、保守 robots）。
 - 无 Pillow/ sharp 时 `image` 只做 SHA-256 完全一致判断，其余 `not-comparable`；不保存头像/哈希，不做人脸识别。
+- `identity_check map`：有 `GOOGLE_MAPS_API_KEY` 时走 Google Places Text Search + Details（名称/地址/电话/网站/评分/评论），无 Key 回退 OSM Nominatim；不抓取 Google Maps 页面，A22 用 fixture 覆盖名称+电话匹配。
 - 可选依赖许可证：Pillow 13.0.0（MIT-CMU）、sharp 0.35.5（Apache-2.0）。
 - 新增 A15–A22；一致性测试覆盖 **8,388,608** 种红旗组合，耗时在 CI 可接受范围。
 - 精简包：**27 个文件**（上限 28），约 286 KB（上限 40MB）；A3 的 RDAP fixture 已内联进用例，不再单独占文件。
