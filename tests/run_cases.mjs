@@ -10,7 +10,7 @@
  *   node tests/run_cases.mjs
  */
 
-import { existsSync, readdirSync, readFileSync, writeFileSync, mkdtempSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, writeFileSync, mkdtempSync, mkdirSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -273,6 +273,62 @@ const runners = {
         parity,
       },
     };
+  },
+
+  sanctions(testCase) {
+    const python = findPython();
+    if (!python) return { skipped: true, actual: 'python not found' };
+    const dir = mkdtempSync(join(tmpdir(), 'buyer-check-sanctions-'));
+    const empty = join(dir, 'empty');
+    const cache = join(dir, 'cache');
+    const down = join(dir, 'down');
+    const fail = join(dir, 'fail');
+    for (const path of [empty, cache, down, fail]) mkdirSync(path, { recursive: true });
+    const csv = testCase.input?.csv || '';
+    writeFileSync(join(cache, 'ofac_sdn.csv'), csv, 'utf8');
+    const [cmd, ...rest] = python.split(' ');
+    const script = join(ROOT, 'scripts', 'sanctions_check.py');
+    const run = (args) => {
+      const result = spawnSync(cmd, [...rest, ...args], { encoding: 'utf8', timeout: 30000 });
+      if (!result.stdout) throw new Error(result.stderr || 'no output');
+      return JSON.parse(result.stdout);
+    };
+    const noCache = run([script, 'GLOBAL STAR TRADING CO', '--no-update', '--cache-dir', empty]);
+    const clear = run([script, 'NOBODY', '--no-update', '--cache-dir', cache]);
+    const hit = run([script, 'GLOBAL STAR TRADING CO', '--no-update', '--cache-dir', cache]);
+    const successScript = [
+      'import sys, json, os',
+      `sys.path.insert(0, ${JSON.stringify(join(ROOT, 'scripts'))})`,
+      'import sanctions_check',
+      'def fake(cache_dir, timeout=60.0):',
+      '    os.makedirs(cache_dir, exist_ok=True)',
+      '    with open(os.path.join(cache_dir, "ofac_sdn.csv"), "w", encoding="utf-8") as handle:',
+      `        handle.write(${JSON.stringify(csv)})`,
+      "    return {'status': 'ok'}",
+      'sanctions_check.download_ofac = fake',
+      `result = sanctions_check.analyse('GLOBAL STAR TRADING CO', cache_dir=${JSON.stringify(down)}, no_update=False)`,
+      `print(json.dumps({'status': result.get('status'), 'match_count': result.get('match_count'), 'exists': os.path.exists(os.path.join(${JSON.stringify(down)}, 'ofac_sdn.csv'))}))`,
+    ].join('\n');
+    const failScript = [
+      'import sys, json, os',
+      `sys.path.insert(0, ${JSON.stringify(join(ROOT, 'scripts'))})`,
+      'import sanctions_check',
+      'def fake(cache_dir, timeout=60.0):',
+      "    return {'status': 'unavailable'}",
+      'sanctions_check.download_ofac = fake',
+      `result = sanctions_check.analyse('GLOBAL STAR TRADING CO', cache_dir=${JSON.stringify(fail)}, no_update=False)`,
+      "print(json.dumps({'status': result.get('status'), 'error': result.get('error')}))",
+    ].join('\n');
+    const success = run(['-c', successScript]);
+    const failed = run(['-c', failScript]);
+    const checks = [
+      noCache.status === 'unavailable' && noCache.error === 'no-network',
+      clear.status === 'ok' && clear.match_count === 0,
+      hit.status === 'ok' && hit.match_count > 0 && hit.requires_manual_review === true,
+      success.status === 'ok' && success.match_count > 0 && success.exists === true,
+      failed.status === 'unavailable' && failed.error === 'download-failed',
+    ];
+    return { ok: checks.every(Boolean), actual: { noCache, clear, hit, success, failed } };
   },
 
   manual() {

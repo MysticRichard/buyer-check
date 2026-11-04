@@ -179,7 +179,7 @@ let checked = 0;
 
   // No-cache path first
   rmSync(CACHE, { recursive: true, force: true });
-  const [pyNoCache, jsNoCache] = runScript(python, 'sanctions_check', ['GLOBAL STAR TRADING CO']);
+  const [pyNoCache, jsNoCache] = runScript(python, 'sanctions_check', ['GLOBAL STAR TRADING CO', '--no-update']);
   compare('sanctions_check no-cache', pyNoCache, jsNoCache);
   if (pyNoCache.status !== 'unavailable') {
     failures += 1;
@@ -190,7 +190,7 @@ let checked = 0;
   mkdirSync(CACHE, { recursive: true });
   writeFileSync(join(CACHE, 'ofac_sdn.csv'), syntheticCsv, 'utf8');
   for (const name of ['GLOBAL STAR TRADING CO', 'Marcus Delgado', 'Nordic Machinery AS']) {
-    const [py, js] = runScript(python, 'sanctions_check', [name]);
+    const [py, js] = runScript(python, 'sanctions_check', [name, '--no-update']);
     compare(`sanctions_check "${name}"`, py, js);
   }
   console.log('✓ sanctions_check: no-cache + 3 synthetic matches identical');

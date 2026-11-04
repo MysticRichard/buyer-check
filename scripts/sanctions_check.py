@@ -18,13 +18,18 @@ status "unavailable" (treated as 未查到 by the caller — never guessed).
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import json
 import os
 import re
 import sys
+import urllib.request
 from typing import Optional
 
 CACHE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".cache", "sanctions")
+CACHE_MAX_AGE_DAYS = 7
+OFAC_URL = "https://www.treasury.gov/ofac/downloads/sdn.csv"
+OFAC_FILE = "ofac_sdn.csv"
 
 LIST_FILES = {
     "OFAC SDN": "ofac_sdn.csv",
@@ -101,7 +106,40 @@ def match(query: str, entries: list) -> list:
     return hits
 
 
-def analyse(query: str) -> dict:
+def download_ofac(cache_dir: str, timeout: float = 60.0) -> dict:
+    """Download the official OFAC SDN CSV. Never sends customer data."""
+    path = os.path.join(cache_dir, OFAC_FILE)
+    try:
+        request = urllib.request.Request(OFAC_URL, headers={"User-Agent": "buyer-check/0.9"})
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            data = response.read()
+        os.makedirs(cache_dir, exist_ok=True)
+        with open(path, "wb") as handle:
+            handle.write(data)
+        return {"status": "ok", "detail": "{} bytes".format(len(data))}
+    except Exception as exc:  # noqa: BLE001 - network errors vary by environment
+        return {"status": "unavailable", "detail": str(exc)}
+
+
+def ensure_cache(cache_dir: str, no_update: bool = False, timeout: float = 60.0) -> Optional[str]:
+    """Return None when a usable cache exists, else a failure reason."""
+    ofac_path = os.path.join(cache_dir, OFAC_FILE)
+    if os.path.exists(ofac_path):
+        age_days = (dt.datetime.now().timestamp() - os.path.getmtime(ofac_path)) / 86400
+        if age_days <= CACHE_MAX_AGE_DAYS:
+            return None
+    if no_update:
+        return None if os.path.exists(ofac_path) else "no-network"
+    try:
+        result = download_ofac(cache_dir, timeout=timeout)
+    except Exception:
+        return "download-failed"
+    if result.get("status") == "ok" and os.path.exists(ofac_path):
+        return None
+    return "download-failed"
+
+
+def analyse(query: str, cache_dir: str = CACHE_DIR, no_update: bool = False) -> dict:
     result = {
         "query": query,
         "lists_checked": [],
@@ -110,9 +148,12 @@ def analyse(query: str) -> dict:
         "requires_manual_review": True,
         "note": "同名需人工排除；存疑应标注「疑似命中，需人工核实」",
     }
+    cache_error = ensure_cache(cache_dir, no_update=no_update)
+    if cache_error:
+        return {**result, "status": "unavailable", "error": cache_error}
     any_list = False
     for list_name, filename in LIST_FILES.items():
-        path = os.path.join(CACHE_DIR, filename)
+        path = os.path.join(cache_dir, filename)
         if not os.path.exists(path):
             continue
         any_list = True
@@ -121,8 +162,6 @@ def analyse(query: str) -> dict:
         except OSError:
             continue
         mtime = os.path.getmtime(path)
-        import datetime as dt
-
         updated = dt.datetime.fromtimestamp(mtime, dt.timezone.utc).strftime("%Y-%m-%d")
         result["lists_checked"].append({"list": list_name, "updated_at": updated})
         for hit in match(query, entries):
@@ -131,8 +170,7 @@ def analyse(query: str) -> dict:
             )
     result["match_count"] = len(result["possible_matches"])
     if not any_list:
-        return {**result, "status": "unavailable",
-                "error": "no sanctions list cached; run scripts/update_sanctions first"}
+        return {**result, "status": "unavailable", "error": "no sanctions list cached"}
     result["status"] = "ok"
     return result
 
@@ -141,12 +179,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Local sanctions list matching for buyer-check.")
     parser.add_argument("name", help="person or company name to check")
     parser.add_argument("--country", help="claimed country ISO2, used only for manual exclusion context")
+    parser.add_argument("--no-update", action="store_true", help="never download or refresh the cache")
+    parser.add_argument("--cache-dir", default=CACHE_DIR, help="cache directory (default: .cache/sanctions)")
     return parser
 
 
 def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
-    result = analyse(args.name)
+    result = analyse(args.name, cache_dir=args.cache_dir, no_update=args.no_update)
     print(json.dumps(result, ensure_ascii=False))
     return 0 if result.get("status") == "ok" else 1
 

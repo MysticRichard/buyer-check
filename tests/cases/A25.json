@@ -1,0 +1,8 @@
+{
+  "id": "A25",
+  "title": "制裁名单自动下载：无缓存/有缓存无命中/同名命中/下载成功/下载失败",
+  "type": "sanctions",
+  "input": {
+    "csv": "1,individual,\"KHALIL, AHMED\"\n2,individual,\"DELGADO, MARCUS\"\n3,entity,\"GLOBAL STAR TRADING CO\"\n4,individual,\"DOE, JOHN\"\n"
+  }
+}
