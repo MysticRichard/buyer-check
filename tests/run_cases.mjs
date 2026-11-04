@@ -20,6 +20,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { score as riskScore, maskSensitive, loadRules } from '../scripts/risk_score.mjs';
 import { analyse as domainAnalyse, loadBrands, loadBrandData } from '../scripts/domain_similarity.mjs';
 import { analyse as whoisAnalyse } from '../scripts/whois_lookup.mjs';
+import { renderCard, ladderCombinations } from '../scripts/render_card.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, '..');
@@ -45,6 +46,35 @@ function findPython() {
 
 function loadCase(file) {
   return JSON.parse(readFileSync(join(CASES_DIR, file), 'utf8'));
+}
+
+function loadFixture(name) {
+  return JSON.parse(readFileSync(join(FIXTURES_DIR, name), 'utf8'));
+}
+
+function cloneJson(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
+function setByPath(target, path, value) {
+  const parts = path.split('.');
+  let cursor = target;
+  for (let i = 0; i < parts.length - 1; i += 1) {
+    const key = /^\d+$/.test(parts[i]) ? Number(parts[i]) : parts[i];
+    if (cursor[key] === undefined || cursor[key] === null || typeof cursor[key] !== 'object') {
+      cursor[key] = /^\d+$/.test(parts[i + 1]) ? [] : {};
+    }
+    cursor = cursor[key];
+  }
+  const last = /^\d+$/.test(parts[parts.length - 1]) ? Number(parts[parts.length - 1]) : parts[parts.length - 1];
+  cursor[last] = value;
+}
+
+function runPythonRender(python, args) {
+  const [cmd, ...rest] = python.split(' ');
+  const result = spawnSync(cmd, [...rest, join(ROOT, 'scripts', 'render_card.py'), ...args], { encoding: 'utf8', timeout: 30000 });
+  if (!result.stdout) throw new Error(result.stderr || 'no output');
+  return JSON.parse(result.stdout);
 }
 
 // The repository keeps one file per case (tests/cases/A*.json). The lean
@@ -352,6 +382,172 @@ const runners = {
       pyFilled !== null && pyFilled.every((value, index) => value === node[index].filled),
     ];
     return { ok: checks.every(Boolean), actual: { node, python: pyFilled } };
+  },
+
+  render_card(testCase) {
+    const evidence = testCase.input.fixture_data ? cloneJson(testCase.input.fixture_data) : loadFixture(testCase.input.fixture);
+    const result = renderCard(evidence, loadRules());
+    const expect = testCase.expect || {};
+    const checks = [];
+    if (expect.status !== undefined) checks.push(result.status === expect.status);
+    if (expect.level !== undefined) checks.push(result.level === expect.level);
+    if (expect.risk_score !== undefined) checks.push(result.risk_score === expect.risk_score);
+    if (expect.credit !== undefined) checks.push(result.credit?.score === expect.credit);
+    if (expect.credit_tier !== undefined) checks.push(result.credit?.tier === expect.credit_tier);
+    if (expect.actual_risk_score !== undefined) checks.push(result.actual?.risk_score === expect.actual_risk_score);
+    if (expect.actual_level !== undefined) checks.push(result.actual?.level === expect.actual_level);
+    if (result.card) {
+      if (expect.card_file) {
+        const expected = readFileSync(join(FIXTURES_DIR, expect.card_file), 'utf8').replace(/\r\n/g, '\n').replace(/\n$/, '');
+        checks.push(result.card === expected);
+      }
+      for (const needle of expect.card_includes || []) checks.push(result.card.includes(needle));
+      for (const needle of expect.card_excludes || []) checks.push(!result.card.includes(needle));
+    } else if (expect.card_file || (expect.card_includes || []).length > 0) {
+      checks.push(false);
+    }
+    if (expect.line_count_max !== undefined) checks.push(result.line_count <= expect.line_count_max);
+    if (expect.first_screen_max !== undefined) checks.push(result.first_screen_lines <= expect.first_screen_max);
+    return {
+      ok: checks.every(Boolean),
+      actual: {
+        status: result.status,
+        level: result.level,
+        risk_score: result.risk_score,
+        credit: result.credit,
+        line_count: result.line_count,
+        first_screen_lines: result.first_screen_lines,
+        errors: result.errors,
+        mismatch: result.actual,
+      },
+    };
+  },
+
+  render_card_boundary(testCase) {
+    const rules = loadRules();
+    const outcomes = (testCase.input.cases || []).map((entry) => {
+      const result = renderCard(cloneJson(entry.evidence), rules);
+      const expect = entry.expect || {};
+      const checks = [result.status === 'ok'];
+      if (expect.credit !== undefined) checks.push(result.credit?.score === expect.credit);
+      if (expect.credit_tier !== undefined) checks.push(result.credit?.tier === expect.credit_tier);
+      for (const [key, expected] of Object.entries(expect.dimensions || {})) {
+        const dim = (result.dimensions || []).find((item) => item.key === key);
+        checks.push(Boolean(dim) && dim.status === expected.status && dim.symbol === expected.symbol && dim.bar === expected.bar);
+      }
+      return { name: entry.name, ok: checks.every(Boolean), credit: result.credit, dims: result.dimensions };
+    });
+    return { ok: outcomes.every((item) => item.ok), actual: outcomes };
+  },
+
+  render_card_validation(testCase) {
+    const rules = loadRules();
+    const base = loadFixture(testCase.input.fixture);
+    const outcomes = (testCase.input.cases || []).map((entry) => {
+      const evidence = cloneJson(base);
+      for (const mutation of entry.mutate || []) setByPath(evidence.display, mutation.path, cloneJson(mutation.value));
+      const result = renderCard(evidence, rules);
+      const codes = (result.errors || []).map((error) => error.code);
+      return {
+        name: entry.name,
+        ok: result.status === 'invalid-display' && codes.includes(entry.expect_code),
+        status: result.status,
+        codes,
+      };
+    });
+    return { ok: outcomes.every((item) => item.ok), actual: outcomes };
+  },
+
+  render_card_ladder(testCase) {
+    const combos = ladderCombinations();
+    const expect = testCase.expect || {};
+    const checks = [combos.length === expect.combos];
+    let violations = 0;
+    for (const combo of combos) {
+      const [reply, sample, custom, payment] = combo.actions;
+      const input = combo.input;
+      const statuses = combo.actions.map((action) => action.status);
+      if (statuses.some((status) => !['✅', '⚠️', '⛔'].includes(status))) violations += 1;
+      if (input.level === '高') {
+        if (!(reply.status === '⚠️' && sample.status === '⛔' && custom.status === '⛔' && payment.status === '⛔')) violations += 1;
+      }
+      if (input.pay_flag && payment.status !== '⛔') violations += 1;
+      if (input.level === '低' && input.credit_tier === '高' && !input.company_low && !input.pay_flag && input.compliance_checked && input.open_questions.length === 0) {
+        if (!(sample.status === '✅' && custom.status === '✅')) violations += 1;
+      }
+      if (input.level === '低' && input.credit_tier === '高' && !input.company_low && !input.pay_flag && input.compliance_checked && input.open_questions.length > 0) {
+        if (custom.status !== '⚠️') violations += 1;
+      }
+      if (input.company_low && (custom.status !== '⛔' || sample.status === '✅')) violations += 1;
+      if (input.level === '需人工核实' && (custom.status !== '⛔' || sample.status !== '⚠️')) violations += 1;
+      if (input.stage === 'pre-order' && input.account_verified && !input.pay_flag && input.level !== '高') {
+        if (payment.status !== '✅') violations += 1;
+      }
+      if (input.stage === 'inquiry' && payment.status === '✅') violations += 1;
+
+      if (testCase.input.mode === 'conclusion') {
+        const expected = input.level === '高'
+          ? '先不要投入：不寄样、不垫付、不付款。'
+          : sample.status === '✅' && custom.status === '✅'
+            ? '可以正常推进，收款前先做订单前复核。'
+            : sample.status === '✅' && custom.status === '⚠️'
+              ? '可以报价、寄样；定制或大额备货前，先'
+              : sample.status === '⚠️'
+                ? '可以先报价；投入前先'
+                : '信息还不足：先报标准价，不要投入。最值钱的补充：';
+        const matches = sample.status === '✅' && custom.status === '⚠️' || sample.status === '⚠️'
+          ? combo.conclusion.startsWith(expected)
+          : combo.conclusion === expected;
+        if (!matches) violations += 1;
+      }
+    }
+    checks.push(violations === 0);
+
+    const python = findPython();
+    if (python) {
+      const py = runPythonRender(python, ['--ladder']);
+      checks.push(isDeepStrictEqual(py.combos, combos));
+    } else {
+      checks.push(false);
+    }
+    return { ok: checks.every(Boolean), actual: { combos: combos.length, violations, python: Boolean(python) } };
+  },
+
+  render_card_lines(testCase) {
+    const rules = loadRules();
+    const outcomes = (testCase.input.fixtures || []).map((name) => {
+      const result = renderCard(loadFixture(name), rules);
+      return {
+        fixture: name,
+        ok: result.status === 'ok' && result.line_count <= testCase.expect.max_lines && result.first_screen_lines <= testCase.expect.max_first_screen,
+        line_count: result.line_count,
+        first_screen_lines: result.first_screen_lines,
+      };
+    });
+    return { ok: outcomes.every((item) => item.ok), actual: outcomes };
+  },
+
+  render_card_deterministic(testCase) {
+    const evidence = loadFixture(testCase.input.fixture);
+    const rules = loadRules();
+    const runs = testCase.input.runs || 100;
+    let first = null;
+    let identical = true;
+    for (let i = 0; i < runs; i += 1) {
+      const card = renderCard(cloneJson(evidence), rules).card;
+      if (first === null) first = card;
+      else if (card !== first) identical = false;
+    }
+    const python = findPython();
+    let parity = false;
+    if (python) {
+      const result = runPythonRender(python, [join(FIXTURES_DIR, testCase.input.fixture), '--json']);
+      parity = result.status === 'ok' && result.card === first;
+    }
+    return {
+      ok: identical && parity && runs === testCase.expect.runs,
+      actual: { runs, identical, parity },
+    };
   },
 
   manual() {

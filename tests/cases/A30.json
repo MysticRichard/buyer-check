@@ -1,0 +1,7 @@
+{
+  "id": "A30",
+  "title": "动作阶梯全组合：768 种输入各恰有一个结果且满足 8 条硬约束",
+  "type": "render_card_ladder",
+  "input": { "mode": "invariants" },
+  "expect": { "combos": 768, "all_pass": true }
+}

@@ -1,0 +1,16 @@
+{
+  "id": "A36",
+  "title": "旧证据包（没有 display、layers、intake）能渲染并使用默认文字",
+  "type": "render_card",
+  "input": { "fixture": "legacy_card.json" },
+  "expect": {
+    "status": "ok",
+    "level": "需人工核实",
+    "card_includes": [
+      "客户：ACME TRADING LTD · 一般询盘",
+      "**需要注意**\n- 未发现需要注意的信号",
+      "**已核实**\n- 🟢 域名信息已核实",
+      "**没查到（没查到不代表没问题）**"
+    ]
+  }
+}

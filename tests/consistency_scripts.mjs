@@ -151,6 +151,18 @@ let checked = 0;
   }
   console.log(`✓ domain_similarity: ${domainChecked}/${domainCases.length} cases identical`);
 
+  // ---------- render_card ----------
+  const cardFixtures = ['card_harbor.json', 'card_nordic.json', 'card_manual.json', 'legacy_card.json', 'score_mismatch.json'];
+  let cardChecked = 0;
+  for (const fixture of cardFixtures) {
+    const [py, js] = runScript(python, 'render_card', [join(ROOT, 'tests', 'fixtures', fixture), '--json']);
+    compare(`render_card ${fixture}`, py, js);
+    cardChecked += 1;
+  }
+  const [pyLadder, jsLadder] = runScript(python, 'render_card', ['--ladder']);
+  compare('render_card --ladder', pyLadder, jsLadder);
+  console.log(`✓ render_card: ${cardChecked}/${cardFixtures.length} card cases + 768 ladder combinations identical`);
+
   // ---------- ip_check ----------
   const ipCases = [
     ['', ['--claimed-country', 'AE']],

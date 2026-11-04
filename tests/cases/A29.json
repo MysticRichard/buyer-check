@@ -1,0 +1,74 @@
+{
+  "id": "A29",
+  "title": "核实度边界：矛盾记 0、人物真实度高加 0.1、缺少层输入记 0",
+  "type": "render_card_boundary",
+  "input": {
+    "cases": [
+      {
+        "name": "公司层命中积极矛盾",
+        "evidence": {
+          "flags": [{ "id": "RF-NEG-001" }],
+          "checks": [],
+          "anchors": { "closure": "independent" },
+          "coverage": { "checked": 8, "total": 8, "uncovered": [] },
+          "layers": {
+            "company": { "credibility": "high" },
+            "person_company_link": { "strength": "strong" },
+            "contact": { "phone_matches": true, "business_email": true, "domain_aged": true },
+            "compliance": { "sanctions": "clear", "negative": "clear" },
+            "scale": { "map": "matched", "customs": "consistent" }
+          }
+        },
+        "expect": {
+          "credit": 60,
+          "credit_tier": "中",
+          "dimensions": {
+            "company": { "status": "有矛盾", "symbol": "⚠️", "bar": "□□□□□" }
+          }
+        }
+      },
+      {
+        "name": "人物真实度高给关联加 0.1 且不超过 1.0",
+        "evidence": {
+          "flags": [],
+          "checks": [],
+          "anchors": { "closure": "single" },
+          "coverage": { "checked": 4, "total": 8, "uncovered": [] },
+          "layers": {
+            "company": { "credibility": "low" },
+            "person_company_link": { "strength": "medium" },
+            "person_authenticity": { "level": "high" },
+            "contact": { "phone_matches": false, "business_email": false, "domain_aged": false },
+            "compliance": { "sanctions": "unchecked", "negative": "unchecked" },
+            "scale": { "map": "unknown", "customs": "unknown" }
+          }
+        },
+        "expect": {
+          "credit": 18,
+          "credit_tier": "低",
+          "dimensions": {
+            "link": { "status": "基本核实", "symbol": "✅", "bar": "■■■■□" }
+          }
+        }
+      },
+      {
+        "name": "缺少 layers 输入时各维度记 0",
+        "evidence": {
+          "flags": [],
+          "checks": [],
+          "anchors": { "closure": "none" },
+          "coverage": { "checked": 2, "total": 8, "uncovered": [] }
+        },
+        "expect": {
+          "credit": 0,
+          "credit_tier": "低",
+          "dimensions": {
+            "company": { "status": "未核实", "symbol": "❓", "bar": "□□□□□" },
+            "link": { "status": "未核实", "symbol": "❓", "bar": "□□□□□" }
+          }
+        }
+      }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

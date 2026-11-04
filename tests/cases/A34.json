@@ -1,0 +1,17 @@
+{
+  "id": "A34",
+  "title": "快照：只有名称+电话的需人工核实卡（分数条全 □、标题 ⚪、核实度低）",
+  "type": "render_card",
+  "input": { "fixture": "card_manual.json" },
+  "expect": {
+    "status": "ok",
+    "level": "需人工核实",
+    "credit_tier": "低",
+    "card_includes": [
+      "⚪ 需人工核实 · 风险 0/100 □□□□□□□□□□",
+      "- ⚪ 地图：需浏览器",
+      "- ⚪ 海关：无免费数据"
+    ],
+    "card_excludes": ["风险 0/100 ■"]
+  }
+}

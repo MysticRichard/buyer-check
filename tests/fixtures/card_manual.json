@@ -1,0 +1,26 @@
+{
+  "subject": {
+    "company": "ACME TRADING LTD",
+    "person": null,
+    "phone": "+971 5* *** 0100",
+    "email": null,
+    "domain": null,
+    "country": "ae"
+  },
+  "stage": "inquiry",
+  "checks": [
+    { "id": "phone", "dimension": "phone", "result": "normal" }
+  ],
+  "flags": [],
+  "anchors": { "closure": "none" },
+  "coverage": {
+    "checked": 3,
+    "total": 8,
+    "uncovered": [
+      "map:not-covered:needs-browser",
+      "customs:not-covered:no-free-data"
+    ]
+  },
+  "confidence": "低",
+  "score": { "risk_score": 0, "level": "需人工核实" }
+}

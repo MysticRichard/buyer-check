@@ -1,0 +1,11 @@
+{
+  "id": "A37",
+  "title": "证据包 score 与重算结果不一致时返回 score-mismatch，不渲染",
+  "type": "render_card",
+  "input": { "fixture": "score_mismatch.json" },
+  "expect": {
+    "status": "score-mismatch",
+    "actual_risk_score": 0,
+    "actual_level": "需人工核实"
+  }
+}

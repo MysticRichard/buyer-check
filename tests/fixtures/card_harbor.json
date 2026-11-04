@@ -1,0 +1,87 @@
+{
+  "subject": {
+    "company": "Harbor Rim Engineering",
+    "person": "a***a",
+    "phone": "+65 6* *** 0100",
+    "email": null,
+    "domain": "harborrim.example",
+    "country": "SG"
+  },
+  "stage": "inquiry",
+  "intake": {
+    "company": "Harbor Rim Engineering",
+    "inquiry_type": "tender",
+    "inquiry_text": "We invite you to tender for the supply of industrial pumps for a project in Batam.",
+    "country": "SG",
+    "city": "Batam"
+  },
+  "checks": [
+    { "id": "domain", "dimension": "domain", "result": "normal" },
+    { "id": "phone", "dimension": "phone", "result": "normal" },
+    { "id": "email", "dimension": "email", "result": "normal" },
+    { "id": "sanctions", "dimension": "sanctions", "result": "normal" },
+    { "id": "negative", "dimension": "negative", "result": "normal" }
+  ],
+  "flags": [],
+  "anchors": { "closure": "independent" },
+  "coverage": {
+    "checked": 7,
+    "total": 8,
+    "uncovered": ["map:not-covered:no-public-record"]
+  },
+  "confidence": "高",
+  "layers": {
+    "company": { "credibility": "high" },
+    "person_company_link": { "strength": "strong" },
+    "person_authenticity": { "level": "high" },
+    "contact": { "phone_matches": true, "business_email": true, "domain_aged": true },
+    "compliance": { "sanctions": "clear", "negative": "clear" },
+    "scale": { "map": "unknown", "customs": "unknown" }
+  },
+  "score": { "total": 0, "risk_score": 0, "level": "低" },
+  "display": {
+    "customer_label": "Harbor Rim Engineering（新加坡 / 巴淡岛）",
+    "inquiry_type": "招标邀请",
+    "dim_notes": {
+      "company": "官网 2015 年注册，领英和 Facebook 页互相指向",
+      "link": "领英现任职 Harbor Rim Engineering，职位和询盘吻合",
+      "contact": "官网电话与客户一致，邮箱域名等于官网",
+      "behavior": "没要求先付款，没要求换收款账户",
+      "compliance": "制裁名单无匹配，公开检索没发现投诉",
+      "scale": "地图没找到商家，海关公开库无记录"
+    },
+    "attention": [
+      { "text": "招标信息待确认：西门子是否强制，项目在巴淡岛还是新加坡", "flag_id": null, "kind": "clue" }
+    ],
+    "verified": [
+      { "text": "官网电话和客户一致，邮箱域名等于官网域名" },
+      { "text": "域名已使用 11 年，没发现钓鱼或投诉记录" },
+      { "text": "制裁名单没有匹配" }
+    ],
+    "missing": [
+      {
+        "text": "地图上没找到这家公司",
+        "gain": 3,
+        "action": {
+          "label": "地图",
+          "link_text": "在 Google 地图搜 Harbor Rim Engineering",
+          "url": "https://www.google.com/maps/search/Harbor+Rim+Engineering+Batam",
+          "instruction": "看建筑规模和门口有没有招牌，回传“吻合 / 偏小 / 住宅”"
+        }
+      },
+      { "text": "海关公开库没有记录", "gain": 2 }
+    ],
+    "open_questions": ["西门子是否强制", "项目地点"],
+    "scripts": [
+      {
+        "en": "Could you confirm whether Siemens is mandatory or an equivalent brand is acceptable?",
+        "zh": "请确认西门子是否强制，或是否接受同等品牌。"
+      },
+      {
+        "en": "Could you confirm whether the project site is Batam or Singapore?",
+        "zh": "请确认项目地点是巴淡岛还是新加坡。"
+      }
+    ],
+    "supplement": "补充地图结果后核实度可达 95。"
+  }
+}

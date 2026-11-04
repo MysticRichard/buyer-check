@@ -1,0 +1,7 @@
+{
+  "id": "A39",
+  "title": "确定性：同一证据包渲染 100 次字节一致，Python 与 Node 一致",
+  "type": "render_card_deterministic",
+  "input": { "fixture": "card_harbor.json", "runs": 100 },
+  "expect": { "runs": 100, "all_identical": true, "parity": true }
+}
