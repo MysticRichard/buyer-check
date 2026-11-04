@@ -143,7 +143,7 @@
 
 ### 新增：证据包与双模式输出（D4/D5/D6）
 
-- `card_template.md`：结论卡版式（首行颜色+等级+分数、10 格分数条、灰▒、≤5 风险点、≤3 话术英文+中文）、证据包 JSON Schema（checks[].result 含 not-covered/skipped-login；anchors.closure 四档）、追问话术规则与话术库（D6/D13：委婉含蓄、询盘期不索要执照）。
+- `card_template.md`：结论卡版式（首行颜色+等级+分数、10 格分数条、灰□、≤5 风险点、≤3 话术英文+中文）、证据包 JSON Schema（checks[].result 含 not-covered/skipped-login；anchors.closure 四档）、追问话术规则与话术库（D6/D13：委婉含蓄、询盘期不索要执照）。
 - SKILL.md 输出改为双模式：结论卡默认只显示不落盘；完整报告按需写入 `reports/`；同一证据包渲染保证一致性（E1）；支持增量复核。
 
 ### 新增：三个全球通用脚本（E3，Python + Node 双实现，tests/consistency_scripts.mjs 保证输出一致）

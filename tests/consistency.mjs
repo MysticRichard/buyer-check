@@ -97,6 +97,16 @@ for (const [file, needles] of templateSpecs) {
     if (!text.includes(needle)) fail(`docs ${file}: missing "${needle}"`);
   }
 }
+const beforeScoreChars = failures;
+for (const file of ['card_template.md', 'SKILL.md', 'examples/sample-report.md', 'report_template.md', 'docs/iteration_plan.md', 'CHANGELOG.md']) {
+  const text = readFileSync(join(docRoot, file), 'utf8');
+  if (/\u2593|\u2591|\u2592/.test(text)) fail(`docs ${file}: legacy score-bar character`);
+}
+const cardText = readFileSync(join(docRoot, 'card_template.md'), 'utf8');
+if (!cardText.includes('■') || !cardText.includes('□')) fail('card_template.md: new score-bar characters missing');
+if (failures === beforeScoreChars) {
+  console.log('✓ score-bar characters use ■/□ only');
+}
 if (failures === beforeTemplate) {
   console.log('✓ card/report templates require confidence + coverage + uncovered items');
 }

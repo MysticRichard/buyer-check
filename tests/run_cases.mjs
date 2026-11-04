@@ -331,6 +331,29 @@ const runners = {
     return { ok: checks.every(Boolean), actual: { noCache, clear, hit, success, failed } };
   },
 
+  score_bar(testCase) {
+    const scores = testCase.input?.scores || [];
+    const node = scores.map((score) => {
+      const filled = Math.floor(score / 10 + 0.5);
+      return { score, filled, bar: `${'■'.repeat(filled)}${'□'.repeat(10 - filled)}` };
+    });
+    const python = findPython();
+    let pyFilled = null;
+    if (python) {
+      const [cmd, ...rest] = python.split(' ');
+      const script = `import math, json\nprint(json.dumps([math.floor(x / 10 + 0.5) for x in ${JSON.stringify(scores)}]))`;
+      const result = spawnSync(cmd, [...rest, '-c', script], { encoding: 'utf8', timeout: 30000 });
+      if (result.stdout) pyFilled = JSON.parse(result.stdout);
+    }
+    const expected = testCase.expect?.filled || [];
+    const checks = [
+      node.every((item, index) => item.filled === expected[index]),
+      pyFilled !== null && pyFilled.every((value, index) => value === expected[index]),
+      pyFilled !== null && pyFilled.every((value, index) => value === node[index].filled),
+    ];
+    return { ok: checks.every(Boolean), actual: { node, python: pyFilled } };
+  },
+
   manual() {
     return { ok: true, skipped: true, actual: 'requires live network / model behaviour' };
   },
