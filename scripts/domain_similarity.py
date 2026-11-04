@@ -22,6 +22,7 @@ import sys
 DEFAULT_BRANDS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "brands.json")
 
 HOMOGLYPHS = str.maketrans({"l": "1", "i": "1", "o": "0", "s": "5", "e": "3"})
+SHORT = 5
 
 
 def normalize(domain: str) -> str:
@@ -66,10 +67,11 @@ def levenshtein(a: str, b: str) -> int:
     return previous[-1]
 
 
-def compare(target: str, brand_domain: str) -> tuple:
+def compare(target: str, brand_domain: str, risk_words=None) -> tuple:
     """Return (type, score) describing how target relates to a brand domain."""
     target_label, target_tld = core_label(target)
     brand_label, brand_tld = core_label(brand_domain)
+    risk_words = set(risk_words or [])
 
     if target_label == brand_label and target_tld == brand_tld:
         return "exact", 0.0
@@ -78,8 +80,14 @@ def compare(target: str, brand_domain: str) -> tuple:
     if homoglyph_key(target_label) == homoglyph_key(brand_label):
         return "homoglyph", 0.90
     if target_label.startswith(brand_label) or target_label.endswith(brand_label):
-        separator = "-" if "-" in target_label else ""
-        return ("hyphenated" if separator else "affixed"), 0.80
+        if "-" in target_label:
+            return "hyphenated", 0.80
+        remainder = target_label.replace(brand_label, "", 1).strip("-")
+        if len(brand_label) <= SHORT:
+            if remainder in risk_words:
+                return "affixed", 0.80
+            return "none", 0.0
+        return "affixed", 0.80
     distance = levenshtein(target_label, brand_label)
     if distance == 1:
         return "typosquat", 0.85
@@ -88,17 +96,23 @@ def compare(target: str, brand_domain: str) -> tuple:
     return "none", 0.0
 
 
+def load_brand_data(path: str) -> tuple:
+    """Load brands and risk words from JSON."""
+    with open(path, "r", encoding="utf-8") as handle:
+        data = json.load(handle)
+    return data.get("brands", []), data.get("risk_words", [])
+
+
 def load_brands(path: str) -> list:
     """Load the brand list from JSON."""
-    with open(path, "r", encoding="utf-8") as handle:
-        return json.load(handle).get("brands", [])
+    return load_brand_data(path)[0]
 
 
-def analyse(target: str, brands: list, threshold: float) -> dict:
+def analyse(target: str, brands: list, threshold: float, risk_words=None) -> dict:
     """Compare a target domain against all known brands."""
     matches = []
     for brand in brands:
-        kind, score = compare(target, brand["domain"])
+        kind, score = compare(target, brand["domain"], risk_words)
         if kind == "exact":
             return {
                 "target": normalize(target),
@@ -137,12 +151,12 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
     try:
-        brands = load_brands(args.brands)
+        brands, risk_words = load_brand_data(args.brands)
     except OSError as exc:
         print(json.dumps({"status": "unavailable", "error": str(exc)}, ensure_ascii=False))
         return 1
 
-    result = analyse(args.domain, brands, args.threshold)
+    result = analyse(args.domain, brands, args.threshold, risk_words)
     result["status"] = "ok"
     print(json.dumps(result, ensure_ascii=False))
     return 0

@@ -19,6 +19,7 @@ const DIR = dirname(fileURLToPath(import.meta.url));
 export const DEFAULT_BRANDS = join(DIR, 'brands.json');
 
 const HOMOGLYPHS = { l: '1', i: '1', o: '0', s: '5', e: '3' };
+const SHORT = 5;
 
 export function normalize(domain = '') {
   let value = String(domain).trim().toLowerCase();
@@ -55,15 +56,22 @@ export function levenshtein(a, b) {
   return previous[b.length];
 }
 
-export function compare(target, brandDomain) {
+export function compare(target, brandDomain, riskWords = []) {
   const [targetLabel, targetTld] = coreLabel(target);
   const [brandLabel, brandTld] = coreLabel(brandDomain);
+  const risks = new Set(riskWords);
 
   if (targetLabel === brandLabel && targetTld === brandTld) return ['exact', 0.0];
   if (targetLabel === brandLabel) return ['tld_swap', 0.7];
   if (homoglyphKey(targetLabel) === homoglyphKey(brandLabel)) return ['homoglyph', 0.9];
   if (targetLabel.startsWith(brandLabel) || targetLabel.endsWith(brandLabel)) {
-    return [targetLabel.includes('-') ? 'hyphenated' : 'affixed', 0.8];
+    if (targetLabel.includes('-')) return ['hyphenated', 0.8];
+    const remainder = targetLabel.replace(brandLabel, '').replace(/^-/, '');
+    if (brandLabel.length <= SHORT) {
+      if (risks.has(remainder)) return ['affixed', 0.8];
+      return ['none', 0.0];
+    }
+    return ['affixed', 0.8];
   }
   const distance = levenshtein(targetLabel, brandLabel);
   if (distance === 1) return ['typosquat', 0.85];
@@ -71,14 +79,19 @@ export function compare(target, brandDomain) {
   return ['none', 0.0];
 }
 
-export function loadBrands(path = DEFAULT_BRANDS) {
-  return JSON.parse(readFileSync(path, 'utf8')).brands || [];
+export function loadBrandData(path = DEFAULT_BRANDS) {
+  const data = JSON.parse(readFileSync(path, 'utf8'));
+  return { brands: data.brands || [], riskWords: data.risk_words || [] };
 }
 
-export function analyse(target, brands, threshold = 0.5) {
+export function loadBrands(path = DEFAULT_BRANDS) {
+  return loadBrandData(path).brands;
+}
+
+export function analyse(target, brands, threshold = 0.5, riskWords = []) {
   const matches = [];
   for (const brand of brands) {
-    const [type, score] = compare(target, brand.domain);
+    const [type, score] = compare(target, brand.domain, riskWords);
     if (type === 'exact') {
       return {
         target: normalize(target),
@@ -121,14 +134,14 @@ function main() {
     console.log(JSON.stringify({ status: 'error', error: 'missing domain argument' }));
     return 1;
   }
-  let brands;
+  let brandData;
   try {
-    brands = loadBrands(args.brands);
+    brandData = loadBrandData(args.brands);
   } catch (error) {
     console.log(JSON.stringify({ status: 'unavailable', error: String(error) }));
     return 1;
   }
-  console.log(JSON.stringify({ ...analyse(args.domain, brands, args.threshold), status: 'ok' }));
+  console.log(JSON.stringify({ ...analyse(args.domain, brandData.brands, args.threshold, brandData.riskWords), status: 'ok' }));
   return 0;
 }
 

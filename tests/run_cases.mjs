@@ -18,7 +18,7 @@ import { fileURLToPath } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
 
 import { score as riskScore, maskSensitive, loadRules } from '../scripts/risk_score.mjs';
-import { analyse as domainAnalyse, loadBrands } from '../scripts/domain_similarity.mjs';
+import { analyse as domainAnalyse, loadBrands, loadBrandData } from '../scripts/domain_similarity.mjs';
 import { analyse as whoisAnalyse } from '../scripts/whois_lookup.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -128,6 +128,19 @@ const runners = {
       ok: checks.every(Boolean),
       actual: { is_lookalike: result.is_lookalike, best_match: result.best_match },
     };
+  },
+
+  domain_batch(testCase) {
+    const { brands, riskWords } = loadBrandData();
+    const threshold = testCase.input.threshold ?? 0.5;
+    const results = (testCase.input.cases || []).map((entry) => {
+      const result = domainAnalyse(entry.domain, brands, threshold, riskWords);
+      const checks = [result.is_lookalike === entry.is_lookalike];
+      if (entry.type) checks.push(result.best_match?.type === entry.type);
+      if (entry.brand) checks.push(result.best_match?.brand === entry.brand);
+      return { domain: entry.domain, ok: checks.every(Boolean), result };
+    });
+    return { ok: results.every((item) => item.ok), actual: results };
   },
 
   invariance(testCase) {

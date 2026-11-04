@@ -1,0 +1,18 @@
+{
+  "id": "A24",
+  "title": "短品牌真阳性：连字符/风险词/同形字/长品牌仍判仿冒",
+  "type": "domain_batch",
+  "input": {
+    "threshold": 0.5,
+    "cases": [
+      { "domain": "ups-track.com", "is_lookalike": true, "type": "hyphenated", "brand": "UPS" },
+      { "domain": "upsexpress.com", "is_lookalike": true, "type": "affixed", "brand": "UPS" },
+      { "domain": "dhl-express-pay.com", "is_lookalike": true, "type": "hyphenated", "brand": "DHL" },
+      { "domain": "fedex-login.com", "is_lookalike": true, "type": "hyphenated", "brand": "FedEx" },
+      { "domain": "app1e.com", "is_lookalike": true, "type": "homoglyph", "brand": "Apple" },
+      { "domain": "apple-support.com", "is_lookalike": true, "type": "hyphenated", "brand": "Apple" },
+      { "domain": "maersklines.com", "is_lookalike": true, "type": "affixed", "brand": "Maersk" },
+      { "domain": "mymaersk.com", "is_lookalike": true, "type": "affixed", "brand": "Maersk" }
+    ]
+  }
+}

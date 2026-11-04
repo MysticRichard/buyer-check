@@ -1,6 +1,12 @@
 {
-  "version": "0.1.0",
+  "version": "0.2.0",
   "note": "知名公司域名清单，用于识别仿冒域名（RF-DOM-001）。可自行追加条目。",
+  "risk_words": [
+    "express", "track", "tracking", "pay", "payment", "invoice", "login",
+    "secure", "support", "service", "services", "shipping", "cargo",
+    "freight", "logistics", "customs", "delivery", "parcel", "mail",
+    "bank", "verify", "account", "official"
+  ],
   "brands": [
     { "name": "Apple", "domain": "apple.com" },
     { "name": "Microsoft", "domain": "microsoft.com" },

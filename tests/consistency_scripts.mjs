@@ -135,6 +135,22 @@ let checked = 0;
   }
   console.log(`✓ phone_check: ${checked}/${phoneCases.length} cases identical`);
 
+  // ---------- domain_similarity ----------
+  const domainCases = [
+    'harborrimgroups.example', 'sunsetgroups.com', 'cups.com', 'pineapple.com',
+    'intelligentsolutions.com', 'bpharma.com', 'mastersteel.com', 'cupsupply.com',
+    'dhlgroup.com', 'fedexgroup.com', 'ups-track.com', 'upsexpress.com',
+    'dhl-express-pay.com', 'fedex-login.com', 'app1e.com', 'apple-support.com',
+    'maersklines.com', 'mymaersk.com',
+  ];
+  let domainChecked = 0;
+  for (const domain of domainCases) {
+    const [py, js] = runScript(python, 'domain_similarity', [domain]);
+    compare(`domain_similarity ${domain}`, py, js);
+    domainChecked += 1;
+  }
+  console.log(`✓ domain_similarity: ${domainChecked}/${domainCases.length} cases identical`);
+
   // ---------- ip_check ----------
   const ipCases = [
     ['', ['--claimed-country', 'AE']],
