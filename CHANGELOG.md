@@ -1,6 +1,27 @@
 # 更新日志
 
-本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与语义化版本。迭代方案见 [docs/iteration_plan.md](docs/iteration_plan.md)（v0.4.1–v0.6.0）、[docs/iteration_plan_v0.7.md](docs/iteration_plan_v0.7.md)（v0.7.0）与 [docs/iteration_plan_v0.8.md](docs/iteration_plan_v0.8.md)（v0.8.0）。
+本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与语义化版本。迭代方案见 [docs/iteration_plan.md](docs/iteration_plan.md)（v0.4.1–v0.6.0）、[docs/iteration_plan_v0.7.md](docs/iteration_plan_v0.7.md)（v0.7.0）、[docs/iteration_plan_v0.8.md](docs/iteration_plan_v0.8.md)（v0.8.0）与 [docs/iteration_plan_v0.9.md](docs/iteration_plan_v0.9.md)（v0.9.0，含 v0.8.1）。
+
+## [0.8.1] - 2026-11-04
+
+### 修复：短品牌仿冒域名误报（P-01）
+
+- `domain_similarity.py/.mjs`：品牌核心标签 ≤5 个字符时，只有连字符独立词段，或后缀是 `risk_words` 中的风险词（express/track/pay/login/support 等）才判 affixed；普通单词里嵌 ups/apple/intel/bp 不再误报。
+- 行为变化：`dhlgroup.com`、`fedexgroup.com` 不再被“仿冒”单独触发，靠域名过新（RF-DOM-002）等其他红旗兜底；长品牌（maersk 等）与 A24 的 8 个真阳性保持阳性。
+- `scripts/brands.json` 新增 `risk_words` 字段；A23（误报回归）、A24（真阳性）覆盖。
+
+### 修复：制裁名单首次使用自动下载（P-02）
+
+- `sanctions_check` 无缓存或缓存超过 7 天时自动下载 OFAC SDN 官方 CSV，写入 `.cache/sanctions/`（不入库）；`--no-update` 关闭下载，测试和离线模式一律使用。
+- 下载失败返回 `status: "unavailable"` 与 `no-network` / `download-failed` 原因，不抛异常；只下载官方公开文件，不发送任何客户信息；同名命中仍需人工排除。
+- 精简包只含 `sanctions_check.py`，下载逻辑内联，避免新增文件超出 28 文件预算；A25 五个场景离线覆盖。
+
+### 修复：卡片人话化与分数条字符（P-03/P-04）
+
+- `card_template.md` 新增“技术词 → 人话”对照表：卡片不再出现 HTTP 状态码、MX/SPF/DMARC、RDAP、POI、CAPTCHA、API Key、“误报已排除”等内部过程；误报只记完整报告附录 C。
+- 分数条改用 `■`（已填）/`□`（未填），10 格，填充数 `floor(分数 / 10 + 0.5)`；不得使用旧花纹字符；需人工核实全部 `□`。
+- `SKILL.md`、`report_template.md`、`examples/sample-report.md`、历史文档同步；A26 校验 0/5/15/25/85/95/100 的填充格数，并对 Python/Node 公式做一致性检查。
+- 本版不改风险分公式、红旗数量/权重、等级色带、覆盖率分母；精简包仍为 27 个文件。
 
 ## [0.8.0] - 2026-10-30
 
