@@ -2,6 +2,8 @@
 
 > 收到陌生询盘、准备寄样或接单前，用一份有来源依据的风险报告，帮外贸业务员判断"这个客户值不值得往下走"。
 
+> 当前版本：v0.9.0（`v0.9` 分支，待合并 `main`）。
+
 `buyer-check` 是一个 Agent Skill：外贸业务员给出客户的公司名、域名、邮箱、询盘原文等有限信息，Skill 自动检索公开信息、交叉比对，输出**结构固定、每条结论都带来源链接和检索时间**的风险报告与下一步建议。
 
 **定位边界**：做的是「风险信号筛查 + 证据整理」，**不判定对方是不是骗子**。风险等级由 `red_flags.md` 的固定权重算出，同一输入多次运行结果一致、可复现。
@@ -76,7 +78,7 @@ buyer-check/
 │   ├── email_header_check.py / .mjs
 │   ├── sanctions_check.py / .mjs + update_sanctions
 │   ├── red_flags.json    # 机器可读红旗表
-│   ├── identity_check.py / .mjs  # 官网画像、社媒回链、头像同图/近似图比对（v0.8.0）
+│   ├── identity_check.py / .mjs  # 官网画像、社媒回链、头像比对、地图 POI、注册库（v0.9）
 │   ├── render_card.py / .mjs  # 结论卡渲染：核实度、六维表、动作阶梯、结论句（v0.9）
 │   └── brands.json       # 知名公司域名清单
 ├── tests/                # 验收用例 A1–A41、一致性测试、行为评测集
@@ -135,6 +137,10 @@ node scripts/ip_check.mjs --ip 203.0.113.7 --claimed-country AE --online
 # 结论卡渲染（证据包 → Markdown；--json 输出计算结果）
 python scripts/render_card.py evidence.json
 node scripts/render_card.mjs evidence.json --json
+
+# 注册库自动查（默认离线；--online 只发送公司名和国家，挪威 Enhetsregisteret，NLOD 2.0）
+python scripts/identity_check.py registry --company "Equinor ASA" --country NO --online
+node scripts/identity_check.mjs registry --company "Equinor ASA" --country NO --claimed-country NO --online
 ```
 
 脚本输出均为 JSON；查询失败时返回 `status: "unavailable"`，调用方按「未查到」处理。

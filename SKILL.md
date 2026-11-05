@@ -396,7 +396,7 @@ metadata:
 | `scripts/check_sources.mjs` | 数据源保鲜：低频检测各入口可达性与重定向，输出失效清单 |
 | `scripts/risk_score.py/.mjs` | 确定性评分与脱敏 |
 | `scripts/render_card.py/.mjs` | 从证据包渲染结论卡：核实度、六维状态、动作阶梯、结论句、`display` 校验；确定性、不联网、不写盘（Node 版仅供仓库一致性测试，不进精简包） |
-| `scripts/identity_check.py` | 官网画像提取、社媒回链判断、头像同图/近似图比对、地图 POI（Google Places 可选/OSM 回退；默认离线；Node 对照在仓库） |
+| `scripts/identity_check.py` | 官网画像提取、社媒回链判断、头像同图/近似图比对、地图 POI、注册库自动查（挪威 Brønnøysund Enhetsregisteret，NLOD 2.0；默认离线；Node 对照在仓库） |
 | `scripts/privacy_scan.mjs` | 提交前隐私扫描 |
 | `scripts/build_submission.mjs` | 精简提交包构建：按 `submission.manifest.json` 合并数据源与用例，校验文件数、体积与相对路径 |
 
@@ -442,7 +442,7 @@ metadata:
 - `scripts/country_capabilities.json` — 国家能力矩阵（null 不猜测）
 - `scripts/` — 域名、号码、邮件头、IP 分类、制裁、评分、卡片渲染、隐私扫描脚本（Python + Node）
 - `scripts/ip_check.py/.mjs` — 邮件来源 IP 分类（默认离线，输出脱敏网段）
-- `scripts/identity_check.py` — 官网画像/社媒回链/头像比对（v0.8.0，精简包）
+- `scripts/identity_check.py` — 官网画像/社媒回链/头像比对/地图 POI/注册库（v0.9，精简包）
 - `scripts/render_card.py` — 结论卡确定性渲染（v0.9，精简包；Node 对照在仓库）
 - `tests/cases/` — 验收用例 A1–A41
 - `tests/eval/` — 行为评测集（45 条合成询盘 + 评分器）

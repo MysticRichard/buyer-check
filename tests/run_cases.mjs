@@ -592,6 +592,54 @@ const runners = {
     };
   },
 
+  registry(testCase) {
+    const python = findPython();
+    if (!python) return { skipped: true, actual: 'python not found' };
+    const pyScript = join(ROOT, 'scripts', 'identity_check.py');
+    const jsScript = join(ROOT, 'scripts', 'identity_check.mjs');
+    const hasNode = existsSync(jsScript);
+    const [pyCmd, ...pyRest] = python.split(' ');
+    const banned = ['dagligLeder', 'styre', 'aksjonærer', 'aksjonær', 'personnavn', 'fodselsdato', 'foedselsdato', 'rolle'];
+    const outcomes = (testCase.input.cases || []).map((entry) => {
+      const dir = mkdtempSync(join(tmpdir(), 'buyer-check-registry-'));
+      const args = ['registry', '--company', entry.company, '--country', entry.country || 'NO'];
+      if (entry.claimed_country) args.push('--claimed-country', entry.claimed_country);
+      if (entry.fixture_data) {
+        const fixture = join(dir, 'fixture.json');
+        writeFileSync(fixture, JSON.stringify(entry.fixture_data), 'utf8');
+        args.push('--fixture-json', fixture);
+      } else if (entry.online) {
+        args.push('--online');
+      }
+      const pyRun = spawnSync(pyCmd, [...pyRest, pyScript, ...args], { cwd: ROOT, encoding: 'utf8', timeout: 30000 });
+      if (!pyRun.stdout) throw new Error(pyRun.stderr || 'no python output');
+      const py = JSON.parse(pyRun.stdout);
+      let js = null;
+      if (hasNode) {
+        const jsRun = spawnSync('node', [jsScript, ...args], { cwd: ROOT, encoding: 'utf8', timeout: 30000 });
+        if (!jsRun.stdout) throw new Error(jsRun.stderr || 'no node output');
+        js = JSON.parse(jsRun.stdout);
+      }
+      const expect = entry.expect || {};
+      const checks = [];
+      if (expect.status !== undefined) checks.push(py.status === expect.status);
+      if (expect.legal_name !== undefined) checks.push(py.legal_name === expect.legal_name);
+      if (expect.status_text !== undefined) checks.push(py.status_text === expect.status_text);
+      if (expect.incorporation_date !== undefined) checks.push(py.incorporation_date === expect.incorporation_date);
+      if (expect.address_country !== undefined) checks.push(py.address_country === expect.address_country);
+      if (expect.country_mismatch !== undefined) checks.push(py.country_mismatch === expect.country_mismatch);
+      if (expect.org_number !== undefined) checks.push(py.org_number === expect.org_number);
+      if (expect.error !== undefined) checks.push(py.error === expect.error);
+      if (expect.candidate_count !== undefined) checks.push((py.candidates || []).length === expect.candidate_count);
+      if (expect.registry_url_contains !== undefined) checks.push(String(py.registry_url || '').includes(expect.registry_url_contains));
+      const serialized = JSON.stringify(py);
+      checks.push(!banned.some((key) => serialized.includes(key)));
+      if (js) checks.push(isDeepStrictEqual(py, js));
+      return { name: entry.name, ok: checks.every(Boolean), status: py.status, parity: js ? isDeepStrictEqual(py, js) : null };
+    });
+    return { ok: outcomes.every((item) => item.ok), actual: outcomes };
+  },
+
   intake_format(testCase) {
     const allowed = new Set(['tender', 'sample', 'large_first_order', 'account_change', 'pre_order', 'general']);
     const phoneRe = /\+?\d[\d\s()\-]{8,}\d/;

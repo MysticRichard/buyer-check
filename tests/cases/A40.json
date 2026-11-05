@@ -1,0 +1,112 @@
+{
+  "id": "A40",
+  "title": "registry：找到/找不到/多家同名/超时/离线/注册地址国不一致，且不含董事股东字段",
+  "type": "registry",
+  "input": {
+    "cases": [
+      {
+        "name": "找到",
+        "company": "NORDIC IMPORT AS",
+        "country": "NO",
+        "claimed_country": "NO",
+        "fixture_data": {
+          "retrieved_at": "2026-11-05T00:00:00Z",
+          "_embedded": {
+            "enheter": [
+              {
+                "navn": "NORDIC IMPORT AS",
+                "organisasjonsnummer": "912345678",
+                "registreringsdatoEnhetsregisteret": "2015-03-12",
+                "konkurs": false,
+                "underAvvikling": false,
+                "forretningsadresse": { "land": "Norge", "kommune": "OSLO" }
+              }
+            ]
+          }
+        },
+        "expect": {
+          "status": "found",
+          "legal_name": "NORDIC IMPORT AS",
+          "status_text": "存续",
+          "incorporation_date": "2015-03-12",
+          "address_country": "NO",
+          "country_mismatch": false,
+          "org_number": "912345678"
+        }
+      },
+      {
+        "name": "找不到",
+        "company": "NORDIC IMPORT AS",
+        "country": "NO",
+        "fixture_data": {
+          "retrieved_at": "2026-11-05T00:00:00Z",
+          "_embedded": { "enheter": [] }
+        },
+        "expect": { "status": "not-found" }
+      },
+      {
+        "name": "多家同名",
+        "company": "NORDIC IMPORT AS",
+        "country": "NO",
+        "fixture_data": {
+          "retrieved_at": "2026-11-05T00:00:00Z",
+          "_embedded": {
+            "enheter": [
+              {
+                "navn": "NORDIC IMPORT AS",
+                "organisasjonsnummer": "912345678",
+                "registreringsdatoEnhetsregisteret": "2015-03-12",
+                "forretningsadresse": { "land": "Norge" }
+              },
+              {
+                "navn": "NORDIC IMPORT AS",
+                "organisasjonsnummer": "923456789",
+                "registreringsdatoEnhetsregisteret": "2019-08-01",
+                "forretningsadresse": { "land": "Norge" }
+              }
+            ]
+          }
+        },
+        "expect": { "status": "ambiguous", "candidate_count": 2 }
+      },
+      {
+        "name": "超时",
+        "company": "NORDIC IMPORT AS",
+        "country": "NO",
+        "fixture_data": { "error": "timeout" },
+        "expect": { "status": "unavailable", "error": "timeout" }
+      },
+      {
+        "name": "离线只给链接",
+        "company": "NORDIC IMPORT AS",
+        "country": "NO",
+        "expect": { "status": "offline", "registry_url_contains": "data.brreg.no" }
+      },
+      {
+        "name": "注册地址国不一致",
+        "company": "NORDIC IMPORT AS",
+        "country": "NO",
+        "claimed_country": "SE",
+        "fixture_data": {
+          "retrieved_at": "2026-11-05T00:00:00Z",
+          "_embedded": {
+            "enheter": [
+              {
+                "navn": "NORDIC IMPORT AS",
+                "organisasjonsnummer": "912345678",
+                "registreringsdatoEnhetsregisteret": "2015-03-12",
+                "forretningsadresse": { "land": "Norge" }
+              }
+            ]
+          }
+        },
+        "expect": {
+          "status": "found",
+          "address_country": "NO",
+          "country_mismatch": true
+        }
+      }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

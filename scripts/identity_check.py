@@ -22,10 +22,13 @@ import html as html_lib
 import json
 import os
 import re
+import socket
 import sys
 import time
 import urllib.robotparser
-from urllib.parse import urljoin, urlencode, urlparse
+from datetime import datetime, timezone
+from urllib.error import HTTPError, URLError
+from urllib.parse import quote, urljoin, urlencode, urlparse
 from urllib.request import Request, urlopen
 
 try:  # optional dependency; never required
@@ -43,6 +46,9 @@ SOCIAL_PATTERNS = {
 }
 GOOGLE_TEXTSEARCH = "https://maps.googleapis.com/maps/api/place/textsearch/json"
 GOOGLE_DETAILS = "https://maps.googleapis.com/maps/api/place/details/json"
+BRREG_SEARCH = "https://data.brreg.no/enhetsregisteret/api/enheter"
+BRREG_ENTITY = "https://data.brreg.no/enhetsregisteret/api/enheter/"
+BRREG_LICENSE = "NLOD 2.0"
 OSM_SEARCH = "https://nominatim.openstreetmap.org/search"
 
 
@@ -463,6 +469,142 @@ def map_command(args):
     return osm_map(args)
 
 
+def normalize_company(value):
+    return re.sub(r"\s+", " ", (value or "").strip()).upper()
+
+
+def country_code(value):
+    key = (value or "").strip().lower()
+    if not key:
+        return None
+    if len(key) == 2 and key.isalpha():
+        return key.upper()
+    return {
+        "norge": "NO", "norway": "NO", "noreg": "NO",
+        "sverige": "SE", "sweden": "SE",
+        "danmark": "DK", "denmark": "DK",
+        "suomi": "FI", "finland": "FI",
+    }.get(key)
+
+
+def registry_status_text(entity):
+    if entity.get("konkurs"):
+        return "已破产"
+    if entity.get("underTvangsavviklingEllerTvangsopplosning"):
+        return "强制清算"
+    if entity.get("underAvvikling"):
+        return "清算中"
+    return "存续"
+
+
+def registry_entry(entity):
+    address = entity.get("forretningsadresse") or {}
+    org_number = entity.get("organisasjonsnummer")
+    return {
+        "legal_name": entity.get("navn"),
+        "org_number": org_number,
+        "status_text": registry_status_text(entity),
+        "incorporation_date": entity.get("registreringsdatoEnhetsregisteret") or entity.get("stiftelsesdato"),
+        "address_country": country_code(address.get("land")),
+        "source_url": f"{BRREG_ENTITY}{org_number}" if org_number else BRREG_SEARCH,
+    }
+
+
+def registry_error(company, registry_url, error):
+    return {
+        "status": "unavailable",
+        "command": "registry",
+        "query": company,
+        "country": "NO",
+        "registry_url": registry_url,
+        "license": BRREG_LICENSE,
+        "error": error,
+    }
+
+
+def registry_command(args):
+    company = (args.company or "").strip()
+    if not company:
+        return {"status": "unavailable", "command": "registry", "error": "missing-company"}
+    country = country_code(args.country) or "NO"
+    encoded = quote(company, safe="!~*'()")
+    registry_url = f"{BRREG_SEARCH}?navn={encoded}"
+    if country != "NO":
+        return {
+            "status": "not-covered",
+            "command": "registry",
+            "query": company,
+            "country": country,
+            "registry_url": registry_url,
+            "license": BRREG_LICENSE,
+            "note": "registry 目前只实现挪威（NO）",
+        }
+
+    if args.fixture_json:
+        try:
+            with open(args.fixture_json, "r", encoding="utf-8") as handle:
+                payload = json.load(handle)
+        except (OSError, ValueError):
+            return registry_error(company, registry_url, "invalid-fixture")
+        if not isinstance(payload, dict):
+            return registry_error(company, registry_url, "invalid-fixture")
+        if payload.get("error"):
+            return registry_error(company, registry_url, str(payload["error"]))
+        entities = ((payload.get("_embedded") or {}).get("enheter") or [])
+        retrieved_at = payload.get("retrieved_at") or "fixture"
+    elif args.online:
+        try:
+            payload = fetch_json(registry_url, args.timeout)
+        except HTTPError as exc:
+            return registry_error(company, registry_url, f"http-{exc.code}")
+        except (TimeoutError, socket.timeout):
+            return registry_error(company, registry_url, "timeout")
+        except URLError as exc:
+            reason = getattr(exc, "reason", exc)
+            if isinstance(reason, (TimeoutError, socket.timeout)) or "timed out" in str(reason).lower():
+                return registry_error(company, registry_url, "timeout")
+            return registry_error(company, registry_url, "fetch-failed")
+        except (OSError, ValueError):
+            return registry_error(company, registry_url, "fetch-failed")
+        if not isinstance(payload, dict):
+            return registry_error(company, registry_url, "invalid-response")
+        entities = ((payload.get("_embedded") or {}).get("enheter") or [])
+        retrieved_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    else:
+        return {
+            "status": "offline",
+            "command": "registry",
+            "query": company,
+            "country": "NO",
+            "registry_url": registry_url,
+            "license": BRREG_LICENSE,
+            "note": "加 --online 或 --fixture-json 查询；离线只给链接",
+        }
+
+    wanted = normalize_company(company)
+    entries = [
+        registry_entry(entity)
+        for entity in entities
+        if isinstance(entity, dict) and normalize_company(entity.get("navn")) == wanted
+    ]
+    base = {
+        "command": "registry",
+        "query": company,
+        "country": "NO",
+        "registry_url": registry_url,
+        "license": BRREG_LICENSE,
+        "retrieved_at": retrieved_at,
+    }
+    if not entries:
+        return {"status": "not-found", **base}
+    if len(entries) > 1:
+        return {"status": "ambiguous", **base, "candidates": entries}
+    entry = entries[0]
+    claimed = country_code(args.claimed_country)
+    mismatch = claimed is not None and entry.get("address_country") is not None and claimed != entry.get("address_country")
+    return {"status": "found", **base, **entry, "country_mismatch": mismatch}
+
+
 def build_parser():
     parser = argparse.ArgumentParser(description="buyer-check identity helpers (site/backlink/image).")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -493,6 +635,14 @@ def build_parser():
     map_cmd.add_argument("--fixture-source", default="google_places")
     map_cmd.add_argument("--limit", type=int, default=5)
     map_cmd.add_argument("--timeout", type=int, default=10)
+
+    registry = sub.add_parser("registry", help="look up a company in the Norwegian Enhetsregisteret (NLOD 2.0)")
+    registry.add_argument("--company")
+    registry.add_argument("--country", default="NO")
+    registry.add_argument("--claimed-country")
+    registry.add_argument("--online", action="store_true")
+    registry.add_argument("--fixture-json")
+    registry.add_argument("--timeout", type=int, default=10)
     return parser
 
 
@@ -504,10 +654,12 @@ def main(argv=None):
         result = backlink_command(args)
     elif args.command == "map":
         result = map_command(args)
+    elif args.command == "registry":
+        result = registry_command(args)
     else:
         result = image_command(args)
     print(json.dumps(result, ensure_ascii=False))
-    return 0 if result.get("status") == "ok" else 1
+    return 0 if result.get("status") in ("ok", "found", "not-found", "ambiguous", "offline") else 1
 
 
 if __name__ == "__main__":

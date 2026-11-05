@@ -16,6 +16,12 @@
 - `SKILL.md` 加第 0 步：用户一句话或一段询盘即开始，抽取 `intake` 并判六类询盘（招标、样品、大额首单、换账户、订单确认、一般）；招标类型走 T1–T4 专项检查；支持“快查”模式。
 - `data-sources/global.md` 加一次动作链接模板；`collection_checklists.md` 加招标专项采集清单；A41 校验六类 `intake` 格式。
 
+### 新增：注册库自动查（P2）
+
+- `scripts/identity_check.py/.mjs` 新增 `registry` 子命令：默认离线只给链接；`--online` 查询挪威 Brønnøysund Enhetsregisteret 开放数据 API（许可 NLOD 2.0），只发送公司名和国家，只返回公司级字段，不返回董事/股东个人信息。
+- 支持 found / not-found / ambiguous / unavailable / offline；注册地址国与自称国不一致时输出 `country_mismatch`；A40 覆盖六类场景并校验 Py/Node 一致与无个人字段。
+- `data-sources/global.md` 增加注册库通道与许可说明；精简包仍为 28 文件（子命令并入既有脚本，不新增进包文件）。
+
 ### 变更
 
 - 版本号 0.9.0；精简提交包 27 → **28 个文件**（唯一新增进包文件 `scripts/render_card.py`）。

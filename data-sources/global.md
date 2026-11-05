@@ -127,3 +127,15 @@
 | `no-public-record` | 不列一次动作 | — | 只在「没查到」栏写一句 |
 
 **纪律**：最多 4 行；按信息增益排序（地图、注册库在前，领英/Facebook 在中）；人只需要登录一次、过一次验证码或回传一句话；链接由模型填入 `display.missing[].action`，`render_card` 不硬编码网址。
+## 十二、注册库自动查（v0.9，P2）
+
+目前只实现挪威 **Enhetsregisteret**（Brønnøysundregistrene）：
+
+- 搜索 API：`https://data.brreg.no/enhetsregisteret/api/enheter?navn=<公司名>`；单条：`https://data.brreg.no/enhetsregisteret/api/enheter/<orgnr>`。
+- 许可：**NLOD 2.0**（`https://data.norge.no/nlod/no/2.0`）；使用时署名 Brønnøysundregistrene。
+- 默认离线：只返回 `registry_url`；加 `--online` 才查询，且只发送公司名和国家（NO），不发送人名、邮箱、电话。
+- 只返回公司级字段：`legal_name`、`org_number`、`status_text`（存续 / 清算中 / 已破产 / 强制清算）、`incorporation_date`、`address_country`、`source_url`、`retrieved_at`；**不返回、不显示、不保存董事、股东等个人信息**。
+- 匹配：公司名规范化（大写、合并空白）后完全一致且国家为 NO；多条同名返回 `ambiguous`，不合并、不猜。
+- 失败：返回 `status: "unavailable"` 与 `timeout` / `http-<code>` / `fetch-failed`，不抛异常。
+- 命令：`python scripts/identity_check.py registry --company "Equinor ASA" --country NO --online`；Node 对照为 `identity_check.mjs registry`。
+- 其他国家：维持注册库链接 + 一次动作，不硬实现、不猜测。
