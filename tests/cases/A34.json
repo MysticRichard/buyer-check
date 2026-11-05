@@ -7,6 +7,9 @@
     "status": "ok",
     "level": "需人工核实",
     "credit_tier": "低",
+    "card_file": "card_manual.expected.txt",
+    "line_count_max": 45,
+    "first_screen_max": 14,
     "card_includes": [
       "⚪ 需人工核实 · 风险 0/100 □□□□□□□□□□",
       "- ⚪ 地图：需浏览器",
