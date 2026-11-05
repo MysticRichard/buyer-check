@@ -30,26 +30,6 @@ jobs:
       - name: Script consistency (E3, python/node parity)
         run: node tests/consistency_scripts.mjs
 
-      - name: Debug render_card CLI
-        if: failure()
-        run: |
-          echo "node=$(node --version) python=$(python --version 2>&1)"
-          node scripts/render_card.mjs tests/fixtures/card_harbor.json --json > /tmp/js_card.json 2> /tmp/js_card.err || true
-          python scripts/render_card.py tests/fixtures/card_harbor.json --json > /tmp/py_card.json 2> /tmp/py_card.err || true
-          wc -c /tmp/js_card.json /tmp/py_card.json || true
-          echo "--- js stderr ---"; head -c 400 /tmp/js_card.err || true
-          echo "--- py stderr ---"; head -c 400 /tmp/py_card.err || true
-          node -e "JSON.parse(require('fs').readFileSync('/tmp/js_card.json','utf8'));console.log('js json ok')" || true
-          python -c "import json;json.load(open('/tmp/py_card.json'));print('py json ok')" || true
-          node scripts/render_card.mjs --ladder > /tmp/js_ladder.json 2> /tmp/js_ladder.err || true
-          python scripts/render_card.py --ladder > /tmp/py_ladder.json 2> /tmp/py_ladder.err || true
-          wc -c /tmp/js_ladder.json /tmp/py_ladder.json || true
-          echo "--- cwd scripts parity ---"
-          (cd scripts && node "$PWD/render_card.mjs" ../tests/fixtures/card_harbor.json --json > /tmp/js_abs.json 2> /tmp/js_abs.err); echo "js_abs_status=$?"
-          (cd scripts && python render_card.py ../tests/fixtures/card_harbor.json --json > /tmp/py_abs.json 2> /tmp/py_abs.err); echo "py_abs_status=$?"
-          wc -c /tmp/js_abs.json /tmp/py_abs.json || true
-          echo "--- js cwd stderr ---"; head -c 400 /tmp/js_abs.err || true
-          echo "--- py cwd stderr ---"; head -c 400 /tmp/py_abs.err || true
 
       - name: account_check acceptance (F2)
         run: node tests/account_check_cases.mjs
