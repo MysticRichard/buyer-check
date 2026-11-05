@@ -2,8 +2,10 @@
 
 - 日期：2026-11-05
 - 分支：`v0.9`
-- 提交范围：`c66b06f`（P1-a）→ `5103911`（P1-b）→ `e1c0670`（P1-c）→ `e14d893`、`87497c0`、`d65ae7e`、`4f716f4`、`4dabdc3`（自测与 CI 修复）
+- 功能 HEAD：`d24c701`（X7 三卡快照修复）
+- 提交范围：`c66b06f`（P1-a）→ `5103911`（P1-b）→ `e1c0670`（P1-c）→ `e14d893`、`87497c0`、`d65ae7e`、`4f716f4`、`4dabdc3`、`d24c701`（自测与 CI 修复）
 - 结论：**开发自测 P1 门通过；等待独立审核 agent 复核**。本文件不代替审核结论。
+- 说明：本文件刷新为纯文档提交；包体积、用例数、CI 证据均对应功能 HEAD `d24c701`，不受后续文档提交影响。
 
 ## 1. X 表（P1 门）
 
@@ -15,18 +17,18 @@
 | X4 分数条字符 | 通过 | A26 填充 0/1/2/3/9/10/10；实际旧字符 `git grep` 无输出 |
 | X5 核实度 | 通过 | A27 Harbor=90（高）、A28 NORDIC=10（低）；A29 矛盾记 0、人物高 +0.1、缺层记 0 |
 | X6 阶梯与结论句 | 通过 | A30/A31 各 768 组合，`violations=0`，Python/Node 一致 |
-| X7 快照与行数 | 通过 | A32 43 行、A33 40 行、A34 32 行；第一屏均 10 行；人工读卡符合 5.1/5.7/5.8 |
+| X7 快照与行数 | 通过 | A32 43 行、A33 40 行、A34 32 行；三张卡均用 `card_file` 做全文字节比对（A34 已补 `card_manual.expected.txt`）；第一屏均 10 行；人工读卡符合 5.1/5.7/5.8 |
 | X8 校验与降级 | 通过 | A35 八类错误码；A36 旧证据包可渲染；A37 返回 `score-mismatch` |
 | X9 确定性与两端一致 | 通过 | A39 100 次字节一致 + Python/Node；`consistency_scripts` 5 张卡 + 768 组合一致 |
 | X10 卡片与报告一致 | 通过 | `report_template.md` 0.1.1 与 `examples/sample-report.md` 同步核实度 10、阶梯、六维；与卡片 85/高/10 一致 |
 | X11 一句话入口格式 | 通过 | A41 六类 `inquiry_type` 均在枚举内，无完整手机/完整邮箱 |
 | X12 词表合规 | 通过 | 禁用词 grep 无输出；技术词只在 `card_template.md` 的“技术词→人话”对照表 |
 | X13 评分不变 | 通过 | `git diff v0.8.0 --stat -- risk_score.py risk_score.mjs red_flags.json red_flags.md` 无输出；红旗 23 |
-| X14 隐私 | 通过 | 仓库 privacy 121 文件 clean；精简包 28 文件 clean |
-| X15 精简包 | 通过 | 28 文件、456,997 bytes；包内 `run_cases` 40/40；测试后仍 28 文件 |
+| X14 隐私 | 通过 | 仓库 privacy 123 文件 clean；精简包 28 文件 clean |
+| X15 精简包 | 通过 | 28 文件、458,569 bytes；包内 `run_cases` 40/40；测试后仍 28 文件 |
 | X16 文档与版本 | 通过 | `SKILL.md`、`submission.manifest.json` 为 0.9.0；CHANGELOG `[0.9.0]`；`docs/development.md` 已加 v0.9.0 |
 | X17 历史与分支 | 通过 | `git merge-base --is-ancestor v0.8.0 HEAD` 退出码 0；提交都在 `v0.9`；无强推/无改写 |
-| X18 CI | 通过 | run `41947059544` 全部步骤 success（含 S2/S3） |
+| X18 CI | 通过 | 功能 HEAD `d24c701` 的 run `41948910630` 全部步骤 success（含 S2/S3）；文档刷新提交的 CI 由审核时最新 run 核对 |
 | X20 开发汇报 | 本文件 | 五要素见下 |
 
 ## 2. B20–B30 自查
@@ -49,7 +51,7 @@
 
 - 模板：`card_template.md`、`report_template.md`、`examples/sample-report.md`
 - 脚本：`scripts/render_card.py`、`scripts/render_card.mjs`、`scripts/build_submission.mjs`
-- 测试：`tests/run_cases.mjs`、`tests/consistency.mjs`、`tests/consistency_scripts.mjs`、`tests/cases/A27–A39`、`tests/cases/A41`、`tests/fixtures/card_harbor.json`、`card_nordic.json`、`card_manual.json`、`legacy_card.json`、`score_mismatch.json`、`card_harbor.expected.txt`、`card_nordic.expected.txt`
+- 测试：`tests/run_cases.mjs`、`tests/consistency.mjs`、`tests/consistency_scripts.mjs`、`tests/cases/A27–A39`、`tests/cases/A41`、`tests/fixtures/card_harbor.json`、`card_nordic.json`、`card_manual.json`、`legacy_card.json`、`score_mismatch.json`、`card_harbor.expected.txt`、`card_nordic.expected.txt`、`card_manual.expected.txt`
 - 发布与文档：`SKILL.md`、`README.md`、`CHANGELOG.md`、`docs/development.md`、`docs/p0-report-v0.8.1.md`、`submission.manifest.json`、`.github/workflows/ci.yml`、`data-sources/global.md`、`data-sources/collection_checklists.md`
 
 ## 4. 行为变化
@@ -60,6 +62,7 @@
 4. 报告开头加 0.1.1 核实度/阶梯/六维表；附录 C 记录被排除的误报；样例报告同步。
 5. 修复 Node 20 下大输出被 `process.exit` 截断：改为设置 `process.exitCode`，让标准输出自然刷新。
 6. 风险分公式、23 条红旗与权重、等级色带、覆盖率分母（8）均未改。
+7. A34 增加“需人工核实”卡全文字节快照；A32/A33/A34 三张卡均做 `card_file` 字节比对，不改卡片行为。
 
 ## 5. 格式断言修改清单
 
@@ -81,13 +84,14 @@ node tests/check_sources_cases.mjs      → passed
 node tests/ip_check_cases.mjs           → passed
 node tests/phone_check_enrich_cases.mjs → passed（1 skipped）
 node tests/eval/score_eval.mjs --self   → self-check passed
-node scripts/privacy_scan.mjs           → clean（121 文件）
-node scripts/build_submission.mjs       → 28 files / 456,997 bytes
+node scripts/privacy_scan.mjs           → clean（123 文件）
+node scripts/build_submission.mjs       → 28 files / 458,569 bytes
 (cd dist/submission && node tests/run_cases.mjs) → 40 passed；测试后仍 28 文件
 node scripts/privacy_scan.mjs dist/submission → clean（28 文件）
+A32/A33/A34                             → card_file 全文字节一致（43/40/32 行）
 git diff v0.8.0 --stat -- risk_score.* red_flags.* → 无输出
 git merge-base --is-ancestor v0.8.0 HEAD → 退出码 0
-CI run 41947059544                     → success（38s）
+CI run 41948910630（功能 HEAD d24c701） → success（31s）
 ```
 
 ## 7. 待办
