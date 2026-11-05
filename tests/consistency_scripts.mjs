@@ -45,10 +45,11 @@ function findPython() {
 function runScript(python, base, args) {
   // Non-zero exit codes are expected for "unavailable" results; parse stdout
   // regardless of exit status so both languages can be compared.
-  const nodeRun = spawnSync('node', [`${base}.mjs`, ...args], { cwd: SCRIPTS, encoding: 'utf8', timeout: 30000 });
+  const maxBuffer = 16 * 1024 * 1024;
+  const nodeRun = spawnSync('node', [join(SCRIPTS, `${base}.mjs`), ...args], { cwd: SCRIPTS, encoding: 'utf8', timeout: 30000, maxBuffer });
   const cmd = python.split(' ')[0];
   const rest = python.split(' ').slice(1);
-  const pyRun = spawnSync(cmd, [...rest, `${base}.py`, ...args], { cwd: SCRIPTS, encoding: 'utf8', timeout: 30000 });
+  const pyRun = spawnSync(cmd, [...rest, join(SCRIPTS, `${base}.py`), ...args], { cwd: SCRIPTS, encoding: 'utf8', timeout: 30000, maxBuffer });
   for (const run of [pyRun, nodeRun]) {
     if (run.error || !run.stdout) {
       throw new Error(`${base} failed to run: ${run.error || 'no stdout'}`);
