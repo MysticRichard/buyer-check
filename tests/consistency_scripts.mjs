@@ -52,14 +52,21 @@ function runScript(python, base, args) {
   const pyRun = spawnSync(cmd, [...rest, join(SCRIPTS, `${base}.py`), ...args], { cwd: SCRIPTS, encoding: 'utf8', timeout: 30000, maxBuffer });
   for (const run of [pyRun, nodeRun]) {
     if (run.error || !run.stdout) {
-      throw new Error(`${base} failed to run: ${run.error || 'no stdout'}`);
+      throw new Error(`${base} failed to run: ${run.error || 'no stdout'}; status=${run.status}; signal=${run.signal}; stderr=${(run.stderr || '').slice(0, 400)}`);
     }
   }
   if (pyRun.status !== nodeRun.status) {
     failures += 1;
     console.log(`✗ ${base} ${args.join(' ')}: exit codes differ python=${pyRun.status} node=${nodeRun.status}`);
   }
-  return [JSON.parse(pyRun.stdout), JSON.parse(nodeRun.stdout)];
+  const parse = (label, run) => {
+    try {
+      return JSON.parse(run.stdout);
+    } catch (error) {
+      throw new Error(`${base} ${label} JSON parse failed: ${error.message}; status=${run.status}; stderr=${(run.stderr || '').slice(0, 300)}; head=${(run.stdout || '').slice(0, 160)}; tail=${(run.stdout || '').slice(-160)}`);
+    }
+  };
+  return [parse('python', pyRun), parse('node', nodeRun)];
 }
 
 let failures = 0;
