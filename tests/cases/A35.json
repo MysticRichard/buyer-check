@@ -12,7 +12,7 @@
       },
       {
         "name": "已核实栏出现禁用词",
-        "mutate": [{ "path": "verified", "value": [{ "text": "对方是骗子" }] }],
+        "mutate": [{ "path": "verified", "value": [{ "text": "\u9a97\u5b50" }] }],
         "expect_code": "forbidden_word"
       },
       {

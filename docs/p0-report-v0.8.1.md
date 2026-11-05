@@ -11,7 +11,7 @@
 | X1 现有测试不改即通过 | 通过 | `run_cases` 26/26；V5 8,388,608 全过；V6 14/14；F2/F3/G/H/E 全过；`git diff v0.8.0 --name-status -- tests/cases` 仅新增 A23–A26 |
 | X2 仿冒域名误报修复 | 通过 | A23 全 false；A24 8/8 true；`domain_similarity` 18/18 Python/Node 一致 |
 | X3 制裁自动下载 | 通过 | A25 五场景：no-network、clear、同名命中、模拟下载成功、download-failed；`--no-update` 全程离线 |
-| X4 分数条字符 | 通过 | A26 填充 0/1/2/3/9/10/10；Python/Node 一致；`git grep '▓|░|▒'` 无输出 |
+| X4 分数条字符 | 通过 | A26 填充 0/1/2/3/9/10/10；Python/Node 一致；实际旧字符（U+2593/U+2591/U+2592）grep 无输出 |
 | X12 词表合规 | 通过 | 禁用词 grep 无输出；技术词仅在 `card_template.md` 的“技术词→人话”对照表 |
 | X13 评分不变 | 通过 | `risk_score.*`/`red_flags.*` 相对 v0.8.0 无 diff；红旗 23 |
 | X14 隐私 | 通过 | 仓库与精简包 privacy clean；用例全虚构 |
@@ -55,10 +55,10 @@ P0 门结论（开发自测）：**通过**；等待独立审核 agent 复核。
 
 | 文件 | 旧断言/字符 | 新断言/字符 | 理由 |
 | --- | --- | --- | --- |
-| `card_template.md` | `▓/░/▒` | `■/□`；`floor(分数/10+0.5)` | P-04 界面渲染花纹 |
-| `SKILL.md` | 灰 `▒` | 灰 `□`、`■/□` | 同上 |
-| `examples/sample-report.md` | `▓▓▓▓▓▓▓▓▓░` | `■■■■■■■■■□` | 同上 |
-| `report_template.md` | 灰 `▒` | 灰 `□` | 同上 |
+| `card_template.md` | `U+2593/U+2591/U+2592` | `■/□`；`floor(分数/10+0.5)` | P-04 界面渲染花纹 |
+| `SKILL.md` | 灰 `U+2591` | 灰 `□`、`■/□` | 同上 |
+| `examples/sample-report.md` | `U+2593` ×9 + `U+2591` ×1 | `■■■■■■■■■□` | 同上 |
+| `report_template.md` | 灰 `U+2591` | 灰 `□` | 同上 |
 | `docs/iteration_plan.md`、`CHANGELOG.md` | 历史旧字符 | `■/□` 或 U+ 转义 | X4 全仓库 grep |
 | `docs/iteration_plan_v0.9.md` | 规划中的旧字符 | `U+2593/U+2591/U+2592` | 避免归档文档自身触发 X4 |
 | `tests/consistency.mjs` | 无字符断言 | 无旧字符、必须含 `■/□` | 防回归 |
