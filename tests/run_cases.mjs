@@ -623,6 +623,7 @@ const runners = {
       const expect = entry.expect || {};
       const checks = [];
       if (expect.status !== undefined) checks.push(py.status === expect.status);
+      if (expect.country !== undefined) checks.push(py.country === expect.country);
       if (expect.legal_name !== undefined) checks.push(py.legal_name === expect.legal_name);
       if (expect.status_text !== undefined) checks.push(py.status_text === expect.status_text);
       if (expect.incorporation_date !== undefined) checks.push(py.incorporation_date === expect.incorporation_date);

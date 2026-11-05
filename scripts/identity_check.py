@@ -522,11 +522,35 @@ def registry_error(company, registry_url, error):
     }
 
 
+def registry_link(country):
+    try:
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "country_capabilities.json"), "r", encoding="utf-8") as handle:
+            data = json.load(handle)
+        entry = ((data.get("countries") or {}).get((country or "").lower()) or {}).get("registry") or {}
+        return entry.get("url")
+    except (OSError, ValueError):
+        return None
+
+
 def registry_command(args):
     company = (args.company or "").strip()
     if not company:
         return {"status": "unavailable", "command": "registry", "error": "missing-company"}
-    country = country_code(args.country) or "NO"
+    raw_country = (args.country or "").strip()
+    if raw_country:
+        country = country_code(raw_country)
+        if country is None:
+            return {
+                "status": "not-covered",
+                "command": "registry",
+                "query": company,
+                "country": raw_country,
+                "registry_url": None,
+                "license": BRREG_LICENSE,
+                "note": "无法识别国家；registry 目前只实现挪威（NO），不猜测",
+            }
+    else:
+        country = "NO"
     encoded = quote(company, safe="!~*'()")
     registry_url = f"{BRREG_SEARCH}?navn={encoded}"
     if country != "NO":
@@ -535,9 +559,9 @@ def registry_command(args):
             "command": "registry",
             "query": company,
             "country": country,
-            "registry_url": registry_url,
+            "registry_url": registry_link(country),
             "license": BRREG_LICENSE,
-            "note": "registry 目前只实现挪威（NO）",
+            "note": "registry 目前只实现挪威（NO）；该国入口见 registry_url，或人工核实",
         }
 
     if args.fixture_json:

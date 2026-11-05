@@ -544,10 +544,37 @@ function registryError(company, registryUrl, error) {
 
 
 
+function registryLink(country) {
+  try {
+    const data = JSON.parse(readFileSync(new URL('./country_capabilities.json', import.meta.url), 'utf8'));
+    const entry = ((data.countries || {})[String(country || '').toLowerCase()] || {}).registry || {};
+    return entry.url || null;
+  } catch {
+    return null;
+  }
+}
+
 async function registryCommand(args) {
   const company = String(args.company || '').trim();
   if (!company) return { status: 'unavailable', command: 'registry', error: 'missing-company' };
-  const country = countryCode(args.country) || 'NO';
+  const rawCountry = String(args.country || '').trim();
+  let country;
+  if (rawCountry) {
+    country = countryCode(rawCountry);
+    if (country === null) {
+      return {
+        status: 'not-covered',
+        command: 'registry',
+        query: company,
+        country: rawCountry,
+        registry_url: null,
+        license: BRREG_LICENSE,
+        note: '无法识别国家；registry 目前只实现挪威（NO），不猜测',
+      };
+    }
+  } else {
+    country = 'NO';
+  }
   const registryUrl = `${BRREG_SEARCH}?navn=${encodeURIComponent(company)}`;
   if (country !== 'NO') {
     return {
@@ -555,9 +582,9 @@ async function registryCommand(args) {
       command: 'registry',
       query: company,
       country,
-      registry_url: registryUrl,
+      registry_url: registryLink(country),
       license: BRREG_LICENSE,
-      note: 'registry 目前只实现挪威（NO）',
+      note: 'registry 目前只实现挪威（NO）；该国入口见 registry_url，或人工核实',
     };
   }
 

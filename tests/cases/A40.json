@@ -1,6 +1,6 @@
 {
   "id": "A40",
-  "title": "registry：找到/找不到/多家同名/超时/离线/注册地址国不一致，且不含董事股东字段",
+  "title": "registry：找到/找不到/多家同名/超时/离线/注册地址国不一致/未知国家不猜，且不含董事股东字段",
   "type": "registry",
   "input": {
     "cases": [
@@ -105,6 +105,12 @@
           "address_country": "NO",
           "country_mismatch": true
         }
+      },
+      {
+        "name": "未知国家不猜",
+        "company": "Equinor ASA",
+        "country": "Germany",
+        "expect": { "status": "not-covered", "country": "Germany" }
       }
     ]
   },
