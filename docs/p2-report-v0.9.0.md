@@ -2,7 +2,7 @@
 
 - 日期：2026-11-05
 - 分支：`v0.9`
-- 功能 HEAD：`75445c2`（`feat(registry): add Norway Enhetsregisteret lookup`）
+- 功能 HEAD：`8e5ba17`（`fix(registry): reject unsupported country instead of guessing Norway`；前置功能提交 `75445c2`）
 - 结论：**开发自测 P2 门通过；等待独立审核 agent 复核**。本文件不代替审核结论。
 - 说明：本文件如为纯文档提交，不影响功能 HEAD 的代码、精简包与 CI 证据。
 
@@ -10,7 +10,7 @@
 
 | 编号 | 结果 | 证据摘要 |
 | --- | --- | --- |
-| **X19 注册库自动查** | 通过 | A40 六类：found / not-found / ambiguous / unavailable / offline / 注册地址国不一致（`country_mismatch:true`）；离线只给 `registry_url`；输出无董事/股东字段；只实现挪威 1 国；Py/Node 六例一致 |
+| **X19 注册库自动查** | 通过 | A40 七类：found / not-found / ambiguous / unavailable / offline / 注册地址国不一致（`country_mismatch:true`）/ 未知国家不猜（`Germany`→`not-covered`）；离线只给 `registry_url`；输出无董事/股东字段；只实现挪威 1 国；Py/Node 七例一致 |
 | X1 现有测试不改 | 通过 | `node tests/run_cases.mjs` 41/41；`git diff v0.8.0 --name-status -- tests/cases` 只新增 A23–A41，A1–A22 无修改 |
 | X2 仿冒域名 | 通过 | A23 10/10 `false`；A24 8/8 `true` 且类型正确 |
 | X3 制裁下载 | 通过 | A25 五场景离线通过 |
@@ -24,11 +24,11 @@
 | X11 intake 格式 | 通过 | A41 六类枚举，无完整手机/邮箱 |
 | X12 词表 | 通过 | 产品文档禁用词 0；技术词只在对照表 |
 | X13 评分不变 | 通过 | `risk_score.*`、`red_flags.*` 相对 v0.8.0 无 diff；红旗 23 |
-| X14 隐私 | 通过 | 仓库 privacy 124 文件 clean；精简包 28 文件 clean |
-| X15 精简包 | 通过 | 28 文件 / 474,196 bytes；含 `render_card.py`；包内 41/41；测试后仍 28 文件 |
+| X14 隐私 | 通过 | 仓库 privacy 125 文件 clean；精简包 28 文件 clean |
+| X15 精简包 | 通过 | 28 文件 / 475,513 bytes；含 `render_card.py`；包内 41/41；测试后仍 28 文件 |
 | X16 文档与版本 | 通过 | `SKILL.md`/manifest 0.9.0；CHANGELOG `[0.9.0]` 含 registry；README 有版本行；`global.md` 注册库通道与 NLOD |
 | X17 历史与分支 | 通过 | `v0.8.0` 是祖先；提交都在 `v0.9`；无强推/改写 |
-| X18 CI | 通过 | 功能 HEAD `75445c2` 的 run `41950896686` 全部步骤 success（含 S2/S3） |
+| X18 CI | 通过 | 功能 HEAD `8e5ba17` 的 run `41952003659` 全部步骤 success（含 S2/S3） |
 | X20 开发汇报 | 本文件 | 五要素见下 |
 
 ## 2. 官方条款与真实请求核对
@@ -66,7 +66,7 @@
 1. `identity_check registry` 新增：默认离线只返回搜索链接；`--online` 查询挪威 Enhetsregisteret（NLOD 2.0）。
 2. 只发送公司名和国家（NO），只返回公司级字段；不返回、不保存董事/股东个人信息。
 3. 支持 found / not-found / ambiguous / unavailable / offline；注册地址国与自称国不一致时给 `country_mismatch`，供模型按既有 RF-CORP-001 线索判断，不新增红旗。
-4. 其他国家维持链接 + 一次动作；不硬实现、不猜测。
+4. 其他国家（含无法识别的国家名，如 `Germany`）返回 `not-covered`，链接优先取 `country_capabilities.json`；取不到为 `null` 并提示人工核实，**绝不回退挪威、不猜测**。
 5. 风险分公式、23 条红旗与权重、等级色带、覆盖率分母（8）、精简包 28 文件均未变。
 
 ## 6. 格式断言修改清单
@@ -79,15 +79,16 @@
 node tests/run_cases.mjs                → 41 passed, 0 failed
 node tests/consistency.mjs              → consistency checks passed
 node tests/consistency_scripts.mjs      → script consistency checks passed
-node scripts/privacy_scan.mjs           → clean（124 文件）
-node scripts/build_submission.mjs       → 28 files / 474,196 bytes
+node scripts/privacy_scan.mjs           → clean（125 文件）
+node scripts/build_submission.mjs       → 28 files / 475,513 bytes
 (cd dist/submission && node tests/run_cases.mjs) → 41 passed；测试后仍 28 文件
 node scripts/privacy_scan.mjs dist/submission → clean（28 文件）
-A40                                     → 六类场景全过；Py/Node 一致；无个人字段
+A40                                     → 七类场景全过；Py/Node 一致；无个人字段
+未知国家 Germany / ISO SE（离线）       → not-covered；不回退挪威
 真实请求 Equinor ASA（--online）         → found；Py/Node 字段一致
 git diff v0.8.0 --stat -- risk_score.* red_flags.* → 无输出
 git merge-base --is-ancestor v0.8.0 HEAD → 退出码 0
-CI run 41950896686（功能 HEAD 75445c2） → success（29s）
+CI run 41952003659（功能 HEAD 8e5ba17） → success（35s）
 ```
 
 ## 8. 待办
