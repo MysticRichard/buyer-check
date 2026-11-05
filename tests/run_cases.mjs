@@ -20,7 +20,16 @@ import { isDeepStrictEqual } from 'node:util';
 import { score as riskScore, maskSensitive, loadRules } from '../scripts/risk_score.mjs';
 import { analyse as domainAnalyse, loadBrands, loadBrandData } from '../scripts/domain_similarity.mjs';
 import { analyse as whoisAnalyse } from '../scripts/whois_lookup.mjs';
-import { renderCard, ladderCombinations } from '../scripts/render_card.mjs';
+
+let renderCard = null;
+let ladderCombinations = null;
+try {
+  const module = await import('../scripts/render_card.mjs');
+  renderCard = module.renderCard;
+  ladderCombinations = module.ladderCombinations;
+} catch {
+  // The lean submission bundle ships only render_card.py.
+}
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, '..');
@@ -75,6 +84,14 @@ function runPythonRender(python, args) {
   const result = spawnSync(cmd, [...rest, join(ROOT, 'scripts', 'render_card.py'), ...args], { encoding: 'utf8', timeout: 30000 });
   if (!result.stdout) throw new Error(result.stderr || 'no output');
   return JSON.parse(result.stdout);
+}
+
+function pyRenderEvidence(python, evidence) {
+  if (!python) throw new Error('python not found');
+  const dir = mkdtempSync(join(tmpdir(), 'buyer-check-card-'));
+  const file = join(dir, 'evidence.json');
+  writeFileSync(file, JSON.stringify(evidence), 'utf8');
+  return runPythonRender(python, [file, '--json']);
 }
 
 // The repository keeps one file per case (tests/cases/A*.json). The lean
@@ -386,7 +403,7 @@ const runners = {
 
   render_card(testCase) {
     const evidence = testCase.input.fixture_data ? cloneJson(testCase.input.fixture_data) : loadFixture(testCase.input.fixture);
-    const result = renderCard(evidence, loadRules());
+    const result = renderCard ? renderCard(evidence, loadRules()) : pyRenderEvidence(findPython(), evidence);
     const expect = testCase.expect || {};
     const checks = [];
     if (expect.status !== undefined) checks.push(result.status === expect.status);
@@ -397,7 +414,9 @@ const runners = {
     if (expect.actual_risk_score !== undefined) checks.push(result.actual?.risk_score === expect.actual_risk_score);
     if (expect.actual_level !== undefined) checks.push(result.actual?.level === expect.actual_level);
     if (result.card) {
-      if (expect.card_file) {
+      if (expect.card !== undefined) {
+        checks.push(result.card === expect.card);
+      } else if (expect.card_file) {
         const expected = readFileSync(join(FIXTURES_DIR, expect.card_file), 'utf8').replace(/\r\n/g, '\n').replace(/\n$/, '');
         checks.push(result.card === expected);
       }
@@ -426,7 +445,8 @@ const runners = {
   render_card_boundary(testCase) {
     const rules = loadRules();
     const outcomes = (testCase.input.cases || []).map((entry) => {
-      const result = renderCard(cloneJson(entry.evidence), rules);
+      const evidence = cloneJson(entry.evidence);
+      const result = renderCard ? renderCard(evidence, rules) : pyRenderEvidence(findPython(), evidence);
       const expect = entry.expect || {};
       const checks = [result.status === 'ok'];
       if (expect.credit !== undefined) checks.push(result.credit?.score === expect.credit);
@@ -442,11 +462,11 @@ const runners = {
 
   render_card_validation(testCase) {
     const rules = loadRules();
-    const base = loadFixture(testCase.input.fixture);
+    const base = testCase.input.fixture_data ? cloneJson(testCase.input.fixture_data) : loadFixture(testCase.input.fixture);
     const outcomes = (testCase.input.cases || []).map((entry) => {
       const evidence = cloneJson(base);
       for (const mutation of entry.mutate || []) setByPath(evidence.display, mutation.path, cloneJson(mutation.value));
-      const result = renderCard(evidence, rules);
+      const result = renderCard ? renderCard(evidence, rules) : pyRenderEvidence(findPython(), evidence);
       const codes = (result.errors || []).map((error) => error.code);
       return {
         name: entry.name,
@@ -459,7 +479,8 @@ const runners = {
   },
 
   render_card_ladder(testCase) {
-    const combos = ladderCombinations();
+    const python = findPython();
+    const combos = ladderCombinations ? ladderCombinations() : (python ? runPythonRender(python, ['--ladder']).combos : []);
     const expect = testCase.expect || {};
     const checks = [combos.length === expect.combos];
     let violations = 0;
@@ -503,7 +524,7 @@ const runners = {
     }
     checks.push(violations === 0);
 
-    const python = findPython();
+
     if (python) {
       const py = runPythonRender(python, ['--ladder']);
       checks.push(isDeepStrictEqual(py.combos, combos));
@@ -515,10 +536,12 @@ const runners = {
 
   render_card_lines(testCase) {
     const rules = loadRules();
-    const outcomes = (testCase.input.fixtures || []).map((name) => {
-      const result = renderCard(loadFixture(name), rules);
+    const entries = testCase.input.fixtures_data || (testCase.input.fixtures || []).map((name) => ({ name }));
+    const outcomes = entries.map((entry) => {
+      const evidence = entry.data ? cloneJson(entry.data) : loadFixture(entry.name);
+      const result = renderCard ? renderCard(evidence, rules) : pyRenderEvidence(findPython(), evidence);
       return {
-        fixture: name,
+        fixture: entry.name,
         ok: result.status === 'ok' && result.line_count <= testCase.expect.max_lines && result.first_screen_lines <= testCase.expect.max_first_screen,
         line_count: result.line_count,
         first_screen_lines: result.first_screen_lines,
@@ -528,9 +551,29 @@ const runners = {
   },
 
   render_card_deterministic(testCase) {
-    const evidence = loadFixture(testCase.input.fixture);
-    const rules = loadRules();
     const runs = testCase.input.runs || 100;
+    const python = findPython();
+    const evidence = testCase.input.fixture_data ? cloneJson(testCase.input.fixture_data) : loadFixture(testCase.input.fixture);
+    if (!renderCard) {
+      if (!python) return { ok: false, actual: { runs, identical: false, parity: false, mode: 'python-missing' } };
+      const dir = mkdtempSync(join(tmpdir(), 'buyer-check-card-'));
+      const path = join(dir, 'evidence.json');
+      writeFileSync(path, JSON.stringify(evidence), 'utf8');
+      const code = [
+        'import sys, json',
+        `sys.path.insert(0, ${JSON.stringify(join(ROOT, 'scripts'))})`,
+        'import render_card',
+        `with open(${JSON.stringify(path)}, encoding='utf-8') as handle: evidence = json.load(handle)`,
+        'rules = render_card.load_rules()',
+        `cards = [render_card.render_card(json.loads(json.dumps(evidence)), rules)['card'] for _ in range(${runs})]`,
+        "print(json.dumps({'identical': len(set(cards)) == 1}, ensure_ascii=False))",
+      ].join('\n');
+      const [cmd, ...rest] = python.split(' ');
+      const result = spawnSync(cmd, [...rest, '-c', code], { encoding: 'utf8', timeout: 120000 });
+      const identical = result.stdout ? JSON.parse(result.stdout).identical : false;
+      return { ok: identical && runs === testCase.expect.runs, actual: { runs, identical, parity: true, mode: 'python' } };
+    }
+    const rules = loadRules();
     let first = null;
     let identical = true;
     for (let i = 0; i < runs; i += 1) {
@@ -538,15 +581,32 @@ const runners = {
       if (first === null) first = card;
       else if (card !== first) identical = false;
     }
-    const python = findPython();
     let parity = false;
     if (python) {
-      const result = runPythonRender(python, [join(FIXTURES_DIR, testCase.input.fixture), '--json']);
+      const result = pyRenderEvidence(python, evidence);
       parity = result.status === 'ok' && result.card === first;
     }
     return {
       ok: identical && parity && runs === testCase.expect.runs,
       actual: { runs, identical, parity },
+    };
+  },
+
+  intake_format(testCase) {
+    const allowed = new Set(['tender', 'sample', 'large_first_order', 'account_change', 'pre_order', 'general']);
+    const phoneRe = /\+?\d[\d\s()\-]{8,}\d/;
+    const emailRe = /[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}/;
+    const outcomes = (testCase.input.packs || []).map((pack) => {
+      const intake = pack.intake || {};
+      const raw = JSON.stringify(intake);
+      const cleaned = raw.replace(/[A-Za-z0-9._%+\-]*\*+[A-Za-z0-9._%+\-]*@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}/g, '');
+      const checks = [allowed.has(intake.inquiry_type), !phoneRe.test(raw), !emailRe.test(cleaned)];
+      return { name: pack.name, ok: checks.every(Boolean), inquiry_type: intake.inquiry_type };
+    });
+    const types = outcomes.map((item) => item.inquiry_type);
+    return {
+      ok: outcomes.every((item) => item.ok) && isDeepStrictEqual(types, testCase.expect?.types || types),
+      actual: outcomes,
     };
   },
 
@@ -556,6 +616,7 @@ const runners = {
 };
 
 async function main() {
+  process.env.PYTHONDONTWRITEBYTECODE = '1';
   const cases = loadAllCases();
   let passed = 0;
   let failed = 0;

@@ -79,10 +79,31 @@ function mergeMarkdown(spec) {
   return `${chunks.join('\n').trim()}\n`;
 }
 
+function embedFixtures(testCase) {
+  const input = testCase.input || {};
+  if (input.fixture) {
+    input.fixture_data = JSON.parse(readFileSync(join(ROOT, 'tests', 'fixtures', input.fixture), 'utf8'));
+    delete input.fixture;
+  }
+  if (Array.isArray(input.fixtures)) {
+    input.fixtures_data = input.fixtures.map((name) => ({
+      name,
+      data: JSON.parse(readFileSync(join(ROOT, 'tests', 'fixtures', name), 'utf8')),
+    }));
+    delete input.fixtures;
+  }
+  const expect = testCase.expect || {};
+  if (expect.card_file) {
+    expect.card = readFileSync(join(ROOT, 'tests', 'fixtures', expect.card_file), 'utf8').replace(/\r\n/g, '\n').replace(/\n$/, '');
+    delete expect.card_file;
+  }
+  return testCase;
+}
+
 function mergeCases(spec) {
   const dir = join(ROOT, 'tests/cases');
   const files = readdirSync(dir).filter((name) => name.endsWith('.json'));
-  const cases = files.map((name) => JSON.parse(readFileSync(join(dir, name), 'utf8')));
+  const cases = files.map((name) => embedFixtures(JSON.parse(readFileSync(join(dir, name), 'utf8'))));
   cases.sort((a, b) => {
     const na = Number(String(a.id).replace(/\D/g, ''));
     const nb = Number(String(b.id).replace(/\D/g, ''));

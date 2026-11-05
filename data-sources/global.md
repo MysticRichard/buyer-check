@@ -110,3 +110,20 @@
 | 人物 | 官网团队页/公开索引 | 头像同图/近似图比对 | 登录后的账号详情 |
 
 **纪律**：先跑 1/2；只有 1/2 无结果才标 `not-covered`；每条留 `source_url + retrieved_at` 与失败原因；不自动登录、不绕验证码、不抓 Google Maps 页面；**不引入无头浏览器/Chromium**（体积/ToS/版权/反爬）；平台边界项给可点击链接 + 一次人工动作，人只做这次动作和最终决策。
+## 十一、一次动作链接模板（v0.9）
+
+卡片「一次动作」只在「没查到」且需要人做一次动作时出现，格式固定：
+
+`▸ 项目 — [链接文字](url)：做什么、回传什么`
+
+| 未覆盖原因（`coverage.uncovered` 的 reason） | 卡片项目 | 链接模板 | 回传什么 |
+| --- | --- | --- | --- |
+| `needs-browser`；地图 `no-public-record` | 地图 | `https://www.google.com/maps/search/<URL 编码后的公司名>` | 建筑规模和门口招牌：吻合 / 偏小 / 住宅 |
+| `search-blocked` | 海关 | 当次实际使用的平台链接（ImportGenius / Volza / 其他可达平台） | 过一次验证码，回传进出口品类 |
+| `login-required`、`login-wall` | 领英和 Facebook | 当次检索到的个人页或公司页链接 | 登录一次，回传现任公司与自称是否一致 |
+| 制裁自动检查失败 | 制裁名单 | `https://sanctionssearch.ofac.treas.gov/` | 输入公司名，回传有 / 没有匹配 |
+| `no-matrix`、`no-company-level-data` | 注册库 | 按 `scripts/country_capabilities.json` 给出的该国注册库链接 | 回传公司状态（存续 / 注销 / 找不到） |
+| `not-provided` | 补一项 | 无链接 | 邮件原始头，或一个带国家区号的电话 |
+| `no-public-record` | 不列一次动作 | — | 只在「没查到」栏写一句 |
+
+**纪律**：最多 4 行；按信息增益排序（地图、注册库在前，领英/Facebook 在中）；人只需要登录一次、过一次验证码或回传一句话；链接由模型填入 `display.missing[].action`，`render_card` 不硬编码网址。

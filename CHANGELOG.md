@@ -2,6 +2,25 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与语义化版本。迭代方案见 [docs/iteration_plan.md](docs/iteration_plan.md)（v0.4.1–v0.6.0）、[docs/iteration_plan_v0.7.md](docs/iteration_plan_v0.7.md)（v0.7.0）、[docs/iteration_plan_v0.8.md](docs/iteration_plan_v0.8.md)（v0.8.0）与 [docs/iteration_plan_v0.9.md](docs/iteration_plan_v0.9.md)（v0.9.0，含 v0.8.1）。
 
+## [0.9.0] - TBD
+
+### 新增：结论卡 v0.9 版式（P-05 至 P-09）
+
+- `scripts/render_card.py`（进精简包）与 `scripts/render_card.mjs`（仓库内一致性对照）：从同一份证据包计算核实度、六维状态、四级动作阶梯与结论句，校验 `display` 文字字段，排版输出 Markdown；不联网、不写盘、不读系统时间。
+- 核实度 0–100（公司真实度 40 / 买家与公司的关联 25 / 联系方式 15 / 合规口碑 10 / 规模匹配 10），与风险分分开显示；动作阶梯和结论句只显示，不改变风险分、等级与置信度。
+- 三栏风险点取代原先的五条上限：需要注意 ≤3 / 已核实 ≤3 / 没查到 ≤2；“没查到”配一次动作（链接 + 做什么 + 回传什么，最多 4 行）。
+- `card_template.md`、`report_template.md` 同步新规则；报告开头加 0.1.1 核实度/阶梯/六维表，附录 C 记录被排除的误报；A27–A39 覆盖算例、边界、768 种阶梯组合、快照、校验、降级、行数与确定性。
+
+### 新增：一句话入口（P-10、P-12）
+
+- `SKILL.md` 加第 0 步：用户一句话或一段询盘即开始，抽取 `intake` 并判六类询盘（招标、样品、大额首单、换账户、订单确认、一般）；招标类型走 T1–T4 专项检查；支持“快查”模式。
+- `data-sources/global.md` 加一次动作链接模板；`collection_checklists.md` 加招标专项采集清单；A41 校验六类 `intake` 格式。
+
+### 变更
+
+- 版本号 0.9.0；精简提交包 27 → **28 个文件**（唯一新增进包文件 `scripts/render_card.py`）。
+- 风险分公式、23 条红旗与权重、等级色带、覆盖率分母（8）均不变；`render_card` 只读证据包、不修改评分。
+
 ## [0.8.1] - 2026-11-04
 
 ### 修复：短品牌仿冒域名误报（P-01）
