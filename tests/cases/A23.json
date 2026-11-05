@@ -1,0 +1,20 @@
+{
+  "id": "A23",
+  "title": "短品牌误报回归：普通单词里含 ups/apple/intel/bp 不判仿冒",
+  "type": "domain_batch",
+  "input": {
+    "threshold": 0.5,
+    "cases": [
+      { "domain": "harborrimgroups.example", "is_lookalike": false },
+      { "domain": "sunsetgroups.com", "is_lookalike": false },
+      { "domain": "cups.com", "is_lookalike": false },
+      { "domain": "pineapple.com", "is_lookalike": false },
+      { "domain": "intelligentsolutions.com", "is_lookalike": false },
+      { "domain": "bpharma.com", "is_lookalike": false },
+      { "domain": "mastersteel.com", "is_lookalike": false },
+      { "domain": "cupsupply.com", "is_lookalike": false },
+      { "domain": "dhlgroup.com", "is_lookalike": false },
+      { "domain": "fedexgroup.com", "is_lookalike": false }
+    ]
+  }
+}

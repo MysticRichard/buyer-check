@@ -32,6 +32,9 @@ const SOCIAL_PATTERNS = {
 const GOOGLE_TEXTSEARCH = 'https://maps.googleapis.com/maps/api/place/textsearch/json';
 const GOOGLE_DETAILS = 'https://maps.googleapis.com/maps/api/place/details/json';
 const OSM_SEARCH = 'https://nominatim.openstreetmap.org/search';
+const BRREG_SEARCH = 'https://data.brreg.no/enhetsregisteret/api/enheter';
+const BRREG_ENTITY = 'https://data.brreg.no/enhetsregisteret/api/enheter/';
+const BRREG_LICENSE = 'NLOD 2.0';
 
 function uniqueSorted(values) {
   return [...new Set(values.map((value) => String(value).trim()).filter(Boolean))].sort();
@@ -318,7 +321,11 @@ async function fetchJson(url, timeoutMs) {
       headers: { 'User-Agent': USER_AGENT, Accept: 'application/json' },
       signal: controller.signal,
     });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    if (!response.ok) {
+      const error = new Error(`http-${response.status}`);
+      error.code = `http-${response.status}`;
+      throw error;
+    }
     return await response.json();
   } finally {
     clearTimeout(timer);
@@ -487,18 +494,168 @@ async function mapCommand(args) {
   return osmMap(args);
 }
 
+function normalizeCompany(value) {
+  return String(value || '').trim().replace(/\s+/g, ' ').toUpperCase();
+}
+
+function countryCode(value) {
+  const key = String(value || '').trim().toLowerCase();
+  if (!key) return null;
+  if (/^[a-z]{2}$/.test(key)) return key.toUpperCase();
+  return {
+    norge: 'NO', norway: 'NO', noreg: 'NO',
+    sverige: 'SE', sweden: 'SE',
+    danmark: 'DK', denmark: 'DK',
+    suomi: 'FI', finland: 'FI',
+  }[key] || null;
+}
+
+function registryStatusText(entity) {
+  if (entity.konkurs) return '已破产';
+  if (entity.underTvangsavviklingEllerTvangsopplosning) return '强制清算';
+  if (entity.underAvvikling) return '清算中';
+  return '存续';
+}
+
+function registryEntry(entity) {
+  const address = entity.forretningsadresse || {};
+  const orgNumber = entity.organisasjonsnummer || null;
+  return {
+    legal_name: entity.navn ?? null,
+    org_number: orgNumber,
+    status_text: registryStatusText(entity),
+    incorporation_date: entity.registreringsdatoEnhetsregisteret ?? entity.stiftelsesdato ?? null,
+    address_country: countryCode(address.land),
+    source_url: orgNumber ? `${BRREG_ENTITY}${orgNumber}` : BRREG_SEARCH,
+  };
+}
+
+function registryError(company, registryUrl, error) {
+  return {
+    status: 'unavailable',
+    command: 'registry',
+    query: company,
+    country: 'NO',
+    registry_url: registryUrl,
+    license: BRREG_LICENSE,
+    error,
+  };
+}
+
+
+
+function registryLink(country) {
+  try {
+    const data = JSON.parse(readFileSync(new URL('./country_capabilities.json', import.meta.url), 'utf8'));
+    const entry = ((data.countries || {})[String(country || '').toLowerCase()] || {}).registry || {};
+    return entry.url || null;
+  } catch {
+    return null;
+  }
+}
+
+async function registryCommand(args) {
+  const company = String(args.company || '').trim();
+  if (!company) return { status: 'unavailable', command: 'registry', error: 'missing-company' };
+  const rawCountry = String(args.country || '').trim();
+  let country;
+  if (rawCountry) {
+    country = countryCode(rawCountry);
+    if (country === null) {
+      return {
+        status: 'not-covered',
+        command: 'registry',
+        query: company,
+        country: rawCountry,
+        registry_url: null,
+        license: BRREG_LICENSE,
+        note: '无法识别国家；registry 目前只实现挪威（NO），不猜测',
+      };
+    }
+  } else {
+    country = 'NO';
+  }
+  const registryUrl = `${BRREG_SEARCH}?navn=${encodeURIComponent(company)}`;
+  if (country !== 'NO') {
+    return {
+      status: 'not-covered',
+      command: 'registry',
+      query: company,
+      country,
+      registry_url: registryLink(country),
+      license: BRREG_LICENSE,
+      note: 'registry 目前只实现挪威（NO）；该国入口见 registry_url，或人工核实',
+    };
+  }
+
+  let payload;
+  let retrievedAt;
+  if (args.fixtureJson) {
+    try {
+      payload = JSON.parse(readFileSync(args.fixtureJson, 'utf8'));
+    } catch {
+      return registryError(company, registryUrl, 'invalid-fixture');
+    }
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      return registryError(company, registryUrl, 'invalid-fixture');
+    }
+    if (payload.error) return registryError(company, registryUrl, String(payload.error));
+    retrievedAt = payload.retrieved_at || 'fixture';
+  } else if (args.online) {
+    try {
+      payload = await fetchJson(registryUrl, args.timeout * 1000);
+    } catch (error) {
+      const message = error && error.name === 'AbortError' ? 'timeout' : (error && error.code) || 'fetch-failed';
+      return registryError(company, registryUrl, message);
+    }
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      return registryError(company, registryUrl, 'invalid-response');
+    }
+    retrievedAt = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
+  } else {
+    return {
+      status: 'offline',
+      command: 'registry',
+      query: company,
+      country: 'NO',
+      registry_url: registryUrl,
+      license: BRREG_LICENSE,
+      note: '加 --online 或 --fixture-json 查询；离线只给链接',
+    };
+  }
+
+  const entities = ((payload._embedded && payload._embedded.enheter) || []).filter((item) => item && typeof item === 'object');
+  const wanted = normalizeCompany(company);
+  const entries = entities.filter((entity) => normalizeCompany(entity.navn) === wanted).map(registryEntry);
+  const base = {
+    command: 'registry',
+    query: company,
+    country: 'NO',
+    registry_url: registryUrl,
+    license: BRREG_LICENSE,
+    retrieved_at: retrievedAt,
+  };
+  if (entries.length === 0) return { status: 'not-found', ...base };
+  if (entries.length > 1) return { status: 'ambiguous', ...base, candidates: entries };
+  const entry = entries[0];
+  const claimed = countryCode(args.claimedCountry);
+  const mismatch = claimed !== null && entry.address_country !== null && claimed !== entry.address_country;
+  return { status: 'found', ...base, ...entry, country_mismatch: mismatch };
+}
+
 function usage() {
   return [
     'Usage: node identity_check.mjs site [--domain DOMAIN] [--html-file FILE] [--online]',
     '       node identity_check.mjs backlink --domain DOMAIN (--text TEXT | --html-file FILE)',
     '       node identity_check.mjs image PATH1 PATH2 [PATH3 ...]',
     '       node identity_check.mjs map --company NAME [--phone PHONE] [--online | --fixture-json FILE]',
+    '       node identity_check.mjs registry --company NAME [--country NO] [--claimed-country NO] [--online | --fixture-json FILE]',
   ].join('\n');
 }
 
 function parseArgs(argv) {
   const command = argv[0];
-  const args = { command, domain: null, htmlFile: null, online: false, maxPages: 4, delay: 1, timeout: 10, text: '', paths: [], company: null, phone: null, country: null, googleKey: null, fixtureJson: null, fixtureSource: 'google_places', limit: 5 };
+  const args = { command, domain: null, htmlFile: null, online: false, maxPages: 4, delay: 1, timeout: 10, text: '', paths: [], company: null, phone: null, country: null, claimedCountry: null, googleKey: null, fixtureJson: null, fixtureSource: 'google_places', limit: 5 };
   for (let i = 1; i < argv.length; i += 1) {
     const token = argv[i];
     if (token === '--domain') args.domain = argv[++i];
@@ -511,6 +668,7 @@ function parseArgs(argv) {
     else if (token === '--company') args.company = argv[++i];
     else if (token === '--phone') args.phone = argv[++i];
     else if (token === '--country') args.country = argv[++i];
+    else if (token === '--claimed-country') args.claimedCountry = argv[++i];
     else if (token === '--google-key') args.googleKey = argv[++i];
     else if (token === '--fixture-json') args.fixtureJson = argv[++i];
     else if (token === '--fixture-source') args.fixtureSource = argv[++i];
@@ -522,7 +680,7 @@ function parseArgs(argv) {
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
-  if (!['site', 'backlink', 'image', 'map'].includes(args.command)) {
+  if (!['site', 'backlink', 'image', 'map', 'registry'].includes(args.command)) {
     console.log(JSON.stringify({ status: 'unavailable', error: 'unknown or missing subcommand' }));
     return 2;
   }
@@ -530,9 +688,10 @@ async function main() {
   if (args.command === 'site') result = await siteCommand(args);
   else if (args.command === 'backlink') result = backlinkCommand(args);
   else if (args.command === 'map') result = await mapCommand(args);
+  else if (args.command === 'registry') result = await registryCommand(args);
   else result = await imageCommand(args);
   console.log(JSON.stringify(result));
-  return result.status === 'ok' ? 0 : 1;
+  return ['ok', 'found', 'not-found', 'ambiguous', 'offline'].includes(result.status) ? 0 : 1;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

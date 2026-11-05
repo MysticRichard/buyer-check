@@ -16,8 +16,11 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
 
+import { updateSanctions } from './update_sanctions.mjs';
+
 const DIR = dirname(fileURLToPath(import.meta.url));
 const CACHE_DIR = join(DIR, '..', '.cache', 'sanctions');
+const CACHE_MAX_AGE_DAYS = 7;
 
 const LIST_FILES = {
   'OFAC SDN': 'ofac_sdn.csv',
@@ -94,7 +97,24 @@ export function match(query, entries) {
   return hits;
 }
 
-export function analyse(query) {
+export async function ensureCache(cacheDir, noUpdate = false) {
+  const ofacPath = join(cacheDir, 'ofac_sdn.csv');
+  if (existsSync(ofacPath)) {
+    const ageDays = (Date.now() - statSync(ofacPath).mtimeMs) / 86400000;
+    if (ageDays <= CACHE_MAX_AGE_DAYS) return null;
+  }
+  if (noUpdate) return existsSync(ofacPath) ? null : 'no-network';
+  let result;
+  try {
+    result = await updateSanctions({ cacheDir });
+  } catch {
+    return 'download-failed';
+  }
+  if (result.status === 'ok' && existsSync(ofacPath)) return null;
+  return 'download-failed';
+}
+
+export async function analyse(query, cacheDir = CACHE_DIR, noUpdate = false) {
   const result = {
     query,
     lists_checked: [],
@@ -103,9 +123,13 @@ export function analyse(query) {
     requires_manual_review: true,
     note: '同名需人工排除；存疑应标注「疑似命中，需人工核实」',
   };
+  const cacheError = await ensureCache(cacheDir, noUpdate);
+  if (cacheError) {
+    return { ...result, status: 'unavailable', error: cacheError };
+  }
   let anyList = false;
   for (const [listName, filename] of Object.entries(LIST_FILES)) {
-    const path = join(CACHE_DIR, filename);
+    const path = join(cacheDir, filename);
     if (!existsSync(path)) continue;
     anyList = true;
     let entries;
@@ -122,22 +146,22 @@ export function analyse(query) {
   }
   result.match_count = result.possible_matches.length;
   if (!anyList) {
-    return {
-      ...result,
-      status: 'unavailable',
-      error: 'no sanctions list cached; run scripts/update_sanctions first',
-    };
+    return { ...result, status: 'unavailable', error: 'no sanctions list cached' };
   }
   return { ...result, status: 'ok' };
 }
 
-function main() {
-  const positional = process.argv.slice(2).filter((a) => !a.startsWith('--'));
+async function main() {
+  const argv = process.argv.slice(2);
+  const noUpdate = argv.includes('--no-update');
+  const cacheIndex = argv.indexOf('--cache-dir');
+  const cacheDir = cacheIndex >= 0 ? argv[cacheIndex + 1] : CACHE_DIR;
+  const positional = argv.filter((arg, index) => !arg.startsWith('--') && !(cacheIndex >= 0 && index === cacheIndex + 1));
   if (!positional.length) {
     console.log(JSON.stringify({ status: 'error', error: 'missing name argument' }));
     process.exit(2);
   }
-  const result = analyse(positional[0]);
+  const result = await analyse(positional[0], cacheDir, noUpdate);
   console.log(JSON.stringify(result));
   process.exit(result.status === 'ok' ? 0 : 1);
 }

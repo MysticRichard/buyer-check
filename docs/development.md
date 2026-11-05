@@ -1,6 +1,6 @@
 # 开发文档（docs/development.md）
 
-> **迭代方案以 [docs/iteration_plan.md](iteration_plan.md)（v0.4.1–v0.6.0）、[docs/iteration_plan_v0.7.md](iteration_plan_v0.7.md)（v0.7.0）与 [docs/iteration_plan_v0.8.md](iteration_plan_v0.8.md)（v0.8.0）为准**。本文记录开发背景与架构；两者冲突时以迭代方案为准。
+> **迭代方案以 [docs/iteration_plan.md](iteration_plan.md)（v0.4.1–v0.6.0）、[docs/iteration_plan_v0.7.md](iteration_plan_v0.7.md)（v0.7.0）、[docs/iteration_plan_v0.8.md](iteration_plan_v0.8.md)（v0.8.0）与 [docs/iteration_plan_v0.9.md](iteration_plan_v0.9.md)（v0.9.0，含 v0.8.1）为准**。本文记录开发背景与架构；两者冲突时以迭代方案为准。
 
 ## 一、背景与目标
 
@@ -20,6 +20,8 @@
 | v0.6.0（订单前复核） | account_check（IBAN mod-97 自实现）、RF-ACC-002、订单前复核流程、check_sources 保鲜、CI、国家扩展至 16 国 | 已交付 |
 | v0.7.0（隐私、提交包与增强） | 历史隐私清理、精简提交包（27 文件）、RF-ACC-002 权重固化、ip_check、phone_check 可选增强 | 已交付 |
 | v0.8.0（三层核实） | 公司层/链接层/人物层、RF-CORP-006、RF-CORP-002 扩写、identity_check、A15–A22、精简包 27 文件 | 已交付 |
+| v0.8.1（P0 修复） | 短品牌误报收紧、OFAC 自动下载、卡片人话化、■/□ 分数条、A23–A26 | 已交付 |
+| v0.9.0（卡片与入口） | 核实度、六维表、动作阶梯、三栏风险点、一次动作、`render_card`、一句话入口与招标专项、注册库自动查（挪威 Enhetsregisteret，NLOD 2.0）、A27–A41、精简包 28 文件 | 已交付 |
 
 
 **明确不做**：法律意见、投资尽调、刑事侦查、个人隐私挖掘（住址、家庭、私人社交账号）。
@@ -70,7 +72,7 @@
 | Python 与 Node 双实现 | 文档要求 Python；Node 版本用于无 Python 环境时的本地验证，两者逻辑同构 |
 | 脚本支持 `--rdap-json` 离线 fixture | 使域名类判定可离线测试（验收 A3），不依赖实时网络 |
 
-## 六、验收用例（tests/cases/，A1–A22）
+## 六、验收用例（tests/cases/，A1–A26）
 
 | 用例 | 场景 | 期望 | 运行方式 |
 | --- | --- | --- | --- |
@@ -114,7 +116,7 @@ node scripts/privacy_scan.mjs
 
 - **赛道**：产业赛道 · 赛题四「AI行业先锋」（行业智能应用方向）；华为云 Skill 市场归类为通用场景 / 效率工具（2026-10-27 调整）。
 - **评审五维**：场景真实性、作品可用性、Skill 复用率、技术完成度、内容传播力。
-- **提交规则**：单次提交 ≤30 个文件、内容合计 ≤40MB；已确认采用 27 文件精简包（`dist/submission/`，由 `scripts/build_submission.mjs` 生成）。
+- **提交规则**：单次提交 ≤30 个文件、内容合计 ≤40MB；已确认采用 28 文件精简包（`dist/submission/`，由 `scripts/build_submission.mjs` 生成）。
 - **提交渠道**：通过华为云码道 CodeArts 或果办 OfficeAce 提交，须同时发布到华为云 Skill 市场与小红书 Skill 市场（发布小红书需带标签 #小红书Skill创新赛 #2026华为开发者大赛）。
 - **关键时间**（2026 年）：报名与作品提交截止 11-16；初赛评审 11-17 至 11-20（Top200）；联合评审 11-23 至 11-27（Top32）；决赛晋级名单 11-30；决赛答辩 12 月。
 - **迭代策略**：赛题允许多次提交，以截止前最新一次为准；按「v0.4.1 卫生版 → v0.5.0 可信度与全球化」节奏迭代。

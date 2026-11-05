@@ -45,20 +45,28 @@ function findPython() {
 function runScript(python, base, args) {
   // Non-zero exit codes are expected for "unavailable" results; parse stdout
   // regardless of exit status so both languages can be compared.
-  const nodeRun = spawnSync('node', [`${base}.mjs`, ...args], { cwd: SCRIPTS, encoding: 'utf8', timeout: 30000 });
+  const maxBuffer = 16 * 1024 * 1024;
+  const nodeRun = spawnSync('node', [join(SCRIPTS, `${base}.mjs`), ...args], { cwd: SCRIPTS, encoding: 'utf8', timeout: 30000, maxBuffer });
   const cmd = python.split(' ')[0];
   const rest = python.split(' ').slice(1);
-  const pyRun = spawnSync(cmd, [...rest, `${base}.py`, ...args], { cwd: SCRIPTS, encoding: 'utf8', timeout: 30000 });
+  const pyRun = spawnSync(cmd, [...rest, join(SCRIPTS, `${base}.py`), ...args], { cwd: SCRIPTS, encoding: 'utf8', timeout: 30000, maxBuffer });
   for (const run of [pyRun, nodeRun]) {
     if (run.error || !run.stdout) {
-      throw new Error(`${base} failed to run: ${run.error || 'no stdout'}`);
+      throw new Error(`${base} failed to run: ${run.error || 'no stdout'}; status=${run.status}; signal=${run.signal}; stderr=${(run.stderr || '').slice(0, 400)}`);
     }
   }
   if (pyRun.status !== nodeRun.status) {
     failures += 1;
     console.log(`✗ ${base} ${args.join(' ')}: exit codes differ python=${pyRun.status} node=${nodeRun.status}`);
   }
-  return [JSON.parse(pyRun.stdout), JSON.parse(nodeRun.stdout)];
+  const parse = (label, run) => {
+    try {
+      return JSON.parse(run.stdout);
+    } catch (error) {
+      throw new Error(`${base} ${label} JSON parse failed: ${error.message}; status=${run.status}; stderr=${(run.stderr || '').slice(0, 300)}; head=${(run.stdout || '').slice(0, 160)}; tail=${(run.stdout || '').slice(-160)}`);
+    }
+  };
+  return [parse('python', pyRun), parse('node', nodeRun)];
 }
 
 let failures = 0;
@@ -135,6 +143,34 @@ let checked = 0;
   }
   console.log(`✓ phone_check: ${checked}/${phoneCases.length} cases identical`);
 
+  // ---------- domain_similarity ----------
+  const domainCases = [
+    'harborrimgroups.example', 'sunsetgroups.com', 'cups.com', 'pineapple.com',
+    'intelligentsolutions.com', 'bpharma.com', 'mastersteel.com', 'cupsupply.com',
+    'dhlgroup.com', 'fedexgroup.com', 'ups-track.com', 'upsexpress.com',
+    'dhl-express-pay.com', 'fedex-login.com', 'app1e.com', 'apple-support.com',
+    'maersklines.com', 'mymaersk.com',
+  ];
+  let domainChecked = 0;
+  for (const domain of domainCases) {
+    const [py, js] = runScript(python, 'domain_similarity', [domain]);
+    compare(`domain_similarity ${domain}`, py, js);
+    domainChecked += 1;
+  }
+  console.log(`✓ domain_similarity: ${domainChecked}/${domainCases.length} cases identical`);
+
+  // ---------- render_card ----------
+  const cardFixtures = ['card_harbor.json', 'card_nordic.json', 'card_manual.json', 'legacy_card.json', 'score_mismatch.json'];
+  let cardChecked = 0;
+  for (const fixture of cardFixtures) {
+    const [py, js] = runScript(python, 'render_card', [join(ROOT, 'tests', 'fixtures', fixture), '--json']);
+    compare(`render_card ${fixture}`, py, js);
+    cardChecked += 1;
+  }
+  const [pyLadder, jsLadder] = runScript(python, 'render_card', ['--ladder']);
+  compare('render_card --ladder', pyLadder, jsLadder);
+  console.log(`✓ render_card: ${cardChecked}/${cardFixtures.length} card cases + 768 ladder combinations identical`);
+
   // ---------- ip_check ----------
   const ipCases = [
     ['', ['--claimed-country', 'AE']],
@@ -163,7 +199,7 @@ let checked = 0;
 
   // No-cache path first
   rmSync(CACHE, { recursive: true, force: true });
-  const [pyNoCache, jsNoCache] = runScript(python, 'sanctions_check', ['GLOBAL STAR TRADING CO']);
+  const [pyNoCache, jsNoCache] = runScript(python, 'sanctions_check', ['GLOBAL STAR TRADING CO', '--no-update']);
   compare('sanctions_check no-cache', pyNoCache, jsNoCache);
   if (pyNoCache.status !== 'unavailable') {
     failures += 1;
@@ -174,7 +210,7 @@ let checked = 0;
   mkdirSync(CACHE, { recursive: true });
   writeFileSync(join(CACHE, 'ofac_sdn.csv'), syntheticCsv, 'utf8');
   for (const name of ['GLOBAL STAR TRADING CO', 'Marcus Delgado', 'Nordic Machinery AS']) {
-    const [py, js] = runScript(python, 'sanctions_check', [name]);
+    const [py, js] = runScript(python, 'sanctions_check', [name, '--no-update']);
     compare(`sanctions_check "${name}"`, py, js);
   }
   console.log('✓ sanctions_check: no-cache + 3 synthetic matches identical');

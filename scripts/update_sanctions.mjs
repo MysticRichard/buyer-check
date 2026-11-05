@@ -51,7 +51,16 @@ async function download(url, path, timeoutMs = 60000) {
 }
 
 async function main() {
-  const checkOnly = process.argv.includes('--check');
+  const argv = process.argv.slice(2);
+  const checkOnly = argv.includes('--check');
+  const cacheIndex = argv.indexOf('--cache-dir');
+  const cacheDir = cacheIndex >= 0 ? argv[cacheIndex + 1] : CACHE_DIR;
+  const result = await updateSanctions({ cacheDir, checkOnly });
+  console.log(JSON.stringify(result));
+  process.exit(result.status === 'ok' ? 0 : 1);
+}
+
+export async function updateSanctions({ cacheDir = CACHE_DIR, timeoutMs = 60000, checkOnly = false } = {}) {
   const results = [];
   let ok = true;
   for (const [name, source] of Object.entries(SOURCES)) {
@@ -59,12 +68,11 @@ async function main() {
       results.push({ list: name, status: source.status, url: source.url });
       continue;
     }
-    const outcome = await download(source.url, join(CACHE_DIR, source.file));
+    const outcome = await download(source.url, join(cacheDir, source.file), timeoutMs);
     results.push({ list: name, status: outcome.ok ? 'downloaded' : 'failed', detail: outcome.detail });
     if (!outcome.ok) ok = false;
   }
-  console.log(JSON.stringify({ status: ok ? 'ok' : 'unavailable', cache_dir: CACHE_DIR, results }));
-  process.exit(ok ? 0 : 1);
+  return { status: ok ? 'ok' : 'unavailable', cache_dir: cacheDir, results };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

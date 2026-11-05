@@ -1,0 +1,82 @@
+{
+  "id": "A41",
+  "title": "intake 格式：六类固定证据包的 inquiry_type 在枚举内，不含完整手机号和完整邮箱",
+  "type": "intake_format",
+  "input": {
+    "packs": [
+      {
+        "name": "招标邀请",
+        "intake": {
+          "company": "Harbor Rim Engineering",
+          "person": "a***a",
+          "phone": "+65 6* *** 0100",
+          "email": null,
+          "country": "SG",
+          "inquiry_type": "tender",
+          "inquiry_text": "We invite you to tender for the supply of industrial pumps."
+        }
+      },
+      {
+        "name": "样品申请",
+        "intake": {
+          "company": "ACME TRADING LTD",
+          "person": "m***a",
+          "phone": "+1 4* *** 2671",
+          "email": null,
+          "country": "US",
+          "inquiry_type": "sample",
+          "inquiry_text": "Please send free samples by our courier account."
+        }
+      },
+      {
+        "name": "大额首单",
+        "intake": {
+          "company": "PACIFIC RETAIL GROUP",
+          "person": "j***n",
+          "phone": "+1 4* *** 2671",
+          "email": null,
+          "country": "US",
+          "inquiry_type": "large_first_order",
+          "inquiry_text": "First order of 50 containers, no negotiation needed."
+        }
+      },
+      {
+        "name": "换收款账户",
+        "intake": {
+          "company": "NORDIC IMPORT AB",
+          "person": "e***k",
+          "phone": "+46 8 *** 4412",
+          "email": null,
+          "country": "SE",
+          "inquiry_type": "account_change",
+          "inquiry_text": "Please note our bank account has changed."
+        }
+      },
+      {
+        "name": "订单确认",
+        "intake": {
+          "company": "Harbor Rim Engineering",
+          "person": "a***a",
+          "phone": "+65 6* *** 0100",
+          "email": null,
+          "country": "SG",
+          "inquiry_type": "pre_order",
+          "inquiry_text": "Please send the proforma invoice and bank details."
+        }
+      },
+      {
+        "name": "一般询盘",
+        "intake": {
+          "company": "ACME TRADING LTD",
+          "person": null,
+          "phone": null,
+          "email": null,
+          "country": "AE",
+          "inquiry_type": "general",
+          "inquiry_text": "We are interested in your products."
+        }
+      }
+    ]
+  },
+  "expect": { "all_pass": true, "types": ["tender", "sample", "large_first_order", "account_change", "pre_order", "general"] }
+}

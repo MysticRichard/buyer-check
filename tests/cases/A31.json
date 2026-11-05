@@ -1,0 +1,7 @@
+{
+  "id": "A31",
+  "title": "结论句模板与动作阶梯逐组合对应",
+  "type": "render_card_ladder",
+  "input": { "mode": "conclusion" },
+  "expect": { "combos": 768, "all_pass": true }
+}

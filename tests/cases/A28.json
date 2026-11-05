@@ -1,0 +1,13 @@
+{
+  "id": "A28",
+  "title": "核实度算例二：NORDIC IMPORT AB 为 10（低）",
+  "type": "render_card",
+  "input": { "fixture": "card_nordic.json" },
+  "expect": {
+    "status": "ok",
+    "credit": 10,
+    "credit_tier": "低",
+    "level": "高",
+    "risk_score": 85
+  }
+}

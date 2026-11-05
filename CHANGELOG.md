@@ -1,6 +1,52 @@
 # 更新日志
 
-本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与语义化版本。迭代方案见 [docs/iteration_plan.md](docs/iteration_plan.md)（v0.4.1–v0.6.0）、[docs/iteration_plan_v0.7.md](docs/iteration_plan_v0.7.md)（v0.7.0）与 [docs/iteration_plan_v0.8.md](docs/iteration_plan_v0.8.md)（v0.8.0）。
+本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与语义化版本。迭代方案见 [docs/iteration_plan.md](docs/iteration_plan.md)（v0.4.1–v0.6.0）、[docs/iteration_plan_v0.7.md](docs/iteration_plan_v0.7.md)（v0.7.0）、[docs/iteration_plan_v0.8.md](docs/iteration_plan_v0.8.md)（v0.8.0）与 [docs/iteration_plan_v0.9.md](docs/iteration_plan_v0.9.md)（v0.9.0，含 v0.8.1）。
+
+## [0.9.0] - 2026-11-05
+
+### 新增：结论卡 v0.9 版式（P-05 至 P-09）
+
+- `scripts/render_card.py`（进精简包）与 `scripts/render_card.mjs`（仓库内一致性对照）：从同一份证据包计算核实度、六维状态、四级动作阶梯与结论句，校验 `display` 文字字段，排版输出 Markdown；不联网、不写盘、不读系统时间。
+- 核实度 0–100（公司真实度 40 / 买家与公司的关联 25 / 联系方式 15 / 合规口碑 10 / 规模匹配 10），与风险分分开显示；动作阶梯和结论句只显示，不改变风险分、等级与置信度。
+- 三栏风险点取代原先的五条上限：需要注意 ≤3 / 已核实 ≤3 / 没查到 ≤2；“没查到”配一次动作（链接 + 做什么 + 回传什么，最多 4 行）。
+- `card_template.md`、`report_template.md` 同步新规则；报告开头加 0.1.1 核实度/阶梯/六维表，附录 C 记录被排除的误报；A27–A39 覆盖算例、边界、768 种阶梯组合、快照、校验、降级、行数与确定性。
+
+### 新增：一句话入口（P-10、P-12）
+
+- `SKILL.md` 加第 0 步：用户一句话或一段询盘即开始，抽取 `intake` 并判六类询盘（招标、样品、大额首单、换账户、订单确认、一般）；招标类型走 T1–T4 专项检查；支持“快查”模式。
+- `data-sources/global.md` 加一次动作链接模板；`collection_checklists.md` 加招标专项采集清单；A41 校验六类 `intake` 格式。
+
+### 新增：注册库自动查（P2）
+
+- `scripts/identity_check.py/.mjs` 新增 `registry` 子命令：默认离线只给链接；`--online` 查询挪威 Brønnøysund Enhetsregisteret 开放数据 API（许可 NLOD 2.0），只发送公司名和国家，只返回公司级字段，不返回董事/股东个人信息。
+- 支持 found / not-found / ambiguous / unavailable / offline；注册地址国与自称国不一致时输出 `country_mismatch`；A40 覆盖六类场景并校验 Py/Node 一致与无个人字段。
+- `data-sources/global.md` 增加注册库通道与许可说明；精简包仍为 28 文件（子命令并入既有脚本，不新增进包文件）。
+
+### 变更
+
+- 版本号 0.9.0；精简提交包 27 → **28 个文件**（唯一新增进包文件 `scripts/render_card.py`）。
+- 风险分公式、23 条红旗与权重、等级色带、覆盖率分母（8）均不变；`render_card` 只读证据包、不修改评分。
+
+## [0.8.1] - 2026-11-04
+
+### 修复：短品牌仿冒域名误报（P-01）
+
+- `domain_similarity.py/.mjs`：品牌核心标签 ≤5 个字符时，只有连字符独立词段，或后缀是 `risk_words` 中的风险词（express/track/pay/login/support 等）才判 affixed；普通单词里嵌 ups/apple/intel/bp 不再误报。
+- 行为变化：`dhlgroup.com`、`fedexgroup.com` 不再被“仿冒”单独触发，靠域名过新（RF-DOM-002）等其他红旗兜底；长品牌（maersk 等）与 A24 的 8 个真阳性保持阳性。
+- `scripts/brands.json` 新增 `risk_words` 字段；A23（误报回归）、A24（真阳性）覆盖。
+
+### 修复：制裁名单首次使用自动下载（P-02）
+
+- `sanctions_check` 无缓存或缓存超过 7 天时自动下载 OFAC SDN 官方 CSV，写入 `.cache/sanctions/`（不入库）；`--no-update` 关闭下载，测试和离线模式一律使用。
+- 下载失败返回 `status: "unavailable"` 与 `no-network` / `download-failed` 原因，不抛异常；只下载官方公开文件，不发送任何客户信息；同名命中仍需人工排除。
+- 精简包只含 `sanctions_check.py`，下载逻辑内联，避免新增文件超出 28 文件预算；A25 五个场景离线覆盖。
+
+### 修复：卡片人话化与分数条字符（P-03/P-04）
+
+- `card_template.md` 新增“技术词 → 人话”对照表：卡片不再出现 HTTP 状态码、MX/SPF/DMARC、RDAP、POI、CAPTCHA、API Key、“误报已排除”等内部过程；误报只记完整报告附录 C。
+- 分数条改用 `■`（已填）/`□`（未填），10 格，填充数 `floor(分数 / 10 + 0.5)`；不得使用旧花纹字符；需人工核实全部 `□`。
+- `SKILL.md`、`report_template.md`、`examples/sample-report.md`、历史文档同步；A26 校验 0/5/15/25/85/95/100 的填充格数，并对 Python/Node 公式做一致性检查。
+- 本版不改风险分公式、红旗数量/权重、等级色带、覆盖率分母；精简包仍为 27 个文件。
 
 ## [0.8.0] - 2026-10-30
 
@@ -143,7 +189,7 @@
 
 ### 新增：证据包与双模式输出（D4/D5/D6）
 
-- `card_template.md`：结论卡版式（首行颜色+等级+分数、10 格分数条、灰▒、≤5 风险点、≤3 话术英文+中文）、证据包 JSON Schema（checks[].result 含 not-covered/skipped-login；anchors.closure 四档）、追问话术规则与话术库（D6/D13：委婉含蓄、询盘期不索要执照）。
+- `card_template.md`：结论卡版式（首行颜色+等级+分数、10 格分数条、灰□、≤5 风险点、≤3 话术英文+中文）、证据包 JSON Schema（checks[].result 含 not-covered/skipped-login；anchors.closure 四档）、追问话术规则与话术库（D6/D13：委婉含蓄、询盘期不索要执照）。
 - SKILL.md 输出改为双模式：结论卡默认只显示不落盘；完整报告按需写入 `reports/`；同一证据包渲染保证一致性（E1）；支持增量复核。
 
 ### 新增：三个全球通用脚本（E3，Python + Node 双实现，tests/consistency_scripts.mjs 保证输出一致）

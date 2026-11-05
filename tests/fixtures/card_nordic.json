@@ -1,0 +1,88 @@
+{
+  "subject": {
+    "company": "NORDIC IMPORT AB",
+    "person": "e***k",
+    "phone": "+46 8 *** 4412",
+    "email": "sales@nordic-import.example",
+    "domain": "nordic-import.example",
+    "country": "SE"
+  },
+  "stage": "inquiry",
+  "intake": {
+    "company": "NORDIC IMPORT AB",
+    "inquiry_type": "sample",
+    "inquiry_text": "Please send free samples. A factory inspection fee of USD 500 is required before we proceed.",
+    "country": "SE"
+  },
+  "checks": [
+    { "id": "domain", "dimension": "domain", "result": "suspicious" },
+    { "id": "email", "dimension": "email", "result": "suspicious" },
+    { "id": "phone", "dimension": "phone", "result": "suspicious" },
+    { "id": "sanctions", "dimension": "sanctions", "result": "normal" },
+    { "id": "negative", "dimension": "negative", "result": "normal" }
+  ],
+  "flags": [
+    { "id": "RF-PAY-001" },
+    { "id": "RF-DOM-001" },
+    { "id": "RF-DOM-002" }
+  ],
+  "anchors": { "closure": "none" },
+  "coverage": {
+    "checked": 6,
+    "total": 8,
+    "uncovered": [
+      "map:not-covered:needs-browser",
+      "social:skipped-login:login-required"
+    ]
+  },
+  "confidence": "低",
+  "layers": {
+    "company": { "credibility": "low" },
+    "person_company_link": { "strength": "none" },
+    "person_authenticity": { "level": "unknown" },
+    "contact": { "phone_matches": false, "business_email": false, "domain_aged": false },
+    "compliance": { "sanctions": "clear", "negative": "clear" },
+    "scale": { "map": "unknown", "customs": "unknown" }
+  },
+  "score": { "total": 12, "risk_score": 85, "level": "高" },
+  "display": {
+    "customer_label": "NORDIC IMPORT AB",
+    "inquiry_type": "询盘（要求先付验厂费）",
+    "dim_notes": {
+      "company": "官网域名和自述域名仅差一字，且注册仅 23 天",
+      "link": "邮箱用的是这个可疑域名，官网上找不到此人",
+      "contact": "域名没有收信设置，“企业邮箱”收不了信",
+      "behavior": "要求先付 500 美元验厂费",
+      "compliance": "制裁名单无匹配，公开检索没发现投诉",
+      "scale": "地图和海关都没查到"
+    },
+    "attention": [
+      { "text": "对方要求先付 500 美元验厂费", "flag_id": "RF-PAY-001", "kind": "flag" },
+      { "text": "和自述官网仅差一个字符", "flag_id": "RF-DOM-001", "kind": "flag" },
+      { "text": "注册只有 23 天", "flag_id": "RF-DOM-002", "kind": "flag" }
+    ],
+    "verified": [
+      { "text": "制裁名单没有匹配，公开检索没发现投诉" }
+    ],
+    "missing": [
+      {
+        "text": "公司注册记录和地图商家页，都没找到",
+        "gain": 3,
+        "action": {
+          "label": "地图",
+          "link_text": "在 Google 地图搜 NORDIC IMPORT AB",
+          "url": "https://www.google.com/maps/search/NORDIC+IMPORT+AB",
+          "instruction": "看建筑规模和门口有没有招牌"
+        }
+      }
+    ],
+    "open_questions": [],
+    "scripts": [
+      {
+        "en": "Thanks for your interest. In our process, factory visits are arranged after the order is confirmed. Could you tell me the product model and quantity you have in mind?",
+        "zh": "感谢关注。我们的流程是下单确认后再安排验厂。方便告诉我型号和数量吗？"
+      }
+    ],
+    "supplement": "不要垫付任何费用。"
+  }
+}

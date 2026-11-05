@@ -1,0 +1,57 @@
+{
+  "id": "A35",
+  "title": "display 校验：超长、禁用词、技术词、找不到红旗、非法链接、完整邮箱/手机号、条数超限",
+  "type": "render_card_validation",
+  "input": {
+    "fixture": "card_harbor.json",
+    "cases": [
+      {
+        "name": "customer_label 超过 40 字",
+        "mutate": [{ "path": "customer_label", "value": "超长客户名称超长客户名称超长客户名称超长客户名称超长客户名称超长客户名称超长客户名称超长客户名称超长客户名称超长客户名称" }],
+        "expect_code": "too_long"
+      },
+      {
+        "name": "已核实栏出现禁用词",
+        "mutate": [{ "path": "verified", "value": [{ "text": "\u9a97\u5b50" }] }],
+        "expect_code": "forbidden_word"
+      },
+      {
+        "name": "维度依据出现技术词",
+        "mutate": [{ "path": "dim_notes.company", "value": "官网 HTTP 200 可以打开" }],
+        "expect_code": "technical_term"
+      },
+      {
+        "name": "attention 的 flag_id 在 flags 里找不到",
+        "mutate": [{ "path": "attention", "value": [{ "kind": "flag", "flag_id": "RF-XXX-999", "text": "线索" }] }],
+        "expect_code": "unknown_flag"
+      },
+      {
+        "name": "一次动作链接不是 http/https",
+        "mutate": [{
+          "path": "missing",
+          "value": [{ "text": "地图上没找到", "gain": 1, "action": { "label": "地图", "link_text": "打开", "url": "ftp://example.com", "instruction": "看规模" } }]
+        }],
+        "expect_code": "invalid_url"
+      },
+      {
+        "name": "已核实栏出现完整邮箱",
+        "mutate": [{ "path": "verified", "value": [{ "text": "联系 sales@acme.example" }] }],
+        "expect_code": "pii_email"
+      },
+      {
+        "name": "已核实栏出现完整手机号",
+        "mutate": [{ "path": "verified", "value": [{ "text": "电话 +1 (415) 555-2671" }] }],
+        "expect_code": "pii_phone"
+      },
+      {
+        "name": "已核实栏超过 3 条",
+        "mutate": [{
+          "path": "verified",
+          "value": [{ "text": "项一" }, { "text": "项二" }, { "text": "项三" }, { "text": "项四" }]
+        }],
+        "expect_code": "too_many"
+      }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

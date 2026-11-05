@@ -1,0 +1,9 @@
+{
+  "id": "A38",
+  "title": "行数：所有快照用例整卡不超过 45 行，第一屏不超过 14 行",
+  "type": "render_card_lines",
+  "input": {
+    "fixtures": ["card_harbor.json", "card_nordic.json", "card_manual.json", "legacy_card.json"]
+  },
+  "expect": { "all_pass": true, "max_lines": 45, "max_first_screen": 14 }
+}

@@ -84,8 +84,8 @@ if (failures === 0) console.log(`✓ doc red-flag counts consistent with red_fla
 
 // ---------- Card/report templates must always render coverage + uncovered items ----------
 const templateSpecs = [
-  ['card_template.md', ['置信度：', '覆盖：', '未覆盖：', 'coverage.uncovered', 'needs-browser', 'no-public-record', 'no-double-match', 'name-only-match', '官网匹配可作为', '三层｜', 'layers', '平台边界项']],
-  ['report_template.md', ['检查点覆盖矩阵', '未覆盖项必须逐项写原因', '社媒（LinkedIn/Facebook/WhatsApp）', '实际查询结果', '双向', '双匹配', '公司画像', '附录 C：本次调查链接清单', '三层核实', '主营一致性', '地图规模判断', '链接层', 'Google Places', '平台边界项']],
+  ['card_template.md', ['置信度：', '覆盖：', '未覆盖：', 'coverage.uncovered', 'needs-browser', 'no-public-record', 'no-double-match', 'name-only-match', '官网匹配可作为', '核实度', '动作阶梯', '六维', '需要注意', '没查到不代表没问题', '一次动作', 'layers', '平台边界项']],
+  ['report_template.md', ['检查点覆盖矩阵', '未覆盖项必须逐项写原因', '社媒（LinkedIn/Facebook/WhatsApp）', '实际查询结果', '双向', '双匹配', '公司画像', '附录 C：本次调查链接清单', '三层核实', '核实度', '动作阶梯', '六维表', '主营一致性', '地图规模判断', '链接层', 'Google Places', '平台边界项']],
   ['SKILL.md', ['覆盖行（强制）', 'coverage.uncovered', '地图 / 海关 / 社媒不直接标未覆盖', '双向', '双匹配', '官网画像优先', '附录 C 本次调查链接清单', '三层核实模型', 'R2', 'R3', 'identity_check.py map', '免费优先与自动取证边界', '不引入无头浏览器']],
   ['data-sources/global.md', ['Google Places', 'OpenStreetMap Nominatim', 'ImportGenius', 'Volza', '双向', '多平台、免费优先', '双匹配', '同名不同公司', '官网画像', '邮箱域名不一定是官网', '姓名 + 电话', '三层核实通道', 'Pillow', 'sharp', 'identity_check.py map', '免费优先顺序', '不引入无头浏览器']],
   ['examples/sample-report.md', ['本次调查链接清单']],
@@ -96,6 +96,16 @@ for (const [file, needles] of templateSpecs) {
   for (const needle of needles) {
     if (!text.includes(needle)) fail(`docs ${file}: missing "${needle}"`);
   }
+}
+const beforeScoreChars = failures;
+for (const file of ['card_template.md', 'SKILL.md', 'examples/sample-report.md', 'report_template.md', 'docs/iteration_plan.md', 'CHANGELOG.md']) {
+  const text = readFileSync(join(docRoot, file), 'utf8');
+  if (/\u2593|\u2591|\u2592/.test(text)) fail(`docs ${file}: legacy score-bar character`);
+}
+const cardText = readFileSync(join(docRoot, 'card_template.md'), 'utf8');
+if (!cardText.includes('■') || !cardText.includes('□')) fail('card_template.md: new score-bar characters missing');
+if (failures === beforeScoreChars) {
+  console.log('✓ score-bar characters use ■/□ only');
 }
 if (failures === beforeTemplate) {
   console.log('✓ card/report templates require confidence + coverage + uncovered items');

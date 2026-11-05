@@ -1,0 +1,19 @@
+{
+  "subject": { "company": "ACME TRADING LTD", "country": "ae" },
+  "stage": "inquiry",
+  "checks": [
+    { "id": "domain", "dimension": "domain", "result": "normal" }
+  ],
+  "flags": [],
+  "anchors": { "closure": "none" },
+  "coverage": {
+    "checked": 3,
+    "total": 8,
+    "uncovered": [
+      "map:not-covered:needs-browser",
+      "social:skipped-login:login-required"
+    ]
+  },
+  "confidence": "低",
+  "score": { "risk_score": 0, "level": "需人工核实" }
+}

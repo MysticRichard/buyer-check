@@ -49,25 +49,29 @@ def download(url: str, path: str, timeout: float = 60.0) -> tuple:
     return True, "{} bytes".format(len(data))
 
 
-def main(argv=None) -> int:
-    parser = argparse.ArgumentParser(description="Update local sanctions list cache.")
-    parser.add_argument("--check", action="store_true", help="report source status only")
-    args = parser.parse_args(argv)
-
+def update(cache_dir: str = CACHE_DIR, timeout: float = 60.0, check_only: bool = False) -> dict:
     results = []
     ok = True
     for name, source in SOURCES.items():
-        if args.check or source["status"] != "configured":
+        if check_only or source["status"] != "configured":
             results.append({"list": name, "status": source["status"], "url": source["url"]})
             continue
-        path = os.path.join(CACHE_DIR, source["file"])
-        success, detail = download(source["url"], path)
+        path = os.path.join(cache_dir, source["file"])
+        success, detail = download(source["url"], path, timeout)
         results.append({"list": name, "status": "downloaded" if success else "failed", "detail": detail})
         if not success:
             ok = False
-    print(json.dumps({"status": "ok" if ok else "unavailable", "cache_dir": CACHE_DIR, "results": results},
-                     ensure_ascii=False))
-    return 0 if ok else 1
+    return {"status": "ok" if ok else "unavailable", "cache_dir": cache_dir, "results": results}
+
+
+def main(argv=None) -> int:
+    parser = argparse.ArgumentParser(description="Update local sanctions list cache.")
+    parser.add_argument("--check", action="store_true", help="report source status only")
+    parser.add_argument("--cache-dir", default=CACHE_DIR, help="cache directory (default: .cache/sanctions)")
+    args = parser.parse_args(argv)
+    result = update(cache_dir=args.cache_dir, check_only=args.check)
+    print(json.dumps(result, ensure_ascii=False))
+    return 0 if result["status"] == "ok" else 1
 
 
 if __name__ == "__main__":

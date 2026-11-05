@@ -2,6 +2,8 @@
 
 > 收到陌生询盘、准备寄样或接单前，用一份有来源依据的风险报告，帮外贸业务员判断"这个客户值不值得往下走"。
 
+> 当前版本：v0.9.0。
+
 `buyer-check` 是一个 Agent Skill：外贸业务员给出客户的公司名、域名、邮箱、询盘原文等有限信息，Skill 自动检索公开信息、交叉比对，输出**结构固定、每条结论都带来源链接和检索时间**的风险报告与下一步建议。
 
 **定位边界**：做的是「风险信号筛查 + 证据整理」，**不判定对方是不是骗子**。风险等级由 `red_flags.md` 的固定权重算出，同一输入多次运行结果一致、可复现。
@@ -13,7 +15,7 @@
 - **是什么**：外贸询盘客户背调 Skill。输入公司名、域名、邮箱、电话或聊天记录，输出一份有来源、可复现的风险判断。
 - **给谁用**：外贸业务员、外贸 SOHO、采购跟单；无需安装，直接在支持 Agent Skill 的客户端对话使用。
 - **解决什么**：骗样品费/验厂费/保证金，以及邮箱被仿冒后的货款损失（BEC）。
-- **怎么用**：默认 10 秒结论卡（等级 + 分数 + ≤5 条风险点 + ≤3 条英文追问话术）；需要时再出完整尽调报告。
+- **怎么用**：默认 10 秒结论卡（风险分 + 核实度 + 动作阶梯 + 六维表 + 三栏风险点 + 一次动作 + ≤3 条英文追问话术）；需要时再出完整尽调报告。
 - **两阶段**：询盘期用公开信息锚定身份（不要求营业执照）→ 订单前核验执照、税号与 IBAN/BIC 收款账户。
 - **可复现**：23 条红旗、固定权重、脚本计算，同一输入多次运行结果一致。
 - **三层核实**：公司层 → 人-公司链接 → 人物真实度；公司层最重，个人账号只辅助。
@@ -76,9 +78,10 @@ buyer-check/
 │   ├── email_header_check.py / .mjs
 │   ├── sanctions_check.py / .mjs + update_sanctions
 │   ├── red_flags.json    # 机器可读红旗表
-│   ├── identity_check.py / .mjs  # 官网画像、社媒回链、头像同图/近似图比对（v0.8.0）
+│   ├── identity_check.py / .mjs  # 官网画像、社媒回链、头像比对、地图 POI、注册库（v0.9）
+│   ├── render_card.py / .mjs  # 结论卡渲染：核实度、六维表、动作阶梯、结论句（v0.9）
 │   └── brands.json       # 知名公司域名清单
-├── tests/                # 验收用例 A1–A22、一致性测试、行为评测集
+├── tests/                # 验收用例 A1–A41、一致性测试、行为评测集
 ├── examples/             # 脱敏样例报告
 ├── reports/              # 生成的报告（本地保留，不入仓库）
 └── docs/                 # development.md 开发文档、iteration_plan.md 迭代方案
@@ -101,14 +104,15 @@ buyer-check/
 ## 验证
 
 ```bash
-node tests/run_cases.mjs        # 验收用例 A1–A22
+node tests/run_cases.mjs        # 验收用例 A1–A41
 node tests/consistency.mjs      # V5 分数区间遍历 + V6 Python/Node 一致性
+node tests/consistency_scripts.mjs  # 脚本 Python/Node 一致性（含 render_card）
 node scripts/privacy_scan.mjs   # 提交前隐私扫描
 node tests/account_check_cases.mjs  # F2 收款账户校验
 node tests/check_sources_cases.mjs  # F3 数据源保鲜
 node tests/ip_check_cases.mjs       # G1–G6 来源 IP 分类
 node tests/phone_check_enrich_cases.mjs  # H1–H5 电话可选增强
-node scripts/build_submission.mjs   # 生成 27 文件精简提交包
+node scripts/build_submission.mjs   # 生成 28 文件精简提交包
 ```
 
 ## 脚本用法
@@ -129,6 +133,14 @@ node scripts/risk_score.mjs --mask "4111 1111 1111 1234"
 # 邮件来源 IP 分类（默认离线；--online 才查询公开 RDAP，只发送 IP）
 python scripts/ip_check.py --ip 203.0.113.7 --claimed-country AE
 node scripts/ip_check.mjs --ip 203.0.113.7 --claimed-country AE --online
+
+# 结论卡渲染（证据包 → Markdown；--json 输出计算结果）
+python scripts/render_card.py evidence.json
+node scripts/render_card.mjs evidence.json --json
+
+# 注册库自动查（默认离线；--online 只发送公司名和国家，挪威 Enhetsregisteret，NLOD 2.0）
+python scripts/identity_check.py registry --company "Equinor ASA" --country NO --online
+node scripts/identity_check.mjs registry --company "Equinor ASA" --country NO --claimed-country NO --online
 ```
 
 脚本输出均为 JSON；查询失败时返回 `status: "unavailable"`，调用方按「未查到」处理。

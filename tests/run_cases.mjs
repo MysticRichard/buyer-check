@@ -10,7 +10,7 @@
  *   node tests/run_cases.mjs
  */
 
-import { existsSync, readdirSync, readFileSync, writeFileSync, mkdtempSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, writeFileSync, mkdtempSync, mkdirSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -18,8 +18,18 @@ import { fileURLToPath } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
 
 import { score as riskScore, maskSensitive, loadRules } from '../scripts/risk_score.mjs';
-import { analyse as domainAnalyse, loadBrands } from '../scripts/domain_similarity.mjs';
+import { analyse as domainAnalyse, loadBrands, loadBrandData } from '../scripts/domain_similarity.mjs';
 import { analyse as whoisAnalyse } from '../scripts/whois_lookup.mjs';
+
+let renderCard = null;
+let ladderCombinations = null;
+try {
+  const module = await import('../scripts/render_card.mjs');
+  renderCard = module.renderCard;
+  ladderCombinations = module.ladderCombinations;
+} catch {
+  // The lean submission bundle ships only render_card.py.
+}
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, '..');
@@ -45,6 +55,43 @@ function findPython() {
 
 function loadCase(file) {
   return JSON.parse(readFileSync(join(CASES_DIR, file), 'utf8'));
+}
+
+function loadFixture(name) {
+  return JSON.parse(readFileSync(join(FIXTURES_DIR, name), 'utf8'));
+}
+
+function cloneJson(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
+function setByPath(target, path, value) {
+  const parts = path.split('.');
+  let cursor = target;
+  for (let i = 0; i < parts.length - 1; i += 1) {
+    const key = /^\d+$/.test(parts[i]) ? Number(parts[i]) : parts[i];
+    if (cursor[key] === undefined || cursor[key] === null || typeof cursor[key] !== 'object') {
+      cursor[key] = /^\d+$/.test(parts[i + 1]) ? [] : {};
+    }
+    cursor = cursor[key];
+  }
+  const last = /^\d+$/.test(parts[parts.length - 1]) ? Number(parts[parts.length - 1]) : parts[parts.length - 1];
+  cursor[last] = value;
+}
+
+function runPythonRender(python, args) {
+  const [cmd, ...rest] = python.split(' ');
+  const result = spawnSync(cmd, [...rest, join(ROOT, 'scripts', 'render_card.py'), ...args], { encoding: 'utf8', timeout: 30000 });
+  if (!result.stdout) throw new Error(result.stderr || 'no output');
+  return JSON.parse(result.stdout);
+}
+
+function pyRenderEvidence(python, evidence) {
+  if (!python) throw new Error('python not found');
+  const dir = mkdtempSync(join(tmpdir(), 'buyer-check-card-'));
+  const file = join(dir, 'evidence.json');
+  writeFileSync(file, JSON.stringify(evidence), 'utf8');
+  return runPythonRender(python, [file, '--json']);
 }
 
 // The repository keeps one file per case (tests/cases/A*.json). The lean
@@ -128,6 +175,19 @@ const runners = {
       ok: checks.every(Boolean),
       actual: { is_lookalike: result.is_lookalike, best_match: result.best_match },
     };
+  },
+
+  domain_batch(testCase) {
+    const { brands, riskWords } = loadBrandData();
+    const threshold = testCase.input.threshold ?? 0.5;
+    const results = (testCase.input.cases || []).map((entry) => {
+      const result = domainAnalyse(entry.domain, brands, threshold, riskWords);
+      const checks = [result.is_lookalike === entry.is_lookalike];
+      if (entry.type) checks.push(result.best_match?.type === entry.type);
+      if (entry.brand) checks.push(result.best_match?.brand === entry.brand);
+      return { domain: entry.domain, ok: checks.every(Boolean), result };
+    });
+    return { ok: results.every((item) => item.ok), actual: results };
   },
 
   invariance(testCase) {
@@ -262,12 +322,350 @@ const runners = {
     };
   },
 
+  sanctions(testCase) {
+    const python = findPython();
+    if (!python) return { skipped: true, actual: 'python not found' };
+    const dir = mkdtempSync(join(tmpdir(), 'buyer-check-sanctions-'));
+    const empty = join(dir, 'empty');
+    const cache = join(dir, 'cache');
+    const down = join(dir, 'down');
+    const fail = join(dir, 'fail');
+    for (const path of [empty, cache, down, fail]) mkdirSync(path, { recursive: true });
+    const csv = testCase.input?.csv || '';
+    writeFileSync(join(cache, 'ofac_sdn.csv'), csv, 'utf8');
+    const [cmd, ...rest] = python.split(' ');
+    const script = join(ROOT, 'scripts', 'sanctions_check.py');
+    const run = (args) => {
+      const result = spawnSync(cmd, [...rest, ...args], { encoding: 'utf8', timeout: 30000 });
+      if (!result.stdout) throw new Error(result.stderr || 'no output');
+      return JSON.parse(result.stdout);
+    };
+    const noCache = run([script, 'GLOBAL STAR TRADING CO', '--no-update', '--cache-dir', empty]);
+    const clear = run([script, 'NOBODY', '--no-update', '--cache-dir', cache]);
+    const hit = run([script, 'GLOBAL STAR TRADING CO', '--no-update', '--cache-dir', cache]);
+    const successScript = [
+      'import sys, json, os',
+      `sys.path.insert(0, ${JSON.stringify(join(ROOT, 'scripts'))})`,
+      'import sanctions_check',
+      'def fake(cache_dir, timeout=60.0):',
+      '    os.makedirs(cache_dir, exist_ok=True)',
+      '    with open(os.path.join(cache_dir, "ofac_sdn.csv"), "w", encoding="utf-8") as handle:',
+      `        handle.write(${JSON.stringify(csv)})`,
+      "    return {'status': 'ok'}",
+      'sanctions_check.download_ofac = fake',
+      `result = sanctions_check.analyse('GLOBAL STAR TRADING CO', cache_dir=${JSON.stringify(down)}, no_update=False)`,
+      `print(json.dumps({'status': result.get('status'), 'match_count': result.get('match_count'), 'exists': os.path.exists(os.path.join(${JSON.stringify(down)}, 'ofac_sdn.csv'))}))`,
+    ].join('\n');
+    const failScript = [
+      'import sys, json, os',
+      `sys.path.insert(0, ${JSON.stringify(join(ROOT, 'scripts'))})`,
+      'import sanctions_check',
+      'def fake(cache_dir, timeout=60.0):',
+      "    return {'status': 'unavailable'}",
+      'sanctions_check.download_ofac = fake',
+      `result = sanctions_check.analyse('GLOBAL STAR TRADING CO', cache_dir=${JSON.stringify(fail)}, no_update=False)`,
+      "print(json.dumps({'status': result.get('status'), 'error': result.get('error')}))",
+    ].join('\n');
+    const success = run(['-c', successScript]);
+    const failed = run(['-c', failScript]);
+    const checks = [
+      noCache.status === 'unavailable' && noCache.error === 'no-network',
+      clear.status === 'ok' && clear.match_count === 0,
+      hit.status === 'ok' && hit.match_count > 0 && hit.requires_manual_review === true,
+      success.status === 'ok' && success.match_count > 0 && success.exists === true,
+      failed.status === 'unavailable' && failed.error === 'download-failed',
+    ];
+    return { ok: checks.every(Boolean), actual: { noCache, clear, hit, success, failed } };
+  },
+
+  score_bar(testCase) {
+    const scores = testCase.input?.scores || [];
+    const node = scores.map((score) => {
+      const filled = Math.floor(score / 10 + 0.5);
+      return { score, filled, bar: `${'■'.repeat(filled)}${'□'.repeat(10 - filled)}` };
+    });
+    const python = findPython();
+    let pyFilled = null;
+    if (python) {
+      const [cmd, ...rest] = python.split(' ');
+      const script = `import math, json\nprint(json.dumps([math.floor(x / 10 + 0.5) for x in ${JSON.stringify(scores)}]))`;
+      const result = spawnSync(cmd, [...rest, '-c', script], { encoding: 'utf8', timeout: 30000 });
+      if (result.stdout) pyFilled = JSON.parse(result.stdout);
+    }
+    const expected = testCase.expect?.filled || [];
+    const checks = [
+      node.every((item, index) => item.filled === expected[index]),
+      pyFilled !== null && pyFilled.every((value, index) => value === expected[index]),
+      pyFilled !== null && pyFilled.every((value, index) => value === node[index].filled),
+    ];
+    return { ok: checks.every(Boolean), actual: { node, python: pyFilled } };
+  },
+
+  render_card(testCase) {
+    const evidence = testCase.input.fixture_data ? cloneJson(testCase.input.fixture_data) : loadFixture(testCase.input.fixture);
+    const result = renderCard ? renderCard(evidence, loadRules()) : pyRenderEvidence(findPython(), evidence);
+    const expect = testCase.expect || {};
+    const checks = [];
+    if (expect.status !== undefined) checks.push(result.status === expect.status);
+    if (expect.level !== undefined) checks.push(result.level === expect.level);
+    if (expect.risk_score !== undefined) checks.push(result.risk_score === expect.risk_score);
+    if (expect.credit !== undefined) checks.push(result.credit?.score === expect.credit);
+    if (expect.credit_tier !== undefined) checks.push(result.credit?.tier === expect.credit_tier);
+    if (expect.actual_risk_score !== undefined) checks.push(result.actual?.risk_score === expect.actual_risk_score);
+    if (expect.actual_level !== undefined) checks.push(result.actual?.level === expect.actual_level);
+    if (result.card) {
+      if (expect.card !== undefined) {
+        checks.push(result.card === expect.card);
+      } else if (expect.card_file) {
+        const expected = readFileSync(join(FIXTURES_DIR, expect.card_file), 'utf8').replace(/\r\n/g, '\n').replace(/\n$/, '');
+        checks.push(result.card === expected);
+      }
+      for (const needle of expect.card_includes || []) checks.push(result.card.includes(needle));
+      for (const needle of expect.card_excludes || []) checks.push(!result.card.includes(needle));
+    } else if (expect.card_file || (expect.card_includes || []).length > 0) {
+      checks.push(false);
+    }
+    if (expect.line_count_max !== undefined) checks.push(result.line_count <= expect.line_count_max);
+    if (expect.first_screen_max !== undefined) checks.push(result.first_screen_lines <= expect.first_screen_max);
+    return {
+      ok: checks.every(Boolean),
+      actual: {
+        status: result.status,
+        level: result.level,
+        risk_score: result.risk_score,
+        credit: result.credit,
+        line_count: result.line_count,
+        first_screen_lines: result.first_screen_lines,
+        errors: result.errors,
+        mismatch: result.actual,
+      },
+    };
+  },
+
+  render_card_boundary(testCase) {
+    const rules = loadRules();
+    const outcomes = (testCase.input.cases || []).map((entry) => {
+      const evidence = cloneJson(entry.evidence);
+      const result = renderCard ? renderCard(evidence, rules) : pyRenderEvidence(findPython(), evidence);
+      const expect = entry.expect || {};
+      const checks = [result.status === 'ok'];
+      if (expect.credit !== undefined) checks.push(result.credit?.score === expect.credit);
+      if (expect.credit_tier !== undefined) checks.push(result.credit?.tier === expect.credit_tier);
+      for (const [key, expected] of Object.entries(expect.dimensions || {})) {
+        const dim = (result.dimensions || []).find((item) => item.key === key);
+        checks.push(Boolean(dim) && dim.status === expected.status && dim.symbol === expected.symbol && dim.bar === expected.bar);
+      }
+      return { name: entry.name, ok: checks.every(Boolean), credit: result.credit, dims: result.dimensions };
+    });
+    return { ok: outcomes.every((item) => item.ok), actual: outcomes };
+  },
+
+  render_card_validation(testCase) {
+    const rules = loadRules();
+    const base = testCase.input.fixture_data ? cloneJson(testCase.input.fixture_data) : loadFixture(testCase.input.fixture);
+    const outcomes = (testCase.input.cases || []).map((entry) => {
+      const evidence = cloneJson(base);
+      for (const mutation of entry.mutate || []) setByPath(evidence.display, mutation.path, cloneJson(mutation.value));
+      const result = renderCard ? renderCard(evidence, rules) : pyRenderEvidence(findPython(), evidence);
+      const codes = (result.errors || []).map((error) => error.code);
+      return {
+        name: entry.name,
+        ok: result.status === 'invalid-display' && codes.includes(entry.expect_code),
+        status: result.status,
+        codes,
+      };
+    });
+    return { ok: outcomes.every((item) => item.ok), actual: outcomes };
+  },
+
+  render_card_ladder(testCase) {
+    const python = findPython();
+    const combos = ladderCombinations ? ladderCombinations() : (python ? runPythonRender(python, ['--ladder']).combos : []);
+    const expect = testCase.expect || {};
+    const checks = [combos.length === expect.combos];
+    let violations = 0;
+    for (const combo of combos) {
+      const [reply, sample, custom, payment] = combo.actions;
+      const input = combo.input;
+      const statuses = combo.actions.map((action) => action.status);
+      if (statuses.some((status) => !['✅', '⚠️', '⛔'].includes(status))) violations += 1;
+      if (input.level === '高') {
+        if (!(reply.status === '⚠️' && sample.status === '⛔' && custom.status === '⛔' && payment.status === '⛔')) violations += 1;
+      }
+      if (input.pay_flag && payment.status !== '⛔') violations += 1;
+      if (input.level === '低' && input.credit_tier === '高' && !input.company_low && !input.pay_flag && input.compliance_checked && input.open_questions.length === 0) {
+        if (!(sample.status === '✅' && custom.status === '✅')) violations += 1;
+      }
+      if (input.level === '低' && input.credit_tier === '高' && !input.company_low && !input.pay_flag && input.compliance_checked && input.open_questions.length > 0) {
+        if (custom.status !== '⚠️') violations += 1;
+      }
+      if (input.company_low && (custom.status !== '⛔' || sample.status === '✅')) violations += 1;
+      if (input.level === '需人工核实' && (custom.status !== '⛔' || sample.status !== '⚠️')) violations += 1;
+      if (input.stage === 'pre-order' && input.account_verified && !input.pay_flag && input.level !== '高') {
+        if (payment.status !== '✅') violations += 1;
+      }
+      if (input.stage === 'inquiry' && payment.status === '✅') violations += 1;
+
+      if (testCase.input.mode === 'conclusion') {
+        const expected = input.level === '高'
+          ? '先不要投入：不寄样、不垫付、不付款。'
+          : sample.status === '✅' && custom.status === '✅'
+            ? '可以正常推进，收款前先做订单前复核。'
+            : sample.status === '✅' && custom.status === '⚠️'
+              ? '可以报价、寄样；定制或大额备货前，先'
+              : sample.status === '⚠️'
+                ? '可以先报价；投入前先'
+                : '信息还不足：先报标准价，不要投入。最值钱的补充：';
+        const matches = sample.status === '✅' && custom.status === '⚠️' || sample.status === '⚠️'
+          ? combo.conclusion.startsWith(expected)
+          : combo.conclusion === expected;
+        if (!matches) violations += 1;
+      }
+    }
+    checks.push(violations === 0);
+
+
+    if (python) {
+      const py = runPythonRender(python, ['--ladder']);
+      checks.push(isDeepStrictEqual(py.combos, combos));
+    } else {
+      checks.push(false);
+    }
+    return { ok: checks.every(Boolean), actual: { combos: combos.length, violations, python: Boolean(python) } };
+  },
+
+  render_card_lines(testCase) {
+    const rules = loadRules();
+    const entries = testCase.input.fixtures_data || (testCase.input.fixtures || []).map((name) => ({ name }));
+    const outcomes = entries.map((entry) => {
+      const evidence = entry.data ? cloneJson(entry.data) : loadFixture(entry.name);
+      const result = renderCard ? renderCard(evidence, rules) : pyRenderEvidence(findPython(), evidence);
+      return {
+        fixture: entry.name,
+        ok: result.status === 'ok' && result.line_count <= testCase.expect.max_lines && result.first_screen_lines <= testCase.expect.max_first_screen,
+        line_count: result.line_count,
+        first_screen_lines: result.first_screen_lines,
+      };
+    });
+    return { ok: outcomes.every((item) => item.ok), actual: outcomes };
+  },
+
+  render_card_deterministic(testCase) {
+    const runs = testCase.input.runs || 100;
+    const python = findPython();
+    const evidence = testCase.input.fixture_data ? cloneJson(testCase.input.fixture_data) : loadFixture(testCase.input.fixture);
+    if (!renderCard) {
+      if (!python) return { ok: false, actual: { runs, identical: false, parity: false, mode: 'python-missing' } };
+      const dir = mkdtempSync(join(tmpdir(), 'buyer-check-card-'));
+      const path = join(dir, 'evidence.json');
+      writeFileSync(path, JSON.stringify(evidence), 'utf8');
+      const code = [
+        'import sys, json',
+        `sys.path.insert(0, ${JSON.stringify(join(ROOT, 'scripts'))})`,
+        'import render_card',
+        `with open(${JSON.stringify(path)}, encoding='utf-8') as handle: evidence = json.load(handle)`,
+        'rules = render_card.load_rules()',
+        `cards = [render_card.render_card(json.loads(json.dumps(evidence)), rules)['card'] for _ in range(${runs})]`,
+        "print(json.dumps({'identical': len(set(cards)) == 1}, ensure_ascii=False))",
+      ].join('\n');
+      const [cmd, ...rest] = python.split(' ');
+      const result = spawnSync(cmd, [...rest, '-c', code], { encoding: 'utf8', timeout: 120000 });
+      const identical = result.stdout ? JSON.parse(result.stdout).identical : false;
+      return { ok: identical && runs === testCase.expect.runs, actual: { runs, identical, parity: true, mode: 'python' } };
+    }
+    const rules = loadRules();
+    let first = null;
+    let identical = true;
+    for (let i = 0; i < runs; i += 1) {
+      const card = renderCard(cloneJson(evidence), rules).card;
+      if (first === null) first = card;
+      else if (card !== first) identical = false;
+    }
+    let parity = false;
+    if (python) {
+      const result = pyRenderEvidence(python, evidence);
+      parity = result.status === 'ok' && result.card === first;
+    }
+    return {
+      ok: identical && parity && runs === testCase.expect.runs,
+      actual: { runs, identical, parity },
+    };
+  },
+
+  registry(testCase) {
+    const python = findPython();
+    if (!python) return { skipped: true, actual: 'python not found' };
+    const pyScript = join(ROOT, 'scripts', 'identity_check.py');
+    const jsScript = join(ROOT, 'scripts', 'identity_check.mjs');
+    const hasNode = existsSync(jsScript);
+    const [pyCmd, ...pyRest] = python.split(' ');
+    const banned = ['dagligLeder', 'styre', 'aksjonærer', 'aksjonær', 'personnavn', 'fodselsdato', 'foedselsdato', 'rolle'];
+    const outcomes = (testCase.input.cases || []).map((entry) => {
+      const dir = mkdtempSync(join(tmpdir(), 'buyer-check-registry-'));
+      const args = ['registry', '--company', entry.company, '--country', entry.country || 'NO'];
+      if (entry.claimed_country) args.push('--claimed-country', entry.claimed_country);
+      if (entry.fixture_data) {
+        const fixture = join(dir, 'fixture.json');
+        writeFileSync(fixture, JSON.stringify(entry.fixture_data), 'utf8');
+        args.push('--fixture-json', fixture);
+      } else if (entry.online) {
+        args.push('--online');
+      }
+      const pyRun = spawnSync(pyCmd, [...pyRest, pyScript, ...args], { cwd: ROOT, encoding: 'utf8', timeout: 30000 });
+      if (!pyRun.stdout) throw new Error(pyRun.stderr || 'no python output');
+      const py = JSON.parse(pyRun.stdout);
+      let js = null;
+      if (hasNode) {
+        const jsRun = spawnSync('node', [jsScript, ...args], { cwd: ROOT, encoding: 'utf8', timeout: 30000 });
+        if (!jsRun.stdout) throw new Error(jsRun.stderr || 'no node output');
+        js = JSON.parse(jsRun.stdout);
+      }
+      const expect = entry.expect || {};
+      const checks = [];
+      if (expect.status !== undefined) checks.push(py.status === expect.status);
+      if (expect.country !== undefined) checks.push(py.country === expect.country);
+      if (expect.legal_name !== undefined) checks.push(py.legal_name === expect.legal_name);
+      if (expect.status_text !== undefined) checks.push(py.status_text === expect.status_text);
+      if (expect.incorporation_date !== undefined) checks.push(py.incorporation_date === expect.incorporation_date);
+      if (expect.address_country !== undefined) checks.push(py.address_country === expect.address_country);
+      if (expect.country_mismatch !== undefined) checks.push(py.country_mismatch === expect.country_mismatch);
+      if (expect.org_number !== undefined) checks.push(py.org_number === expect.org_number);
+      if (expect.error !== undefined) checks.push(py.error === expect.error);
+      if (expect.candidate_count !== undefined) checks.push((py.candidates || []).length === expect.candidate_count);
+      if (expect.registry_url_contains !== undefined) checks.push(String(py.registry_url || '').includes(expect.registry_url_contains));
+      const serialized = JSON.stringify(py);
+      checks.push(!banned.some((key) => serialized.includes(key)));
+      if (js) checks.push(isDeepStrictEqual(py, js));
+      return { name: entry.name, ok: checks.every(Boolean), status: py.status, parity: js ? isDeepStrictEqual(py, js) : null };
+    });
+    return { ok: outcomes.every((item) => item.ok), actual: outcomes };
+  },
+
+  intake_format(testCase) {
+    const allowed = new Set(['tender', 'sample', 'large_first_order', 'account_change', 'pre_order', 'general']);
+    const phoneRe = /\+?\d[\d\s()\-]{8,}\d/;
+    const emailRe = /[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}/;
+    const outcomes = (testCase.input.packs || []).map((pack) => {
+      const intake = pack.intake || {};
+      const raw = JSON.stringify(intake);
+      const cleaned = raw.replace(/[A-Za-z0-9._%+\-]*\*+[A-Za-z0-9._%+\-]*@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}/g, '');
+      const checks = [allowed.has(intake.inquiry_type), !phoneRe.test(raw), !emailRe.test(cleaned)];
+      return { name: pack.name, ok: checks.every(Boolean), inquiry_type: intake.inquiry_type };
+    });
+    const types = outcomes.map((item) => item.inquiry_type);
+    return {
+      ok: outcomes.every((item) => item.ok) && isDeepStrictEqual(types, testCase.expect?.types || types),
+      actual: outcomes,
+    };
+  },
+
   manual() {
     return { ok: true, skipped: true, actual: 'requires live network / model behaviour' };
   },
 };
 
 async function main() {
+  process.env.PYTHONDONTWRITEBYTECODE = '1';
   const cases = loadAllCases();
   let passed = 0;
   let failed = 0;

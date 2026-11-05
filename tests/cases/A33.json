@@ -1,0 +1,12 @@
+{
+  "id": "A33",
+  "title": "快照：高风险示意卡（NORDIC IMPORT AB）全文字节一致",
+  "type": "render_card",
+  "input": { "fixture": "card_nordic.json" },
+  "expect": {
+    "status": "ok",
+    "card_file": "card_nordic.expected.txt",
+    "line_count_max": 45,
+    "first_screen_max": 14
+  }
+}

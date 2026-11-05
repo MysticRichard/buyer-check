@@ -1,0 +1,13 @@
+{
+  "id": "A27",
+  "title": "核实度算例一：Harbor Rim 证据包为 90（高）",
+  "type": "render_card",
+  "input": { "fixture": "card_harbor.json" },
+  "expect": {
+    "status": "ok",
+    "credit": 90,
+    "credit_tier": "高",
+    "level": "低",
+    "risk_score": 0
+  }
+}

@@ -21,7 +21,7 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Acceptance cases (A1-A14)
+      - name: Acceptance cases (A1-A41)
         run: node tests/run_cases.mjs
 
       - name: Score consistency (V5/V6, python/node parity)
@@ -29,6 +29,7 @@ jobs:
 
       - name: Script consistency (E3, python/node parity)
         run: node tests/consistency_scripts.mjs
+
 
       - name: account_check acceptance (F2)
         run: node tests/account_check_cases.mjs
