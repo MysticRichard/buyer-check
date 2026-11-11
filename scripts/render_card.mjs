@@ -63,6 +63,25 @@ const INQUIRY_LABELS = {
 
 const ACTION_LABELS = ['回复和报价', '寄样和小额投入', '定制和大额备货', '收定金和付款'];
 
+const CHECK_LABELS = { sanctions: '制裁名单', registry: '注册处', search: '公开搜索', map: '地图', other: '其他检查' };
+const REASON_LABELS = {
+  'no-network': '网络失败',
+  'download-failed': '下载失败',
+  'invalid-content': '下载内容不合法',
+  'all-urls-failed': '所有地址失败',
+  'login-wall': '需登录',
+  timeout: '超时',
+  stale: '数据陈旧',
+};
+const DEFAULT_NEXT_STEPS = {
+  sanctions: '在 OFAC 官方站按公司名手动查一次',
+  registry: '在注册处按公司名查登记，或要求对方提供注册证书',
+  search: '换一个搜索引擎或换关键词再查一次',
+  map: '在 Google 地图搜公司名，确认建筑和招牌',
+  other: '人工补查一次',
+};
+const INCOMPLETE_COVERAGE = { sanctions: 'sanctions', registry: 'customs', search: 'negative', map: 'map' };
+
 const STATUS_TEXT = { '✅': '可以', '⚠️': '有条件', '⛔': '不建议' };
 
 function text(value) {
@@ -490,10 +509,36 @@ function inquiryText(evidence) {
   return text((evidence.intake && evidence.intake.inquiry_text) || evidence.inquiry_text || (evidence.subject && evidence.subject.inquiry_text));
 }
 
+function validateChecksIncomplete(evidence) {
+  const raw = evidence.checks_incomplete;
+  if (raw === undefined || raw === null) return { items: [], errors: [] };
+  if (!Array.isArray(raw)) return { items: [], errors: [{ code: 'invalid-input', field: 'checks_incomplete' }] };
+  const items = [];
+  const errors = [];
+  raw.forEach((item, index) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) {
+      errors.push({ code: 'invalid-input', field: `checks_incomplete[${index}]` });
+      return;
+    }
+    const check = item.check;
+    const reason = item.reason;
+    if (!(check in CHECK_LABELS)) errors.push({ code: 'invalid-input', field: `checks_incomplete[${index}].check` });
+    if (!(reason in REASON_LABELS)) errors.push({ code: 'invalid-input', field: `checks_incomplete[${index}].reason` });
+    const nextStep = item.next_step === undefined || item.next_step === null ? DEFAULT_NEXT_STEPS[check] || '人工补查一次' : item.next_step;
+    if (typeof nextStep !== 'string' || charLength(nextStep) > 40) {
+      errors.push({ code: 'invalid-input', field: `checks_incomplete[${index}].next_step` });
+    }
+    items.push({ check, reason, next_step: nextStep });
+  });
+  return { items, errors };
+}
+
 export function renderCard(evidence, rules) {
   const display = evidence.display || {};
   const errors = validateDisplay(evidence, rules);
   if (errors.length > 0) return { status: 'invalid-display', errors };
+  const incomplete = validateChecksIncomplete(evidence);
+  if (incomplete.errors.length > 0) return { status: 'invalid-input', errors: incomplete.errors };
 
   const ids = flagIdsOf(evidence);
   const flagIndex = new Map((rules.flags || []).map((flag) => [flag.id, flag]));
@@ -502,6 +547,8 @@ export function renderCard(evidence, rules) {
   const coverage = evidence.coverage || {};
   const covered = coverage.checked === undefined ? null : coverage.checked;
   const total = coverage.total === undefined ? 8 : coverage.total;
+  const incompleteCoverage = incomplete.items.filter((item) => item.check in INCOMPLETE_COVERAGE).length;
+  const effectiveCovered = covered === null ? null : Math.max(0, covered - incompleteCoverage);
   const anchors = anchorCount(evidence);
 
   const layers = evidence.layers || {};
@@ -608,8 +655,15 @@ export function renderCard(evidence, rules) {
   const bar = `${'■'.repeat(filled)}${'□'.repeat(10 - filled)}`;
 
   const lines = [];
-  lines.push(`## ${color} ${levelLabel} · 风险 ${score}/100 ${bar} ｜ 核实度 ${credit.score}/100（${credit.tier}）`);
-  lines.push(`置信度：${confidence}（锚点 ${anchors}/3）｜覆盖：${covered === null ? 0 : covered}/${total}｜未覆盖：${uncoveredText}`);
+  const incompleteSuffix = incomplete.items.length > 0 ? ` · 有 ${incomplete.items.length} 项未完成` : '';
+  lines.push(`## ${color} ${levelLabel} · 风险 ${score}/100 ${bar} ｜ 核实度 ${credit.score}/100（${credit.tier}）${incompleteSuffix}`);
+  lines.push(`置信度：${confidence}（锚点 ${anchors}/3）｜覆盖：${effectiveCovered === null ? 0 : effectiveCovered}/${total}｜未覆盖：${uncoveredText}`);
+  if (incomplete.items.length > 0) {
+    const details = incomplete.items
+      .map((item) => `${CHECK_LABELS[item.check] || item.check}未完成（${REASON_LABELS[item.reason] || item.reason}）→ ${item.next_step}`)
+      .join('；');
+    lines.push(`⚠ 本次未完成：${details}`);
+  }
   lines.push(`**结论：${conclusion}** 客户：${customerLabel(evidence, display)} · ${inquiryLabel(evidence, display)}`);
   lines.push('');
   lines.push('| 动作 | 建议 | 条件 |');

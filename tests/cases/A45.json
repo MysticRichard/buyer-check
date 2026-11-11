@@ -1,0 +1,15 @@
+{
+  "id": "A45",
+  "title": "Y4 未完成行：覆盖行下方显示本次未完成，覆盖分子减去该项、分母仍为 8",
+  "type": "render_card",
+  "input": { "fixture": "card_incomplete.json" },
+  "expect": {
+    "status": "ok",
+    "card_includes": [
+      "覆盖：6/8",
+      "· 有 1 项未完成",
+      "⚠ 本次未完成：制裁名单未完成（下载失败）→ 在 OFAC 官方站按公司名手动查一次"
+    ],
+    "first_screen_max": 14
+  }
+}

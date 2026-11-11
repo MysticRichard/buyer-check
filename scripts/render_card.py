@@ -66,6 +66,25 @@ INQUIRY_LABELS = {
 
 ACTION_LABELS = ["回复和报价", "寄样和小额投入", "定制和大额备货", "收定金和付款"]
 
+CHECK_LABELS = {"sanctions": "制裁名单", "registry": "注册处", "search": "公开搜索", "map": "地图", "other": "其他检查"}
+REASON_LABELS = {
+    "no-network": "网络失败",
+    "download-failed": "下载失败",
+    "invalid-content": "下载内容不合法",
+    "all-urls-failed": "所有地址失败",
+    "login-wall": "需登录",
+    "timeout": "超时",
+    "stale": "数据陈旧",
+}
+DEFAULT_NEXT_STEPS = {
+    "sanctions": "在 OFAC 官方站按公司名手动查一次",
+    "registry": "在注册处按公司名查登记，或要求对方提供注册证书",
+    "search": "换一个搜索引擎或换关键词再查一次",
+    "map": "在 Google 地图搜公司名，确认建筑和招牌",
+    "other": "人工补查一次",
+}
+INCOMPLETE_COVERAGE = {"sanctions": "sanctions", "registry": "customs", "search": "negative", "map": "map"}
+
 STATUS_TEXT = {"✅": "可以", "⚠️": "有条件", "⛔": "不建议"}
 
 
@@ -580,11 +599,41 @@ def inquiry_text(evidence):
     return text(intake.get("inquiry_text") or evidence.get("inquiry_text") or subject.get("inquiry_text"))
 
 
+def validate_checks_incomplete(evidence):
+    raw = evidence.get("checks_incomplete")
+    if raw is None:
+        return [], []
+    if not isinstance(raw, list):
+        return [], [{"code": "invalid-input", "field": "checks_incomplete"}]
+    items = []
+    errors = []
+    for index, item in enumerate(raw):
+        if not isinstance(item, dict):
+            errors.append({"code": "invalid-input", "field": f"checks_incomplete[{index}]"})
+            continue
+        check = item.get("check")
+        reason = item.get("reason")
+        if check not in CHECK_LABELS:
+            errors.append({"code": "invalid-input", "field": f"checks_incomplete[{index}].check"})
+        if reason not in REASON_LABELS:
+            errors.append({"code": "invalid-input", "field": f"checks_incomplete[{index}].reason"})
+        next_step = item.get("next_step")
+        if next_step is None:
+            next_step = DEFAULT_NEXT_STEPS.get(check, "人工补查一次")
+        if not isinstance(next_step, str) or len(next_step) > 40:
+            errors.append({"code": "invalid-input", "field": f"checks_incomplete[{index}].next_step"})
+        items.append({"check": check, "reason": reason, "next_step": next_step})
+    return items, errors
+
+
 def render_card(evidence, rules):
     display = evidence.get("display") or {}
     errors = validate_display(evidence, rules)
     if errors:
         return {"status": "invalid-display", "errors": errors}
+    incomplete, incomplete_errors = validate_checks_incomplete(evidence)
+    if incomplete_errors:
+        return {"status": "invalid-input", "errors": incomplete_errors}
 
     ids = flag_ids_of(evidence)
     flag_index = {flag.get("id"): flag for flag in (rules.get("flags") or [])}
@@ -593,6 +642,8 @@ def render_card(evidence, rules):
     coverage = evidence.get("coverage") or {}
     covered = coverage.get("checked")
     total = 8 if coverage.get("total") is None else coverage.get("total")
+    incomplete_coverage = sum(1 for item in incomplete if item.get("check") in INCOMPLETE_COVERAGE)
+    effective_covered = None if covered is None else max(0, covered - incomplete_coverage)
     anchors = anchor_count(evidence)
 
     layers = evidence.get("layers") or {}
@@ -692,8 +743,15 @@ def render_card(evidence, rules):
     bar = "■" * filled + "□" * (10 - filled)
 
     lines = []
-    lines.append(f"## {color} {level_label} · 风险 {score}/100 {bar} ｜ 核实度 {credit['score']}/100（{credit['tier']}）")
-    lines.append(f"置信度：{confidence}（锚点 {anchors}/3）｜覆盖：{0 if covered is None else covered}/{total}｜未覆盖：{uncovered_text}")
+    incomplete_suffix = f" · 有 {len(incomplete)} 项未完成" if incomplete else ""
+    lines.append(f"## {color} {level_label} · 风险 {score}/100 {bar} ｜ 核实度 {credit['score']}/100（{credit['tier']}）{incomplete_suffix}")
+    lines.append(f"置信度：{confidence}（锚点 {anchors}/3）｜覆盖：{0 if effective_covered is None else effective_covered}/{total}｜未覆盖：{uncovered_text}")
+    if incomplete:
+        details = "；".join(
+            f"{CHECK_LABELS.get(item['check'], item['check'])}未完成（{REASON_LABELS.get(item['reason'], item['reason'])}）→ {item['next_step']}"
+            for item in incomplete
+        )
+        lines.append(f"⚠ 本次未完成：{details}")
     lines.append(f"**结论：{conclusion}** 客户：{customer_label(evidence, display)} · {inquiry_label(evidence, display)}")
     lines.append("")
     lines.append("| 动作 | 建议 | 条件 |")

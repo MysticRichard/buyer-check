@@ -47,7 +47,10 @@
     ]
   },
   "confidence": "low",
-  "score": { "total": 3, "risk_score": 27, "level": "低" }
+  "score": { "total": 3, "risk_score": 27, "level": "低" },
+  "checks_incomplete": [
+    { "check": "sanctions", "reason": "download-failed", "next_step": "在 OFAC 官方站按公司名手动查一次" }
+  ]
 }
 ```
 
@@ -65,6 +68,7 @@
   - `result`：`not-covered`（该国/该维度无覆盖）/ `unverifiable`（工具或检索受限）/ `skipped-login`（未登录跳过）。
   - `reason`：`needs-browser`（地图需浏览器/JS）/ `no-matrix`（该国不在能力矩阵）/ `no-free-data`（无免费公司级数据）/ `login-required`（社媒需登录）/ `not-provided`（用户未提供，如邮件头/电话）/ `search-blocked`（检索被验证码或限流拦截）/ `no-public-record`（已实际查询但公开无记录）/ `login-wall`（公共页被登录墙拦截）/ `no-company-level-data`（该国无公开公司级数据）/ `no-double-match`（社媒名称+电话/域名未双匹配）/ `name-only-match`（仅同名，不能算真实）。
   - 没有未覆盖项时为空数组 `[]`；**不得省略字段**。
+- 可选 `checks_incomplete`（v0.9.1）：任何应跑但没跑完的检查写入 `{check, reason, next_step}`；`check` 取 `sanctions` / `registry` / `search` / `map` / `other`，`reason` 取 `no-network` / `download-failed` / `invalid-content` / `all-urls-failed` / `login-wall` / `timeout` / `stale`；`next_step` 必填且 ≤40 字。卡片覆盖行下方输出一行「⚠ 本次未完成：…」，覆盖分子减去对应检查、分母仍为 8；标题追加「· 有 N 项未完成」。旧证据包不带该字段时渲染结果与 v0.9.0 完全一致。
 - **官网匹配可作为 🟢 正向证据**（不占红旗、不计分）：写明官网域名、官网 Contact 的姓名/电话是否与客户一致；邮箱域名与官网不同时标「待确认」，不直接判伪。
 - 平台边界项（登录/验证码/付费）必须在卡片给**可点击链接 + 一次动作说明**；不能只写 `not-covered`。
 - 可选 `layers`（v0.8.0，旧证据包可不带）：
@@ -85,8 +89,9 @@
 **版式自上而下：**
 
 ```text
-[1] 标题行      ## 颜色 等级 · 风险 N/100 分数条 ｜ 核实度 M/100（高/中/低）
+[1] 标题行      ## 颜色 等级 · 风险 N/100 分数条 ｜ 核实度 M/100（高/中/低）· 有 N 项未完成
 [2] 覆盖行      置信度：x（锚点 n/3）｜覆盖：X/8｜未覆盖：…
+[2a] 未完成行   ⚠ 本次未完成：<检查>未完成（<原因>）→ <下一步>
 [3] 结论行      **结论：一句话。** 客户：名称（国家/城市）· 询盘类型
   ——— 以上加 [4] 为第一屏 ———
 [4] 动作阶梯    表：动作 | 建议 | 条件（4 行）
@@ -99,7 +104,8 @@
 
 | 规则 | 取值 |
 | --- | --- |
-| 整卡行数 | ≤45 行（含表格行）；第一屏 [1]–[4] ≤14 行 |
+| 整卡行数 | ≤45 行（含表格行）；第一屏 [1]–[4] 含未完成行 ≤14 行 |
+| 未完成行 | `checks_incomplete` 非空时输出一行，位于覆盖行下方；覆盖分子减去对应检查，分母仍为 8 |
 | 标题 | 二级标题；🟢 低（0–29）/ 🟡 中（30–59）/ 🔴 高（60–100）/ ⚪ 需人工核实 |
 | 分数条 | 10 格，填充数 `floor(风险分 / 10 + 0.5)`；`■` 已填、`□` 未填；需人工核实全部 `□` |
 | 核实度 | 标题行只写数字和档位，不画条；公式见 `SKILL.md`/`report_template.md` |
