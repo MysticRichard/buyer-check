@@ -1,0 +1,17 @@
+{
+  "id": "A48",
+  "title": "Y7 user_input 可无 URL，但只能留在需要注意，不能进已核实",
+  "type": "render_card",
+  "input": { "fixture": "card_user_input.json" },
+  "expect": {
+    "status": "ok",
+    "evidence_missing": 1,
+    "card_includes": [
+      "- 🟡 用户自述线索",
+      "（客户自述，未证实）用户自述已核实"
+    ],
+    "card_excludes": ["- 🟢 用户自述已核实"],
+    "line_count_max": 45,
+    "first_screen_max": 14
+  }
+}

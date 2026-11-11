@@ -524,6 +524,7 @@ const runners = {
     }
     if (expect.line_count_max !== undefined) checks.push(result.line_count <= expect.line_count_max);
     if (expect.first_screen_max !== undefined) checks.push(result.first_screen_lines <= expect.first_screen_max);
+    if (expect.evidence_missing !== undefined) checks.push(result.evidence_missing === expect.evidence_missing);
     if (testCase.input.compare_fixture) {
       const baseEvidence = loadFixture(testCase.input.compare_fixture);
       const base = renderCard ? renderCard(baseEvidence, loadRules()) : pyRenderEvidence(findPython(), baseEvidence);

@@ -533,12 +533,77 @@ function validateChecksIncomplete(evidence) {
   return { items, errors };
 }
 
+function applyEvidenceRules(evidence, attention, verified, missing, attentionFromDisplay, verifiedFromDisplay) {
+  if (!('evidence' in evidence)) {
+    return { attention, verified, missing, evidenceMissing: 0, missingOverflow: 0 };
+  }
+  const raw = Array.isArray(evidence.evidence) ? evidence.evidence : [];
+  const index = new Map();
+  const duplicates = new Set();
+  for (const entry of raw) {
+    if (entry && typeof entry === 'object' && text(entry.id)) {
+      const id = text(entry.id);
+      if (index.has(id)) duplicates.add(id);
+      index.set(id, entry);
+    }
+  }
+  const check = (item, target) => {
+    const ids = item && item.evidence_ids;
+    if (!Array.isArray(ids) || ids.length === 0) return { ok: false, label: '缺证据' };
+    let allUser = true;
+    for (const id of ids) {
+      if (typeof id !== 'string' || !id || duplicates.has(id) || !index.has(id)) return { ok: false, label: '缺证据' };
+      const entry = index.get(id);
+      if (entry.source_type !== 'user_input') {
+        allUser = false;
+        if (!text(entry.url) || !text(entry.retrieved_at)) return { ok: false, label: '缺证据' };
+      }
+    }
+    if (target === 'verified' && allUser) return { ok: false, label: '客户自述，未证实' };
+    return { ok: true, label: '' };
+  };
+  let evidenceMissing = 0;
+  if (attentionFromDisplay) {
+    const kept = [];
+    const dropped = [];
+    for (const item of attention) {
+      const result = check(item, 'attention');
+      if (result.ok) kept.push(item);
+      else {
+        const body = text(item.text) || text(item.flag_id);
+        dropped.push({ text: `（${result.label}）${body}` });
+      }
+    }
+    attention = kept;
+    missing.push(...dropped);
+    evidenceMissing += dropped.length;
+  }
+  if (verifiedFromDisplay) {
+    const kept = [];
+    const dropped = [];
+    for (const item of verified) {
+      if (!item || typeof item !== 'object') { kept.push(item); continue; }
+      const result = check(item, 'verified');
+      if (result.ok) kept.push(item);
+      else dropped.push({ text: `（${result.label}）${text(item.text)}` });
+    }
+    verified = kept;
+    missing.push(...dropped);
+    evidenceMissing += dropped.length;
+  }
+  const missingOverflow = Math.max(0, missing.length - 2);
+  return { attention, verified, missing, evidenceMissing, missingOverflow };
+}
+
 export function renderCard(evidence, rules) {
   const display = evidence.display || {};
   const errors = validateDisplay(evidence, rules);
   if (errors.length > 0) return { status: 'invalid-display', errors };
   const incomplete = validateChecksIncomplete(evidence);
   if (incomplete.errors.length > 0) return { status: 'invalid-input', errors: incomplete.errors };
+  if (evidence.evidence !== undefined && !Array.isArray(evidence.evidence)) {
+    return { status: 'invalid-input', errors: [{ code: 'invalid-input', field: 'evidence' }] };
+  }
 
   const ids = flagIdsOf(evidence);
   const flagIndex = new Map((rules.flags || []).map((flag) => [flag.id, flag]));
@@ -620,7 +685,7 @@ export function renderCard(evidence, rules) {
 
   let verified = [];
   if (Array.isArray(display.verified) && display.verified.length > 0) {
-    verified = display.verified.map((item) => text(item.text));
+    verified = display.verified.filter((item) => item && typeof item === 'object').map((item) => ({ ...item }));
   } else {
     verified = (evidence.checks || [])
       .filter((check) => check && check.result === 'normal')
@@ -639,6 +704,18 @@ export function renderCard(evidence, rules) {
     });
     if (missing.length === 0) missing = [{ text: '暂无可补充的公开信息' }];
   }
+
+  const applied = applyEvidenceRules(
+    evidence,
+    attention,
+    verified,
+    missing,
+    Array.isArray(display.attention) && display.attention.length > 0,
+    Array.isArray(display.verified) && display.verified.length > 0,
+  );
+  attention = applied.attention;
+  verified = applied.verified;
+  missing = applied.missing;
 
   const actionRows = missing
     .filter((item) => item.action)
@@ -692,10 +769,11 @@ export function renderCard(evidence, rules) {
   }
   lines.push('');
   lines.push('**已核实**');
-  for (const item of verified.slice(0, 3)) lines.push(`- 🟢 ${item}`);
+  for (const item of verified.slice(0, 3)) lines.push(`- 🟢 ${typeof item === 'string' ? item : text(item.text)}`);
   lines.push('');
   lines.push('**没查到（没查到不代表没问题）**');
   for (const item of missing.slice(0, 2)) lines.push(`- ⚪ ${text(item.text)}`);
+  if (applied.missingOverflow > 0) lines.push(`- ⚪ 另有 ${applied.missingOverflow} 项未列出`);
   lines.push('');
   if (actionRows.length > 0) {
     lines.push('**一次动作**');
@@ -734,6 +812,7 @@ export function renderCard(evidence, rules) {
     dimensions: dims,
     actions,
     conclusion,
+    evidence_missing: applied.evidenceMissing,
     line_count: lines.length,
     first_screen_lines: firstScreenLines,
     card: lines.join('\n'),

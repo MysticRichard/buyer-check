@@ -626,6 +626,69 @@ def validate_checks_incomplete(evidence):
     return items, errors
 
 
+def apply_evidence_rules(evidence, attention, verified, missing, attention_from_display, verified_from_display):
+    if "evidence" not in evidence:
+        return attention, verified, missing, 0, 0
+    raw = evidence.get("evidence")
+    index = {}
+    duplicates = set()
+    for entry in raw if isinstance(raw, list) else []:
+        if isinstance(entry, dict) and text(entry.get("id")):
+            evidence_id = text(entry.get("id"))
+            if evidence_id in index:
+                duplicates.add(evidence_id)
+            index[evidence_id] = entry
+
+    def check(item, target):
+        ids = item.get("evidence_ids")
+        if not isinstance(ids, list) or not ids:
+            return False, "缺证据"
+        all_user = True
+        for evidence_id in ids:
+            if not isinstance(evidence_id, str) or not evidence_id or evidence_id in duplicates or evidence_id not in index:
+                return False, "缺证据"
+            entry = index[evidence_id]
+            if entry.get("source_type") != "user_input":
+                all_user = False
+                if not text(entry.get("url")) or not text(entry.get("retrieved_at")):
+                    return False, "缺证据"
+        if target == "verified" and all_user:
+            return False, "客户自述，未证实"
+        return True, ""
+
+    count = 0
+    if attention_from_display:
+        kept = []
+        dropped = []
+        for item in attention:
+            ok, label = check(item, "attention")
+            if ok:
+                kept.append(item)
+            else:
+                body = text(item.get("text")) or text(item.get("flag_id"))
+                dropped.append({"text": f"（{label}）{body}"})
+        attention = kept
+        missing.extend(dropped)
+        count += len(dropped)
+    if verified_from_display:
+        kept = []
+        dropped = []
+        for item in verified:
+            if not isinstance(item, dict):
+                kept.append(item)
+                continue
+            ok, label = check(item, "verified")
+            if ok:
+                kept.append(item)
+            else:
+                dropped.append({"text": f"（{label}）{text(item.get('text'))}"})
+        verified = kept
+        missing.extend(dropped)
+        count += len(dropped)
+    overflow = max(0, len(missing) - 2)
+    return attention, verified, missing, count, overflow
+
+
 def render_card(evidence, rules):
     display = evidence.get("display") or {}
     errors = validate_display(evidence, rules)
@@ -634,6 +697,8 @@ def render_card(evidence, rules):
     incomplete, incomplete_errors = validate_checks_incomplete(evidence)
     if incomplete_errors:
         return {"status": "invalid-input", "errors": incomplete_errors}
+    if evidence.get("evidence") is not None and not isinstance(evidence.get("evidence"), list):
+        return {"status": "invalid-input", "errors": [{"code": "invalid-input", "field": "evidence"}]}
 
     ids = flag_ids_of(evidence)
     flag_index = {flag.get("id"): flag for flag in (rules.get("flags") or [])}
@@ -714,7 +779,7 @@ def render_card(evidence, rules):
 
     raw_verified = display.get("verified")
     if isinstance(raw_verified, list) and raw_verified:
-        verified = [text(item.get("text")) for item in raw_verified if isinstance(item, dict)]
+        verified = [dict(item) for item in raw_verified if isinstance(item, dict)]
     else:
         verified = [check_label(check.get("id") or check.get("dimension")) for check in (evidence.get("checks") or []) if isinstance(check, dict) and check.get("result") == "normal"][:3]
         if not verified:
@@ -730,6 +795,15 @@ def render_card(evidence, rules):
             missing.append({"text": f"{CHECKPOINT_NAMES.get(parsed['checkpoint'], parsed['checkpoint'])}：{reason_text(parsed['checkpoint'], parsed['reason'])}"})
         if not missing:
             missing = [{"text": "暂无可补充的公开信息"}]
+
+    attention, verified, missing, evidence_missing, missing_overflow = apply_evidence_rules(
+        evidence,
+        attention,
+        verified,
+        missing,
+        bool(isinstance(raw_attention, list) and raw_attention),
+        bool(isinstance(raw_verified, list) and raw_verified),
+    )
 
     action_indexed = list(enumerate(item for item in missing if item.get("action")))
     action_indexed.sort(key=lambda pair: (-(pair[1].get("gain") or 0), pair[0]))
@@ -781,11 +855,13 @@ def render_card(evidence, rules):
     lines.append("")
     lines.append("**已核实**")
     for item in verified[:3]:
-        lines.append(f"- 🟢 {item}")
+        lines.append(f"- 🟢 {text(item.get('text')) if isinstance(item, dict) else item}")
     lines.append("")
     lines.append("**没查到（没查到不代表没问题）**")
     for item in missing[:2]:
         lines.append(f"- ⚪ {text(item.get('text'))}")
+    if missing_overflow:
+        lines.append(f"- ⚪ 另有 {missing_overflow} 项未列出")
     lines.append("")
     if action_rows:
         lines.append("**一次动作**")
@@ -820,6 +896,7 @@ def render_card(evidence, rules):
         "dimensions": dims,
         "actions": actions,
         "conclusion": conclusion,
+        "evidence_missing": evidence_missing,
         "line_count": len(lines),
         "first_screen_lines": first_screen_lines,
         "card": "\n".join(lines),
