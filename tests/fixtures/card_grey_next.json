@@ -1,0 +1,40 @@
+{
+  "subject": { "company": "ACME TRADING LTD", "country": "AE" },
+  "stage": "inquiry",
+  "checks": [],
+  "flags": [],
+  "anchors": { "closure": "none" },
+  "coverage": {
+    "checked": 3,
+    "total": 8,
+    "uncovered": ["map:not-covered:needs-browser", "customs:not-covered:no-matrix"]
+  },
+  "confidence": "低",
+  "layers": {
+    "company": { "credibility": "unknown" },
+    "person_company_link": { "strength": "none" },
+    "person_authenticity": { "level": "unknown" },
+    "contact": { "phone_matches": false, "business_email": false, "domain_aged": false },
+    "compliance": { "sanctions": "unchecked", "negative": "unchecked" },
+    "scale": { "map": "unknown", "customs": "unknown" }
+  },
+  "score": { "risk_score": 0, "level": "需人工核实" },
+  "evidence": [],
+  "display": {
+    "customer_label": "ACME TRADING LTD",
+    "inquiry_type": "一般询盘",
+    "dim_notes": {
+      "company": "暂未核实",
+      "link": "暂未核实",
+      "contact": "暂未核实",
+      "behavior": "暂未核实",
+      "compliance": "暂未核实",
+      "scale": "暂未核实"
+    },
+    "attention": [],
+    "verified": [],
+    "missing": [{ "text": "公司注册记录没找到" }],
+    "open_questions": ["公司注册号"],
+    "scripts": []
+  }
+}

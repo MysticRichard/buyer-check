@@ -87,6 +87,14 @@ DEFAULT_NEXT_STEPS = {
 INCOMPLETE_COVERAGE = {"sanctions": "sanctions", "registry": "customs", "search": "negative", "map": "map"}
 DATA_SOURCE_LABELS = {"sanctions_list": "制裁名单", "registry": "注册处", "map": "地图", "search": "公开搜索", "website": "官网", "other": "其他"}
 DATA_LABEL_ORDER = ["制裁名单", "注册处", "地图", "公开搜索", "官网", "其他"]
+NEXT_STEPS_DIM = {
+    "company": "在注册处按公司名查登记，或要求对方提供注册证书",
+    "link": "用公司官方渠道的电话或邮箱回访一次该买家",
+    "contact": "比对官网上的联系方式，确认邮箱域名与官网一致",
+    "behavior": "核对对方要求的付款方式和收款账户是否与公司名一致",
+    "compliance": "在官方制裁名单站点按公司名查一次",
+    "scale": "问对方近一年的采购量和主要销售渠道",
+}
 
 
 def collect_data_dates(evidence):
@@ -861,13 +869,20 @@ def render_card(evidence, rules):
     conclusion = compute_conclusion(level, actions, first_uncovered)
 
     dim_notes = display.get("dim_notes") or {}
+    new_mode = any(key in evidence for key in ("evidence", "checks_incomplete", "conflicts"))
     dims = []
     for dim in credit["dims"]:
         item = dict(dim)
-        item["note"] = text(dim_notes.get(dim["key"])) or default_dim_note(dim["key"], dim["status"])
+        note = text(dim_notes.get(dim["key"]))
+        if new_mode and dim["status"] == "未核实" and (not note or note == "暂未核实"):
+            note = NEXT_STEPS_DIM.get(dim["key"], "人工补查一次")
+        item["note"] = note or default_dim_note(dim["key"], dim["status"])
         dims.append(item)
     behavior_note = "发现异常交易要求" if behavior_status == "有异常" else "没发现异常交易要求" if behavior_status == "无异常" else "没有询盘原文"
-    dims.insert(3, {"key": "behavior", "label": "交易行为", "status": behavior_status, "symbol": behavior_symbol, "bar": "—", "note": text(dim_notes.get("behavior")) or behavior_note})
+    behavior_display = text(dim_notes.get("behavior"))
+    if new_mode and behavior_status == "未核实" and (not behavior_display or behavior_display == "暂未核实"):
+        behavior_display = NEXT_STEPS_DIM["behavior"]
+    dims.insert(3, {"key": "behavior", "label": "交易行为", "status": behavior_status, "symbol": behavior_symbol, "bar": "—", "note": behavior_display or behavior_note})
 
     flag_attention = [
         {"id": flag_id, "name": flag_index[flag_id].get("name"), "weight": flag_index[flag_id].get("weight", 0)}
@@ -928,7 +943,10 @@ def render_card(evidence, rules):
 
     lines = []
     incomplete_suffix = f" · 有 {len(incomplete)} 项未完成" if incomplete else ""
-    lines.append(f"## {color} {level_label} · 风险 {score}/100 {bar} ｜ 核实度 {credit['score']}/100（{credit['tier']}）{incomplete_suffix}")
+    if level == "需人工核实" and new_mode:
+        lines.append(f"## ⚪ 需人工核实 · 风险 待核实 ｜ 核实度 {credit['score']}/100（{credit['tier']}）{incomplete_suffix}")
+    else:
+        lines.append(f"## {color} {level_label} · 风险 {score}/100 {bar} ｜ 核实度 {credit['score']}/100（{credit['tier']}）{incomplete_suffix}")
     lines.append(f"置信度：{confidence}（锚点 {anchors}/3）｜覆盖：{0 if effective_covered is None else effective_covered}/{total}｜未覆盖：{uncovered_text}")
     if incomplete:
         details = "；".join(

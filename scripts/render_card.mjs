@@ -83,6 +83,14 @@ const DEFAULT_NEXT_STEPS = {
 const INCOMPLETE_COVERAGE = { sanctions: 'sanctions', registry: 'customs', search: 'negative', map: 'map' };
 const DATA_SOURCE_LABELS = { sanctions_list: '制裁名单', registry: '注册处', map: '地图', search: '公开搜索', website: '官网', other: '其他' };
 const DATA_LABEL_ORDER = ['制裁名单', '注册处', '地图', '公开搜索', '官网', '其他'];
+const NEXT_STEPS_DIM = {
+  company: '在注册处按公司名查登记，或要求对方提供注册证书',
+  link: '用公司官方渠道的电话或邮箱回访一次该买家',
+  contact: '比对官网上的联系方式，确认邮箱域名与官网一致',
+  behavior: '核对对方要求的付款方式和收款账户是否与公司名一致',
+  compliance: '在官方制裁名单站点按公司名查一次',
+  scale: '问对方近一年的采购量和主要销售渠道',
+};
 
 function collectDataDates(evidence) {
   const values = new Map();
@@ -757,8 +765,15 @@ export function renderCard(evidence, rules) {
   const conclusion = computeConclusion(level, actions, firstUncovered);
 
   const dimNotes = display.dim_notes || {};
-  const dims = credit.dims.map((dim) => ({ ...dim, note: text(dimNotes[dim.key]) || defaultDimNote(dim.key, dim.status) }));
-  dims.splice(3, 0, { key: 'behavior', label: '交易行为', status: behaviorStatus, symbol: behaviorSymbol, bar: '—', note: text(dimNotes.behavior) || (behaviorStatus === '有异常' ? '发现异常交易要求' : behaviorStatus === '无异常' ? '没发现异常交易要求' : '没有询盘原文') });
+  const newMode = ['evidence', 'checks_incomplete', 'conflicts'].some((key) => key in evidence);
+  const dims = credit.dims.map((dim) => {
+    let note = text(dimNotes[dim.key]);
+    if (newMode && dim.status === '未核实' && (!note || note === '暂未核实')) note = NEXT_STEPS_DIM[dim.key] || '人工补查一次';
+    return { ...dim, note: note || defaultDimNote(dim.key, dim.status) };
+  });
+  let behaviorNote = text(dimNotes.behavior);
+  if (newMode && behaviorStatus === '未核实' && (!behaviorNote || behaviorNote === '暂未核实')) behaviorNote = NEXT_STEPS_DIM.behavior;
+  dims.splice(3, 0, { key: 'behavior', label: '交易行为', status: behaviorStatus, symbol: behaviorSymbol, bar: '—', note: behaviorNote || (behaviorStatus === '有异常' ? '发现异常交易要求' : behaviorStatus === '无异常' ? '没发现异常交易要求' : '没有询盘原文') });
 
   const flagAttention = ids
     .filter((id) => flagIndex.has(id))
@@ -833,7 +848,11 @@ export function renderCard(evidence, rules) {
 
   const lines = [];
   const incompleteSuffix = incomplete.items.length > 0 ? ` · 有 ${incomplete.items.length} 项未完成` : '';
-  lines.push(`## ${color} ${levelLabel} · 风险 ${score}/100 ${bar} ｜ 核实度 ${credit.score}/100（${credit.tier}）${incompleteSuffix}`);
+  if (level === '需人工核实' && newMode) {
+    lines.push(`## ⚪ 需人工核实 · 风险 待核实 ｜ 核实度 ${credit.score}/100（${credit.tier}）${incompleteSuffix}`);
+  } else {
+    lines.push(`## ${color} ${levelLabel} · 风险 ${score}/100 ${bar} ｜ 核实度 ${credit.score}/100（${credit.tier}）${incompleteSuffix}`);
+  }
   lines.push(`置信度：${confidence}（锚点 ${anchors}/3）｜覆盖：${effectiveCovered === null ? 0 : effectiveCovered}/${total}｜未覆盖：${uncoveredText}`);
   if (incomplete.items.length > 0) {
     const details = incomplete.items
