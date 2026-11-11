@@ -1,0 +1,7 @@
+{
+  "id": "A58",
+  "title": "Y17 验证说明：docs/validation.md 存在，含场景表、已修复误报、已知局限、复现命令与 R1 实测结果",
+  "type": "validation_doc",
+  "input": { "path": "docs/validation.md" },
+  "expect": { "all_pass": true }
+}

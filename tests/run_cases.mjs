@@ -767,6 +767,15 @@ const runners = {
     };
   },
 
+  validation_doc(testCase) {
+    const path = join(ROOT, testCase.input.path || 'docs/validation.md');
+    if (!existsSync(path)) return { ok: false, actual: 'missing' };
+    const text = readFileSync(path, 'utf8');
+    const needles = ['验证范围', '虚构场景表', '已修复的误报', '已知局限', '复现命令', '5,833,851', '19,564', 'sanctionslistservice.ofac.treas.gov', 'privacy_scan'];
+    const missing = needles.filter((needle) => !text.includes(needle));
+    return { ok: missing.length === 0, actual: { missing } };
+  },
+
   manual() {
     return { ok: true, skipped: true, actual: 'requires live network / model behaviour' };
   },
