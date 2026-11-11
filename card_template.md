@@ -73,6 +73,7 @@
 - 来源等级（v0.9.1）：`source_type` 缺省映射 `registry/sanctions_list → official`、`search/map → third_party`、`website/user_input/other → self_declared`；可用 `source_grade` 显式覆盖。条目末尾显示 `[官方]/[第三方]/[自述]`。进入「已核实」至少 1 条 `official`，或 2 条主域（eTLD+1）不同的 `third_party`；同主域多页只算一条；只有自述的移入「没查到」并写「客户自述，未证实」。
 - 数据日期（v0.9.1）：每条证据可选 `data_as_of`（YYYY-MM-DD）；有值时在六维表下方输出「数据日期：制裁名单 … · 注册处 … · 地图 …」，没有该来源就不列。制裁名单超过 7 天视为陈旧，由调用方写入 `checks_incomplete` 的 `stale` 原因，与 R2 同一行显示。
 - 来源冲突（v0.9.1）：可选 `conflicts[]`，每项 `{topic, a:{claim≤30字, evidence_id}, b:{claim≤30字, evidence_id}}`，两个 `evidence_id` 必须存在于 `evidence`。卡片在「需要注意」栏输出一行「⚠ 来源冲突：A，B」，占 3 条名额之一，不替用户二选一，不改风险分。
+- 红旗说明（v0.9.1）：每条红旗在 `red_flags.json` 带 `why`（为什么是信号）与 `benign`（可能的无害解释）；卡片只给“需要注意”里权重最高的触发行追加「· 可能无害：…」，完整报告逐条显示两者。
 - **官网匹配可作为 🟢 正向证据**（不占红旗、不计分）：写明官网域名、官网 Contact 的姓名/电话是否与客户一致；邮箱域名与官网不同时标「待确认」，不直接判伪。
 - 平台边界项（登录/验证码/付费）必须在卡片给**可点击链接 + 一次动作说明**；不能只写 `not-covered`。
 - 可选 `layers`（v0.8.0，旧证据包可不带）：

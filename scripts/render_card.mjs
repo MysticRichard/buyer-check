@@ -847,6 +847,13 @@ export function renderCard(evidence, rules) {
   const bar = `${'■'.repeat(filled)}${'□'.repeat(10 - filled)}`;
 
   const lines = [];
+  let benignId = null;
+  if (newMode) {
+    const flagItems = attention.filter((item) => item.kind === 'flag' && flagIndex.has(item.flag_id));
+    if (flagItems.length > 0) {
+      benignId = flagItems.reduce((best, item) => (flagIndex.get(item.flag_id).weight > flagIndex.get(best.flag_id).weight ? item : best), flagItems[0]).flag_id;
+    }
+  }
   const incompleteSuffix = incomplete.items.length > 0 ? ` · 有 ${incomplete.items.length} 项未完成` : '';
   if (level === '需人工核实' && newMode) {
     lines.push(`## ⚪ 需人工核实 · 风险 待核实 ｜ 核实度 ${credit.score}/100（${credit.tier}）${incompleteSuffix}`);
@@ -883,7 +890,8 @@ export function renderCard(evidence, rules) {
         const info = flagIndex.get(item.flag_id) || { name: item.flag_id, weight: 0 };
         const symbol = info.weight >= 4 ? '🔴' : '🟡';
         const body = text(item.text);
-        lines.push(`- ${symbol} ${info.name}（${item.flag_id}）${body ? `：${body}` : ''}${gradeLabel}`);
+        const benign = item.flag_id === benignId && info.benign ? ` · 可能无害：${info.benign}` : '';
+        lines.push(`- ${symbol} ${info.name}（${item.flag_id}）${body ? `：${body}` : ''}${gradeLabel}${benign}`);
       } else if (item.kind === 'conflict') {
         lines.push(`- ⚠ ${text(item.text)}`);
       } else {

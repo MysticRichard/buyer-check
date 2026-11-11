@@ -1,0 +1,16 @@
+{
+  "id": "A55",
+  "title": "Y14 红旗 why/benign：23 条齐全；卡片只给最高权重触发行追加“可能无害”",
+  "type": "render_card",
+  "input": { "fixture": "card_benign.json" },
+  "expect": {
+    "status": "ok",
+    "risk_score": 70,
+    "level": "高",
+    "card_includes": [
+      "- 🔴 要求先付款（RF-PAY-001） · 可能无害：少数小公司会要求先付样品运费"
+    ],
+    "line_count_max": 45,
+    "first_screen_max": 14
+  }
+}

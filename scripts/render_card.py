@@ -942,6 +942,11 @@ def render_card(evidence, rules):
     bar = "■" * filled + "□" * (10 - filled)
 
     lines = []
+    benign_id = None
+    if new_mode:
+        flag_items = [item for item in attention if item.get("kind") == "flag" and item.get("flag_id") in flag_index]
+        if flag_items:
+            benign_id = max(flag_items, key=lambda item: flag_index[item["flag_id"]].get("weight", 0)).get("flag_id")
     incomplete_suffix = f" · 有 {len(incomplete)} 项未完成" if incomplete else ""
     if level == "需人工核实" and new_mode:
         lines.append(f"## ⚪ 需人工核实 · 风险 待核实 ｜ 核实度 {credit['score']}/100（{credit['tier']}）{incomplete_suffix}")
@@ -981,7 +986,10 @@ def render_card(evidence, rules):
                 info = flag_index.get(item.get("flag_id")) or {"name": item.get("flag_id"), "weight": 0}
                 symbol = "🔴" if info.get("weight", 0) >= 4 else "🟡"
                 body = text(item.get("text"))
-                lines.append(f"- {symbol} {info.get('name')}（{item.get('flag_id')}）{('：' + body) if body else ''}{grade_label}")
+                benign = ""
+                if item.get("flag_id") == benign_id and info.get("benign"):
+                    benign = f" · 可能无害：{info.get('benign')}"
+                lines.append(f"- {symbol} {info.get('name')}（{item.get('flag_id')}）{('：' + body) if body else ''}{grade_label}{benign}")
             elif item.get("kind") == "conflict":
                 lines.append(f"- ⚠ {text(item.get('text'))}")
             else:
