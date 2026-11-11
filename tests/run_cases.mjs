@@ -11,7 +11,8 @@
  */
 
 import { existsSync, readdirSync, readFileSync, writeFileSync, mkdtempSync, mkdirSync } from 'node:fs';
-import { spawnSync } from 'node:child_process';
+import { createServer } from 'node:http';
+import { spawn, spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -105,6 +106,25 @@ function loadAllCases() {
     .filter((name) => name.endsWith('.json'))
     .sort()
     .map((name) => loadCase(name));
+}
+
+function runProcess(cmd, args, options = {}) {
+  return new Promise((resolve) => {
+    const child = spawn(cmd, args, options);
+    let stdout = '';
+    let stderr = '';
+    const timer = setTimeout(() => child.kill(), options.timeout || 60000);
+    child.stdout.on('data', (chunk) => { stdout += chunk; });
+    child.stderr.on('data', (chunk) => { stderr += chunk; });
+    child.on('error', (error) => {
+      clearTimeout(timer);
+      resolve({ status: -1, stdout, stderr: String(error) });
+    });
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      resolve({ status: code, stdout, stderr });
+    });
+  });
 }
 
 const runners = {
@@ -320,6 +340,83 @@ const runners = {
         parity,
       },
     };
+  },
+
+  async sanctions_update(testCase) {
+    const python = findPython();
+    const scenario = testCase.input.scenario;
+    const validRows = [];
+    for (let i = 1; i <= 15000; i += 1) {
+      validRows.push(`${i},entity,"SYNTHETIC ENTITY ${String(i).padStart(5, '0')}",-0-,-0-,-0-,-0-,-0-,-0-,-0-,-0-,-0-`);
+    }
+    const validCsv = `${validRows.join('\n')}\n`;
+    const invalidCsv = 'not,a,csv\n1,2,3\n';
+    const hits = [];
+    const server = createServer((req, res) => {
+      hits.push(req.url);
+      if (req.url === '/good' || req.url === '/third') {
+        res.writeHead(200, { 'content-type': 'text/csv', 'last-modified': 'Mon, 09 Nov 2026 19:36:11 GMT' });
+        res.end(validCsv);
+      } else if (req.url === '/invalid' || req.url === '/bad') {
+        res.writeHead(200, { 'content-type': 'text/plain' });
+        res.end(invalidCsv);
+      } else if (req.url === '/fail' || req.url === '/fail2') {
+        res.writeHead(500);
+        res.end('error');
+      } else {
+        res.writeHead(404);
+        res.end('not found');
+      }
+    });
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const port = server.address().port;
+    const base = `http://127.0.0.1:${port}`;
+    const paths = scenario === 'chain' ? ['/invalid', '/good', '/third'] : scenario === 'invalid' ? ['/bad'] : ['/fail', '/fail2'];
+    const oldCache = scenario === 'invalid' ? 'OLD-CACHE-BYTES' : null;
+    const [pyCmd, ...pyRest] = (python || '').split(' ');
+    const impls = [];
+    if (python) impls.push({ name: 'python', cmd: pyCmd, rest: pyRest, script: join(ROOT, 'scripts', 'update_sanctions.py') });
+    impls.push({ name: 'node', cmd: 'node', rest: [], script: join(ROOT, 'scripts', 'update_sanctions.mjs') });
+    const outcomes = [];
+    for (const impl of impls) {
+      hits.length = 0;
+      const dir = mkdtempSync(join(tmpdir(), 'buyer-check-sanctions-'));
+      if (oldCache) writeFileSync(join(dir, 'ofac_sdn.csv'), oldCache, 'utf8');
+      const args = [impl.script, '--urls', paths.map((item) => base + item).join(','), '--cache-dir', dir];
+      const run = await runProcess(impl.cmd, [...impl.rest, ...args], {
+        cwd: ROOT,
+        env: { ...process.env, NO_PROXY: '127.0.0.1,localhost', no_proxy: '127.0.0.1,localhost' },
+      });
+      if (!run.stdout) throw new Error(run.stderr || `${impl.name} no output`);
+      const result = JSON.parse(run.stdout);
+      const item = (result.results && result.results[0]) || {};
+      const cachePath = join(dir, 'ofac_sdn.csv');
+      outcomes.push({
+        impl: impl.name,
+        status: result.status,
+        reason: item.reason || null,
+        source_path: item.source_url ? item.source_url.replace(base, '') : null,
+        hits: [...hits],
+        cache: oldCache && existsSync(cachePath) ? readFileSync(cachePath, 'utf8') : null,
+        exit: run.status,
+        attempt_statuses: (item.attempts || []).map((attempt) => attempt.status),
+      });
+    }
+    await new Promise((resolve) => server.close(resolve));
+    const checks = outcomes.map((outcome) => {
+      if (scenario === 'chain') {
+        return outcome.status === 'ok' && outcome.source_path === '/good' && isDeepStrictEqual(outcome.hits, ['/invalid', '/good']) && outcome.exit === 0;
+      }
+      if (scenario === 'invalid') {
+        return outcome.status === 'unavailable' && outcome.reason === 'invalid-content' && outcome.cache === oldCache && outcome.exit === 1;
+      }
+      return outcome.status === 'unavailable' && outcome.reason === 'all-urls-failed' && outcome.exit === 1;
+    });
+    const parity = outcomes.length === 2
+      && outcomes[0].status === outcomes[1].status
+      && outcomes[0].reason === outcomes[1].reason
+      && outcomes[0].source_path === outcomes[1].source_path;
+    return { ok: checks.every(Boolean) && parity, actual: outcomes };
   },
 
   sanctions(testCase) {

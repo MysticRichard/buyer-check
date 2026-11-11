@@ -26,9 +26,10 @@ import sys
 import urllib.request
 from typing import Optional
 
+from update_sanctions import download_sdn
+
 CACHE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".cache", "sanctions")
 CACHE_MAX_AGE_DAYS = 7
-OFAC_URL = "https://www.treasury.gov/ofac/downloads/sdn.csv"
 OFAC_FILE = "ofac_sdn.csv"
 
 LIST_FILES = {
@@ -106,22 +107,12 @@ def match(query: str, entries: list) -> list:
     return hits
 
 
-def download_ofac(cache_dir: str, timeout: float = 60.0) -> dict:
-    """Download the official OFAC SDN CSV. Never sends customer data."""
-    path = os.path.join(cache_dir, OFAC_FILE)
-    try:
-        request = urllib.request.Request(OFAC_URL, headers={"User-Agent": "buyer-check/0.9"})
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            data = response.read()
-        os.makedirs(cache_dir, exist_ok=True)
-        with open(path, "wb") as handle:
-            handle.write(data)
-        return {"status": "ok", "detail": "{} bytes".format(len(data))}
-    except Exception as exc:  # noqa: BLE001 - network errors vary by environment
-        return {"status": "unavailable", "detail": str(exc)}
+def download_ofac(cache_dir: str, timeout: float = 20.0) -> dict:
+    """Download and validate the official OFAC SDN CSV. Never sends customer data."""
+    return download_sdn(cache_dir, timeout=timeout)
 
 
-def ensure_cache(cache_dir: str, no_update: bool = False, timeout: float = 60.0) -> Optional[str]:
+def ensure_cache(cache_dir: str, no_update: bool = False, timeout: float = 20.0) -> Optional[str]:
     """Return None when a usable cache exists, else a failure reason."""
     ofac_path = os.path.join(cache_dir, OFAC_FILE)
     if os.path.exists(ofac_path):
@@ -136,7 +127,7 @@ def ensure_cache(cache_dir: str, no_update: bool = False, timeout: float = 60.0)
         return "download-failed"
     if result.get("status") == "ok" and os.path.exists(ofac_path):
         return None
-    return "download-failed"
+    return result.get("reason") or "download-failed"
 
 
 def analyse(query: str, cache_dir: str = CACHE_DIR, no_update: bool = False) -> dict:
@@ -163,7 +154,18 @@ def analyse(query: str, cache_dir: str = CACHE_DIR, no_update: bool = False) -> 
             continue
         mtime = os.path.getmtime(path)
         updated = dt.datetime.fromtimestamp(mtime, dt.timezone.utc).strftime("%Y-%m-%d")
-        result["lists_checked"].append({"list": list_name, "updated_at": updated})
+        entry = {"list": list_name, "updated_at": updated}
+        if list_name == "OFAC SDN":
+            meta_path = os.path.join(cache_dir, "ofac_sdn.meta.json")
+            try:
+                with open(meta_path, "r", encoding="utf-8") as handle:
+                    meta = json.load(handle)
+                for key in ("source_url", "list_date", "list_age_days"):
+                    if meta.get(key) is not None:
+                        entry[key] = meta[key]
+            except (OSError, ValueError):
+                pass
+        result["lists_checked"].append(entry)
         for hit in match(query, entries):
             result["possible_matches"].append(
                 {"list": list_name, "entry": hit["entry"], "match_type": hit["match_type"]}
