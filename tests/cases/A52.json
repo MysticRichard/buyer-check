@@ -1,0 +1,16 @@
+{
+  "id": "A52",
+  "title": "Y11 来源冲突并列展示，占需要注意名额，不影响风险分",
+  "type": "render_card",
+  "input": { "fixture": "card_conflict.json" },
+  "expect": {
+    "status": "ok",
+    "risk_score": 0,
+    "card_includes": [
+      "- ⚠ 来源冲突：官网称成立 2015 年，注册处显示 2024 年",
+      "- 🟡 邮箱域名与官网不一致 [自述]"
+    ],
+    "line_count_max": 45,
+    "first_screen_max": 14
+  }
+}

@@ -760,6 +760,40 @@ def apply_evidence_rules(evidence, attention, verified, missing, attention_from_
     return attention, verified, missing, count, overflow
 
 
+def validate_conflicts(evidence):
+    raw = evidence.get("conflicts")
+    if raw is None:
+        return [], []
+    if not isinstance(raw, list):
+        return [], [{"code": "invalid-input", "field": "conflicts"}]
+    evidence_ids = {
+        text(entry.get("id"))
+        for entry in (evidence.get("evidence") or [])
+        if isinstance(entry, dict) and text(entry.get("id"))
+    }
+    items = []
+    errors = []
+    for index, item in enumerate(raw):
+        if not isinstance(item, dict):
+            errors.append({"code": "invalid-input", "field": f"conflicts[{index}]"})
+            continue
+        claims = []
+        for side in ("a", "b"):
+            value = item.get(side)
+            if not isinstance(value, dict):
+                errors.append({"code": "invalid-input", "field": f"conflicts[{index}].{side}"})
+                continue
+            claim = text(value.get("claim"))
+            if not claim or len(claim) > 30:
+                errors.append({"code": "invalid-input", "field": f"conflicts[{index}].{side}.claim"})
+            if text(value.get("evidence_id")) not in evidence_ids:
+                errors.append({"code": "invalid-input", "field": f"conflicts[{index}].{side}.evidence_id"})
+            claims.append(claim)
+        if len(claims) == 2:
+            items.append({"kind": "conflict", "text": f"来源冲突：{claims[0]}，{claims[1]}"})
+    return items, errors
+
+
 def render_card(evidence, rules):
     display = evidence.get("display") or {}
     errors = validate_display(evidence, rules)
@@ -770,6 +804,9 @@ def render_card(evidence, rules):
         return {"status": "invalid-input", "errors": incomplete_errors}
     if evidence.get("evidence") is not None and not isinstance(evidence.get("evidence"), list):
         return {"status": "invalid-input", "errors": [{"code": "invalid-input", "field": "evidence"}]}
+    conflicts, conflict_errors = validate_conflicts(evidence)
+    if conflict_errors:
+        return {"status": "invalid-input", "errors": conflict_errors}
 
     ids = flag_ids_of(evidence)
     flag_index = {flag.get("id"): flag for flag in (rules.get("flags") or [])}
@@ -875,6 +912,8 @@ def render_card(evidence, rules):
         bool(isinstance(raw_attention, list) and raw_attention),
         bool(isinstance(raw_verified, list) and raw_verified),
     )
+    if conflicts:
+        attention = attention[: max(0, 3 - len(conflicts))] + conflicts
 
     action_indexed = list(enumerate(item for item in missing if item.get("action")))
     action_indexed.sort(key=lambda pair: (-(pair[1].get("gain") or 0), pair[0]))
@@ -925,6 +964,8 @@ def render_card(evidence, rules):
                 symbol = "🔴" if info.get("weight", 0) >= 4 else "🟡"
                 body = text(item.get("text"))
                 lines.append(f"- {symbol} {info.get('name')}（{item.get('flag_id')}）{('：' + body) if body else ''}{grade_label}")
+            elif item.get("kind") == "conflict":
+                lines.append(f"- ⚠ {text(item.get('text'))}")
             else:
                 lines.append(f"- 🟡 {text(item.get('text'))}{grade_label}")
     lines.append("")

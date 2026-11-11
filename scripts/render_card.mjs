@@ -661,6 +661,35 @@ function applyEvidenceRules(evidence, attention, verified, missing, attentionFro
   return { attention, verified, missing, evidenceMissing, missingOverflow };
 }
 
+function validateConflicts(evidence) {
+  const raw = evidence.conflicts;
+  if (raw === undefined || raw === null) return { items: [], errors: [] };
+  if (!Array.isArray(raw)) return { items: [], errors: [{ code: 'invalid-input', field: 'conflicts' }] };
+  const evidenceIds = new Set((evidence.evidence || []).filter((entry) => entry && typeof entry === 'object' && text(entry.id)).map((entry) => text(entry.id)));
+  const items = [];
+  const errors = [];
+  raw.forEach((item, index) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) {
+      errors.push({ code: 'invalid-input', field: `conflicts[${index}]` });
+      return;
+    }
+    const claims = [];
+    for (const side of ['a', 'b']) {
+      const value = item[side];
+      if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        errors.push({ code: 'invalid-input', field: `conflicts[${index}].${side}` });
+        continue;
+      }
+      const claim = text(value.claim);
+      if (!claim || charLength(claim) > 30) errors.push({ code: 'invalid-input', field: `conflicts[${index}].${side}.claim` });
+      if (!evidenceIds.has(text(value.evidence_id))) errors.push({ code: 'invalid-input', field: `conflicts[${index}].${side}.evidence_id` });
+      claims.push(claim);
+    }
+    if (claims.length === 2) items.push({ kind: 'conflict', text: `来源冲突：${claims[0]}，${claims[1]}` });
+  });
+  return { items, errors };
+}
+
 export function renderCard(evidence, rules) {
   const display = evidence.display || {};
   const errors = validateDisplay(evidence, rules);
@@ -670,6 +699,8 @@ export function renderCard(evidence, rules) {
   if (evidence.evidence !== undefined && !Array.isArray(evidence.evidence)) {
     return { status: 'invalid-input', errors: [{ code: 'invalid-input', field: 'evidence' }] };
   }
+  const conflicts = validateConflicts(evidence);
+  if (conflicts.errors.length > 0) return { status: 'invalid-input', errors: conflicts.errors };
 
   const ids = flagIdsOf(evidence);
   const flagIndex = new Map((rules.flags || []).map((flag) => [flag.id, flag]));
@@ -782,6 +813,9 @@ export function renderCard(evidence, rules) {
   attention = applied.attention;
   verified = applied.verified;
   missing = applied.missing;
+  if (conflicts.items.length > 0) {
+    attention = attention.slice(0, Math.max(0, 3 - conflicts.items.length)).concat(conflicts.items);
+  }
 
   const actionRows = missing
     .filter((item) => item.action)
@@ -831,6 +865,8 @@ export function renderCard(evidence, rules) {
         const symbol = info.weight >= 4 ? '🔴' : '🟡';
         const body = text(item.text);
         lines.push(`- ${symbol} ${info.name}（${item.flag_id}）${body ? `：${body}` : ''}${gradeLabel}`);
+      } else if (item.kind === 'conflict') {
+        lines.push(`- ⚠ ${text(item.text)}`);
       } else {
         lines.push(`- 🟡 ${text(item.text)}${gradeLabel}`);
       }
