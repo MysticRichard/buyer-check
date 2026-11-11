@@ -440,6 +440,12 @@ export function validateDisplay(evidence, rules) {
     }
   }
 
+  const flipHint = display.flip_hint;
+  if (flipHint !== undefined && flipHint !== null) {
+    if (typeof flipHint !== 'string') add('invalid_type', 'flip_hint');
+    else if (charLength(flipHint) > 40) add('too_long', 'flip_hint');
+  }
+
   const texts = [];
   const pushText = (field, value) => { if (typeof value === 'string') texts.push([field, value]); };
   pushText('customer_label', display.customer_label);
@@ -880,6 +886,8 @@ export function renderCard(evidence, rules) {
   lines.push('');
   const dataDates = collectDataDates(evidence);
   if (dataDates.length > 0) lines.push(`数据日期：${dataDates.map(([label, date]) => `${label} ${date}`).join(' · ')}`);
+  const flipHint = text(display.flip_hint);
+  if (newMode && flipHint) lines.push(`什么会改变结论：${flipHint}`);
   lines.push('**需要注意**');
   if (attention.length === 0) {
     lines.push('- 未发现需要注意的信号');
@@ -936,7 +944,7 @@ export function renderCard(evidence, rules) {
   if (!supplement) supplement = actionRows.length > 0 ? `补充${text(actionRows[0].label)}结果后，核实度会更高。` : '信息越多，判断越准。';
   const punctuation = /[。！？]$/.test(supplement) ? '' : '。';
   lines.push(`${supplement}${punctuation}需要完整报告请回复“出完整报告”。`);
-  lines.push('仅为基于公开信息的风险提示，不构成法律意见。');
+  lines.push(newMode ? '仅基于公开信息的风险信号筛查，不构成对客户的定性。' : '仅为基于公开信息的风险提示，不构成法律意见。');
 
   return {
     status: 'ok',

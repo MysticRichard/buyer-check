@@ -1,0 +1,12 @@
+{
+  "id": "A56",
+  "title": "Y15 flip_hint：有值时在首屏之外输出“什么会改变结论”，没有就不输出",
+  "type": "render_card",
+  "input": { "fixture": "card_flip.json" },
+  "expect": {
+    "status": "ok",
+    "card_includes": ["什么会改变结论：对方提供注册证书后核实度可升为高"],
+    "line_count_max": 45,
+    "first_screen_max": 14
+  }
+}

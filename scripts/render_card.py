@@ -513,6 +513,13 @@ def validate_display(evidence, rules):
                 elif han_length(item) > 12:
                     add("too_long", "open_questions")
 
+    flip_hint = display.get("flip_hint")
+    if flip_hint is not None:
+        if not isinstance(flip_hint, str):
+            add("invalid_type", "flip_hint")
+        elif char_length(flip_hint) > 40:
+            add("too_long", "flip_hint")
+
     texts = []
 
     def push_text(field, value):
@@ -976,6 +983,9 @@ def render_card(evidence, rules):
     data_dates = collect_data_dates(evidence)
     if data_dates:
         lines.append("数据日期：" + " · ".join(f"{label} {date}" for label, date in data_dates))
+    flip_hint = text(display.get("flip_hint"))
+    if new_mode and flip_hint:
+        lines.append(f"什么会改变结论：{flip_hint}")
     lines.append("**需要注意**")
     if not attention:
         lines.append("- 未发现需要注意的信号")
@@ -1031,7 +1041,10 @@ def render_card(evidence, rules):
         supplement = f"补充{text(action_rows[0].get('label'))}结果后，核实度会更高。" if action_rows else "信息越多，判断越准。"
     punctuation = "" if re.search(r"[。！？]$", supplement) else "。"
     lines.append(f"{supplement}{punctuation}需要完整报告请回复“出完整报告”。")
-    lines.append("仅为基于公开信息的风险提示，不构成法律意见。")
+    if new_mode:
+        lines.append("仅基于公开信息的风险信号筛查，不构成对客户的定性。")
+    else:
+        lines.append("仅为基于公开信息的风险提示，不构成法律意见。")
 
     return {
         "status": "ok",
