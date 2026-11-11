@@ -92,6 +92,10 @@ function embedFixtures(testCase) {
     }));
     delete input.fixtures;
   }
+  if (input.compare_fixture) {
+    input.compare_fixture_data = JSON.parse(readFileSync(join(ROOT, 'tests', 'fixtures', input.compare_fixture), 'utf8'));
+    delete input.compare_fixture;
+  }
   const expect = testCase.expect || {};
   if (expect.card_file) {
     expect.card = readFileSync(join(ROOT, 'tests', 'fixtures', expect.card_file), 'utf8').replace(/\r\n/g, '\n').replace(/\n$/, '');

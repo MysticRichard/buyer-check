@@ -18,19 +18,29 @@ status "unavailable" (treated as 未查到 by the caller — never guessed).
 from __future__ import annotations
 
 import argparse
+import csv
 import datetime as dt
+import io
 import json
 import os
 import re
 import sys
+import urllib.error
 import urllib.request
+from email.utils import parsedate_to_datetime
 from typing import Optional
-
-from update_sanctions import download_sdn
 
 CACHE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".cache", "sanctions")
 CACHE_MAX_AGE_DAYS = 7
 OFAC_FILE = "ofac_sdn.csv"
+SDN_URLS = [
+    "https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports/SDN.CSV",
+    "https://www.treasury.gov/ofac/downloads/sdn.csv",
+]
+PER_URL_TIMEOUT = 20.0
+MIN_SDN_ROWS = 15000
+SDN_COLUMNS = 12
+MAX_WIDTH_OUTLIER_RATIO = 0.10
 
 LIST_FILES = {
     "OFAC SDN": "ofac_sdn.csv",
@@ -107,6 +117,86 @@ def match(query: str, entries: list) -> list:
     return hits
 
 
+def validate_sdn(data: bytes) -> tuple:
+    if not data:
+        return False, "empty"
+    head = data[:300].lower()
+    if b"<html" in head or b"<!doctype" in head or head.lstrip().startswith(b"<"):
+        return False, "not-csv"
+    text = data.decode("utf-8", errors="replace")
+    rows = [row for row in csv.reader(io.StringIO(text)) if row and any(cell.strip() for cell in row)]
+    if len(rows) < MIN_SDN_ROWS:
+        return False, "too-few-rows:{}".format(len(rows))
+    if len(rows[0]) < SDN_COLUMNS:
+        return False, "missing-columns"
+    good_width = sum(1 for row in rows if len(row) >= SDN_COLUMNS)
+    if good_width / len(rows) < (1 - MAX_WIDTH_OUTLIER_RATIO):
+        return False, "bad-columns"
+    return True, "{} rows".format(len(rows))
+
+
+def parse_list_date(last_modified: str, path: str) -> str:
+    if last_modified:
+        try:
+            return parsedate_to_datetime(last_modified).astimezone(dt.timezone.utc).date().isoformat()
+        except (TypeError, ValueError, OverflowError):
+            pass
+    try:
+        return dt.datetime.fromtimestamp(os.path.getmtime(path), dt.timezone.utc).date().isoformat()
+    except OSError:
+        return dt.datetime.now(dt.timezone.utc).date().isoformat()
+
+
+def download_one(url: str, timeout: float) -> dict:
+    request = urllib.request.Request(url, headers={"User-Agent": "buyer-check/0.9"})
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            return {
+                "status": "ok",
+                "data": response.read(),
+                "last_modified": response.headers.get("Last-Modified"),
+                "source_url": url,
+            }
+    except urllib.error.HTTPError as exc:
+        return {"status": "failed", "reason": "download-failed", "detail": "http-{}".format(exc.code)}
+    except OSError as exc:
+        return {"status": "failed", "reason": "no-network", "detail": str(exc)[:200]}
+
+
+def download_sdn(cache_dir: str = CACHE_DIR, timeout: float = PER_URL_TIMEOUT, urls=None) -> dict:
+    path = os.path.join(cache_dir, OFAC_FILE)
+    meta_path = os.path.join(cache_dir, "ofac_sdn.meta.json")
+    attempts = []
+    invalid_seen = False
+    for url in urls or SDN_URLS:
+        outcome = download_one(url, timeout)
+        if outcome.get("status") != "ok":
+            attempts.append({"url": url, "status": "failed", "reason": outcome.get("reason", "download-failed"), "detail": outcome.get("detail", "")})
+            continue
+        ok, detail = validate_sdn(outcome["data"])
+        if not ok:
+            invalid_seen = True
+            attempts.append({"url": url, "status": "invalid-content", "reason": detail})
+            continue
+        os.makedirs(cache_dir, exist_ok=True)
+        temp_path = path + ".tmp"
+        with open(temp_path, "wb") as handle:
+            handle.write(outcome["data"])
+        os.replace(temp_path, path)
+        list_date = parse_list_date(outcome.get("last_modified"), path)
+        try:
+            age_days = (dt.datetime.now(dt.timezone.utc).date() - dt.date.fromisoformat(list_date)).days
+        except ValueError:
+            age_days = None
+        meta = {"source_url": outcome.get("source_url", url), "list_date": list_date, "list_age_days": age_days, "bytes": len(outcome["data"]), "detail": detail}
+        with open(meta_path, "w", encoding="utf-8") as handle:
+            json.dump(meta, handle, ensure_ascii=False)
+        attempts.append({"url": url, "status": "ok", "reason": detail})
+        return {"status": "ok", **meta, "attempts": attempts}
+    reason = "invalid-content" if invalid_seen else "all-urls-failed"
+    return {"status": "unavailable", "reason": reason, "attempts": attempts}
+
+
 def download_ofac(cache_dir: str, timeout: float = 20.0) -> dict:
     """Download and validate the official OFAC SDN CSV. Never sends customer data."""
     return download_sdn(cache_dir, timeout=timeout)
@@ -179,15 +269,27 @@ def analyse(query: str, cache_dir: str = CACHE_DIR, no_update: bool = False) -> 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Local sanctions list matching for buyer-check.")
-    parser.add_argument("name", help="person or company name to check")
+    parser.add_argument("name", nargs="?", help="person or company name to check")
     parser.add_argument("--country", help="claimed country ISO2, used only for manual exclusion context")
     parser.add_argument("--no-update", action="store_true", help="never download or refresh the cache")
     parser.add_argument("--cache-dir", default=CACHE_DIR, help="cache directory (default: .cache/sanctions)")
+    parser.add_argument("--self-update", action="store_true", help="download and validate the SDN CSV only (test hook)")
+    parser.add_argument("--urls", help="test hook: comma-separated SDN URLs")
     return parser
 
 
 def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
+    if args.self_update:
+        urls = [item.strip() for item in args.urls.split(",") if item.strip()] if args.urls else None
+        outcome = download_sdn(cache_dir=args.cache_dir, urls=urls)
+        results = [{"list": "OFAC SDN", "status": "downloaded" if outcome.get("status") == "ok" else "failed", **{k: outcome.get(k) for k in ("reason", "source_url", "list_date", "list_age_days", "attempts") if k in outcome}}]
+        result = {"status": "ok" if outcome.get("status") == "ok" else "unavailable", "cache_dir": args.cache_dir, "results": results}
+        print(json.dumps(result, ensure_ascii=False))
+        return 0 if result["status"] == "ok" else 1
+    if not args.name:
+        print(json.dumps({"status": "unavailable", "error": "missing name"}, ensure_ascii=False))
+        return 1
     result = analyse(args.name, cache_dir=args.cache_dir, no_update=args.no_update)
     print(json.dumps(result, ensure_ascii=False))
     return 0 if result.get("status") == "ok" else 1
