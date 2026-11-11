@@ -81,6 +81,21 @@ const DEFAULT_NEXT_STEPS = {
   other: '人工补查一次',
 };
 const INCOMPLETE_COVERAGE = { sanctions: 'sanctions', registry: 'customs', search: 'negative', map: 'map' };
+const DATA_SOURCE_LABELS = { sanctions_list: '制裁名单', registry: '注册处', map: '地图', search: '公开搜索', website: '官网', other: '其他' };
+const DATA_LABEL_ORDER = ['制裁名单', '注册处', '地图', '公开搜索', '官网', '其他'];
+
+function collectDataDates(evidence) {
+  const values = new Map();
+  for (const entry of evidence.evidence || []) {
+    if (!entry || typeof entry !== 'object') continue;
+    const date = text(entry.data_as_of);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+    const label = DATA_SOURCE_LABELS[entry.source_type];
+    if (!label) continue;
+    if (!values.has(label) || date > values.get(label)) values.set(label, date);
+  }
+  return DATA_LABEL_ORDER.filter((label) => values.has(label)).map((label) => [label, values.get(label)]);
+}
 
 const STATUS_TEXT = { '✅': '可以', '⚠️': '有条件', '⛔': '不建议' };
 
@@ -803,6 +818,8 @@ export function renderCard(evidence, rules) {
   lines.push('| --- | --- | --- |');
   for (const dim of dims) lines.push(`| ${dim.label} | ${dim.symbol} ${dim.bar} ${dim.status} | ${dim.note} |`);
   lines.push('');
+  const dataDates = collectDataDates(evidence);
+  if (dataDates.length > 0) lines.push(`数据日期：${dataDates.map(([label, date]) => `${label} ${date}`).join(' · ')}`);
   lines.push('**需要注意**');
   if (attention.length === 0) {
     lines.push('- 未发现需要注意的信号');

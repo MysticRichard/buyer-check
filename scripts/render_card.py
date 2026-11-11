@@ -85,6 +85,22 @@ DEFAULT_NEXT_STEPS = {
     "other": "人工补查一次",
 }
 INCOMPLETE_COVERAGE = {"sanctions": "sanctions", "registry": "customs", "search": "negative", "map": "map"}
+DATA_SOURCE_LABELS = {"sanctions_list": "制裁名单", "registry": "注册处", "map": "地图", "search": "公开搜索", "website": "官网", "other": "其他"}
+DATA_LABEL_ORDER = ["制裁名单", "注册处", "地图", "公开搜索", "官网", "其他"]
+
+
+def collect_data_dates(evidence):
+    values = {}
+    for entry in evidence.get("evidence") or []:
+        if not isinstance(entry, dict):
+            continue
+        date = text(entry.get("data_as_of"))
+        if not re.match(r"^\d{4}-\d{2}-\d{2}$", date):
+            continue
+        label = DATA_SOURCE_LABELS.get(entry.get("source_type"))
+        if label:
+            values[label] = max(values.get(label, ""), date)
+    return [(label, values[label]) for label in DATA_LABEL_ORDER if label in values]
 
 STATUS_TEXT = {"✅": "可以", "⚠️": "有条件", "⛔": "不建议"}
 
@@ -895,6 +911,9 @@ def render_card(evidence, rules):
     for dim in dims:
         lines.append(f"| {dim['label']} | {dim['symbol']} {dim['bar']} {dim['status']} | {dim['note']} |")
     lines.append("")
+    data_dates = collect_data_dates(evidence)
+    if data_dates:
+        lines.append("数据日期：" + " · ".join(f"{label} {date}" for label, date in data_dates))
     lines.append("**需要注意**")
     if not attention:
         lines.append("- 未发现需要注意的信号")

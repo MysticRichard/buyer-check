@@ -71,6 +71,7 @@
 - 可选 `checks_incomplete`（v0.9.1）：任何应跑但没跑完的检查写入 `{check, reason, next_step}`；`check` 取 `sanctions` / `registry` / `search` / `map` / `other`，`reason` 取 `no-network` / `download-failed` / `invalid-content` / `all-urls-failed` / `login-wall` / `timeout` / `stale`；`next_step` 必填且 ≤40 字。卡片覆盖行下方输出一行「⚠ 本次未完成：…」，覆盖分子减去对应检查、分母仍为 8；标题追加「· 有 N 项未完成」。旧证据包不带该字段时渲染结果与 v0.9.0 完全一致。
 - 证据强制（v0.9.1）：证据包一旦带 `evidence`，`display.attention[]` 与 `display.verified[]` 每条必须带 `evidence_ids`，每个编号必须真实存在且带 `url` + `retrieved_at`；缺编号、假编号、重复编号自动移入「没查到」并加「（缺证据）」，返回 `evidence_missing` 计数。`source_type: user_input` 可无 URL，但只能留在「需要注意」，不能进「已核实」。旧证据包不带 `evidence` 时不做强制。
 - 来源等级（v0.9.1）：`source_type` 缺省映射 `registry/sanctions_list → official`、`search/map → third_party`、`website/user_input/other → self_declared`；可用 `source_grade` 显式覆盖。条目末尾显示 `[官方]/[第三方]/[自述]`。进入「已核实」至少 1 条 `official`，或 2 条主域（eTLD+1）不同的 `third_party`；同主域多页只算一条；只有自述的移入「没查到」并写「客户自述，未证实」。
+- 数据日期（v0.9.1）：每条证据可选 `data_as_of`（YYYY-MM-DD）；有值时在六维表下方输出「数据日期：制裁名单 … · 注册处 … · 地图 …」，没有该来源就不列。制裁名单超过 7 天视为陈旧，由调用方写入 `checks_incomplete` 的 `stale` 原因，与 R2 同一行显示。
 - **官网匹配可作为 🟢 正向证据**（不占红旗、不计分）：写明官网域名、官网 Contact 的姓名/电话是否与客户一致；邮箱域名与官网不同时标「待确认」，不直接判伪。
 - 平台边界项（登录/验证码/付费）必须在卡片给**可点击链接 + 一次动作说明**；不能只写 `not-covered`。
 - 可选 `layers`（v0.8.0，旧证据包可不带）：
