@@ -3,7 +3,7 @@ name: buyer-check
 description: 外贸客户背调与交易风险筛查（BuyerCheck）：收到陌生询盘、只有姓名/电话/邮箱/公司名/聊天记录时，快速核验客户公开身份，识别付款、账户、域名、邮箱与行为风险，给出可复现的 0–100 风险分、跟进分级与追问话术。覆盖询盘期背调与订单前复核两阶段：询盘期用公开信息锚定公司/官网/企业邮箱（不要求营业执照），订单前核验执照、税号与 IBAN/BIC 收款账户。默认输出 10 秒可读的结论卡（不落盘），按需生成带来源链接与检索时间的完整报告与证据包。只做风险信号筛查与证据整理，不判定对方是否存在欺诈，不查个人隐私、不做账号枚举或位置追踪。Use for foreign-trade buyer due diligence, inquiry screening, BEC/payment-fraud checks and pre-order verification.
 license: MIT
 metadata:
-  version: 0.9.0
+  version: 0.9.1
   tags: [foreign-trade, buyer-check, due-diligence, fraud-screening, scam-detection, osint, risk-assessment]
 ---
 
@@ -460,7 +460,7 @@ metadata:
 - `scripts/ip_check.py/.mjs` — 邮件来源 IP 分类（默认离线，输出脱敏网段）
 - `scripts/identity_check.py` — 官网画像/社媒回链/头像比对/地图 POI/注册库（v0.9，精简包）
 - `scripts/render_card.py` — 结论卡确定性渲染（v0.9，精简包；Node 对照在仓库）
-- `tests/cases/` — 验收用例 A1–A41
+- `tests/cases/` — 验收用例 A1–A58
 - `tests/eval/` — 行为评测集（45 条合成询盘 + 评分器）
 - `examples/` — 脱敏样例报告
 - `docs/development.md` — 开发文档

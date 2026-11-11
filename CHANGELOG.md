@@ -2,6 +2,21 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与语义化版本。迭代方案见 [docs/iteration_plan.md](docs/iteration_plan.md)（v0.4.1–v0.6.0）、[docs/iteration_plan_v0.7.md](docs/iteration_plan_v0.7.md)（v0.7.0）、[docs/iteration_plan_v0.8.md](docs/iteration_plan_v0.8.md)（v0.8.0）与 [docs/iteration_plan_v0.9.md](docs/iteration_plan_v0.9.md)（v0.9.0，含 v0.8.1）。
 
+## [0.9.1] - 2026-11-11
+
+### 新增：可信度增强（R1–R11）
+
+- 制裁名单下载改为官方 SLS 端点优先、treasury 兜底，逐项 20 秒超时，CSV 行数/列数校验后原子替换；失败原因 `invalid-content` / `all-urls-failed`。
+- 新增 `checks_incomplete`：工具失败/未完成项在卡片覆盖行下方显式显示，覆盖分子扣除对应检查、分母仍为 8。
+- 证据强制：带 `evidence` 时“需要注意/已核实”每条必须有真实 `evidence_ids`，假/空/重复编号自动降级到“没查到”。
+- 来源等级 `[官方]/[第三方]/[自述]` 与独立来源准入；`data_as_of` 数据日期；`conflicts` 来源冲突并列；灰色卡“风险 待核实”和具体下一步。
+- 23 条红旗新增 `why/benign`；`flip_hint` 与固定声明；新增 `docs/validation.md`；用例 A42–A58。
+
+### 变更
+
+- 版本号 0.9.1；评分公式、23 条红旗编号/权重/触发条件、等级分档（0–29/30–59/60–100）、覆盖分母 8 均未改。
+- 精简包仍 28 文件；`update_sanctions.py` 不进包，下载与校验逻辑内联到 `sanctions_check.py`，包内测试通过 `--self-update` 覆盖。
+
 ## [0.9.0] - 2026-11-05
 
 ### 新增：结论卡 v0.9 版式（P-05 至 P-09）
