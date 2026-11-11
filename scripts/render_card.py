@@ -20,6 +20,7 @@ import json
 import os
 import re
 import sys
+from urllib.parse import urlparse
 
 from risk_score import load_rules, score as risk_score
 
@@ -626,6 +627,43 @@ def validate_checks_incomplete(evidence):
     return items, errors
 
 
+SOURCE_GRADE_DEFAULT = {
+    "registry": "official",
+    "sanctions_list": "official",
+    "search": "third_party",
+    "map": "third_party",
+    "website": "self_declared",
+    "user_input": "self_declared",
+    "other": "self_declared",
+}
+GRADE_LABEL = {"official": "官方", "third_party": "第三方", "self_declared": "自述"}
+GRADE_RANK = {"self_declared": 0, "third_party": 1, "official": 2}
+MULTI_SUFFIX = {"co.uk", "org.uk", "com.au", "co.jp", "com.br", "co.nz"}
+
+
+def url_host(url):
+    try:
+        return urlparse(url).netloc.lower().removeprefix("www.")
+    except ValueError:
+        return ""
+
+
+def registrable_domain(host):
+    parts = host.split(".") if host else []
+    if len(parts) <= 2:
+        return host
+    if ".".join(parts[-2:]) in MULTI_SUFFIX:
+        return ".".join(parts[-3:])
+    return ".".join(parts[-2:])
+
+
+def grade_of(entry):
+    explicit = entry.get("source_grade")
+    if explicit in GRADE_LABEL:
+        return explicit
+    return SOURCE_GRADE_DEFAULT.get(entry.get("source_type"), "self_declared")
+
+
 def apply_evidence_rules(evidence, attention, verified, missing, attention_from_display, verified_from_display):
     if "evidence" not in evidence:
         return attention, verified, missing, 0, 0
@@ -639,30 +677,45 @@ def apply_evidence_rules(evidence, attention, verified, missing, attention_from_
                 duplicates.add(evidence_id)
             index[evidence_id] = entry
 
-    def check(item, target):
+    def evaluate(item, target):
         ids = item.get("evidence_ids")
         if not isinstance(ids, list) or not ids:
-            return False, "缺证据"
+            return False, "缺证据", None
+        entries = []
         all_user = True
         for evidence_id in ids:
             if not isinstance(evidence_id, str) or not evidence_id or evidence_id in duplicates or evidence_id not in index:
-                return False, "缺证据"
+                return False, "缺证据", None
             entry = index[evidence_id]
             if entry.get("source_type") != "user_input":
                 all_user = False
                 if not text(entry.get("url")) or not text(entry.get("retrieved_at")):
-                    return False, "缺证据"
+                    return False, "缺证据", None
+            entries.append(entry)
         if target == "verified" and all_user:
-            return False, "客户自述，未证实"
-        return True, ""
+            return False, "客户自述，未证实", None
+        grades = [grade_of(entry) for entry in entries]
+        if target == "verified":
+            has_official = "official" in grades
+            third_domains = {
+                registrable_domain(url_host(entry.get("url")))
+                for entry, grade in zip(entries, grades)
+                if grade == "third_party" and entry.get("url")
+            }
+            if not has_official and len(third_domains) < 2:
+                return False, "客户自述，未证实", None
+        top = max(grades, key=lambda item: GRADE_RANK.get(item, 0)) if grades else "self_declared"
+        return True, "", GRADE_LABEL[top]
 
     count = 0
     if attention_from_display:
         kept = []
         dropped = []
         for item in attention:
-            ok, label = check(item, "attention")
+            ok, label, grade_label = evaluate(item, "attention")
             if ok:
+                if grade_label:
+                    item["grade_label"] = grade_label
                 kept.append(item)
             else:
                 body = text(item.get("text")) or text(item.get("flag_id"))
@@ -677,8 +730,10 @@ def apply_evidence_rules(evidence, attention, verified, missing, attention_from_
             if not isinstance(item, dict):
                 kept.append(item)
                 continue
-            ok, label = check(item, "verified")
+            ok, label, grade_label = evaluate(item, "verified")
             if ok:
+                if grade_label:
+                    item["grade_label"] = grade_label
                 kept.append(item)
             else:
                 dropped.append({"text": f"（{label}）{text(item.get('text'))}"})
@@ -845,17 +900,22 @@ def render_card(evidence, rules):
         lines.append("- 未发现需要注意的信号")
     else:
         for item in attention:
+            grade_label = f" [{item.get('grade_label')}]" if item.get("grade_label") else ""
             if item.get("kind") == "flag":
                 info = flag_index.get(item.get("flag_id")) or {"name": item.get("flag_id"), "weight": 0}
                 symbol = "🔴" if info.get("weight", 0) >= 4 else "🟡"
                 body = text(item.get("text"))
-                lines.append(f"- {symbol} {info.get('name')}（{item.get('flag_id')}）{('：' + body) if body else ''}")
+                lines.append(f"- {symbol} {info.get('name')}（{item.get('flag_id')}）{('：' + body) if body else ''}{grade_label}")
             else:
-                lines.append(f"- 🟡 {text(item.get('text'))}")
+                lines.append(f"- 🟡 {text(item.get('text'))}{grade_label}")
     lines.append("")
     lines.append("**已核实**")
     for item in verified[:3]:
-        lines.append(f"- 🟢 {text(item.get('text')) if isinstance(item, dict) else item}")
+        if isinstance(item, dict):
+            grade_label = f" [{item.get('grade_label')}]" if item.get("grade_label") else ""
+            lines.append(f"- 🟢 {text(item.get('text'))}{grade_label}")
+        else:
+            lines.append(f"- 🟢 {item}")
     lines.append("")
     lines.append("**没查到（没查到不代表没问题）**")
     for item in missing[:2]:

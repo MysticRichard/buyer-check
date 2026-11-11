@@ -533,6 +533,39 @@ function validateChecksIncomplete(evidence) {
   return { items, errors };
 }
 
+const SOURCE_GRADE_DEFAULT = {
+  registry: 'official',
+  sanctions_list: 'official',
+  search: 'third_party',
+  map: 'third_party',
+  website: 'self_declared',
+  user_input: 'self_declared',
+  other: 'self_declared',
+};
+const GRADE_LABEL = { official: '官方', third_party: '第三方', self_declared: '自述' };
+const GRADE_RANK = { self_declared: 0, third_party: 1, official: 2 };
+const MULTI_SUFFIX = new Set(['co.uk', 'org.uk', 'com.au', 'co.jp', 'com.br', 'co.nz']);
+
+function urlHost(url) {
+  try {
+    return new URL(url).hostname.toLowerCase().replace(/^www\./, '');
+  } catch {
+    return '';
+  }
+}
+
+function registrableDomain(host) {
+  const parts = host ? host.split('.') : [];
+  if (parts.length <= 2) return host;
+  if (MULTI_SUFFIX.has(parts.slice(-2).join('.'))) return parts.slice(-3).join('.');
+  return parts.slice(-2).join('.');
+}
+
+function gradeOf(entry) {
+  if (entry.source_grade in GRADE_LABEL) return entry.source_grade;
+  return SOURCE_GRADE_DEFAULT[entry.source_type] || 'self_declared';
+}
+
 function applyEvidenceRules(evidence, attention, verified, missing, attentionFromDisplay, verifiedFromDisplay) {
   if (!('evidence' in evidence)) {
     return { attention, verified, missing, evidenceMissing: 0, missingOverflow: 0 };
@@ -547,29 +580,45 @@ function applyEvidenceRules(evidence, attention, verified, missing, attentionFro
       index.set(id, entry);
     }
   }
-  const check = (item, target) => {
+  const evaluate = (item, target) => {
     const ids = item && item.evidence_ids;
-    if (!Array.isArray(ids) || ids.length === 0) return { ok: false, label: '缺证据' };
+    if (!Array.isArray(ids) || ids.length === 0) return { ok: false, label: '缺证据', gradeLabel: null };
+    const entries = [];
     let allUser = true;
     for (const id of ids) {
-      if (typeof id !== 'string' || !id || duplicates.has(id) || !index.has(id)) return { ok: false, label: '缺证据' };
+      if (typeof id !== 'string' || !id || duplicates.has(id) || !index.has(id)) return { ok: false, label: '缺证据', gradeLabel: null };
       const entry = index.get(id);
       if (entry.source_type !== 'user_input') {
         allUser = false;
-        if (!text(entry.url) || !text(entry.retrieved_at)) return { ok: false, label: '缺证据' };
+        if (!text(entry.url) || !text(entry.retrieved_at)) return { ok: false, label: '缺证据', gradeLabel: null };
       }
+      entries.push(entry);
     }
-    if (target === 'verified' && allUser) return { ok: false, label: '客户自述，未证实' };
-    return { ok: true, label: '' };
+    if (target === 'verified' && allUser) return { ok: false, label: '客户自述，未证实', gradeLabel: null };
+    const grades = entries.map(gradeOf);
+    if (target === 'verified') {
+      const hasOfficial = grades.includes('official');
+      const thirdDomains = new Set(
+        entries
+          .filter((entry, position) => grades[position] === 'third_party' && entry.url)
+          .map((entry) => registrableDomain(urlHost(entry.url)))
+          .filter(Boolean),
+      );
+      if (!hasOfficial && thirdDomains.size < 2) return { ok: false, label: '客户自述，未证实', gradeLabel: null };
+    }
+    const top = grades.length ? grades.reduce((best, grade) => (GRADE_RANK[grade] > GRADE_RANK[best] ? grade : best), 'self_declared') : 'self_declared';
+    return { ok: true, label: '', gradeLabel: GRADE_LABEL[top] };
   };
   let evidenceMissing = 0;
   if (attentionFromDisplay) {
     const kept = [];
     const dropped = [];
     for (const item of attention) {
-      const result = check(item, 'attention');
-      if (result.ok) kept.push(item);
-      else {
+      const result = evaluate(item, 'attention');
+      if (result.ok) {
+        if (result.gradeLabel) item.grade_label = result.gradeLabel;
+        kept.push(item);
+      } else {
         const body = text(item.text) || text(item.flag_id);
         dropped.push({ text: `（${result.label}）${body}` });
       }
@@ -583,9 +632,11 @@ function applyEvidenceRules(evidence, attention, verified, missing, attentionFro
     const dropped = [];
     for (const item of verified) {
       if (!item || typeof item !== 'object') { kept.push(item); continue; }
-      const result = check(item, 'verified');
-      if (result.ok) kept.push(item);
-      else dropped.push({ text: `（${result.label}）${text(item.text)}` });
+      const result = evaluate(item, 'verified');
+      if (result.ok) {
+        if (result.gradeLabel) item.grade_label = result.gradeLabel;
+        kept.push(item);
+      } else dropped.push({ text: `（${result.label}）${text(item.text)}` });
     }
     verified = kept;
     missing.push(...dropped);
@@ -757,19 +808,23 @@ export function renderCard(evidence, rules) {
     lines.push('- 未发现需要注意的信号');
   } else {
     for (const item of attention) {
+      const gradeLabel = item.grade_label ? ` [${item.grade_label}]` : '';
       if (item.kind === 'flag') {
         const info = flagIndex.get(item.flag_id) || { name: item.flag_id, weight: 0 };
         const symbol = info.weight >= 4 ? '🔴' : '🟡';
         const body = text(item.text);
-        lines.push(`- ${symbol} ${info.name}（${item.flag_id}）${body ? `：${body}` : ''}`);
+        lines.push(`- ${symbol} ${info.name}（${item.flag_id}）${body ? `：${body}` : ''}${gradeLabel}`);
       } else {
-        lines.push(`- 🟡 ${text(item.text)}`);
+        lines.push(`- 🟡 ${text(item.text)}${gradeLabel}`);
       }
     }
   }
   lines.push('');
   lines.push('**已核实**');
-  for (const item of verified.slice(0, 3)) lines.push(`- 🟢 ${typeof item === 'string' ? item : text(item.text)}`);
+  for (const item of verified.slice(0, 3)) {
+    if (typeof item === 'string') lines.push(`- 🟢 ${item}`);
+    else lines.push(`- 🟢 ${text(item.text)}${item.grade_label ? ` [${item.grade_label}]` : ''}`);
+  }
   lines.push('');
   lines.push('**没查到（没查到不代表没问题）**');
   for (const item of missing.slice(0, 2)) lines.push(`- ⚪ ${text(item.text)}`);

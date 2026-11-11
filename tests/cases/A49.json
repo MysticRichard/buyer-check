@@ -1,0 +1,19 @@
+{
+  "id": "A49",
+  "title": "Y8 来源标签：条目末尾显示 [官方]/[第三方]/[自述]；只有自述或单条第三方不进已核实",
+  "type": "render_card",
+  "input": { "fixture": "card_grades.json" },
+  "expect": {
+    "status": "ok",
+    "evidence_missing": 2,
+    "card_includes": [
+      "官方线索 [官方]",
+      "自述线索 [自述]",
+      "- 🟢 官方登记一致 [官方]",
+      "（客户自述，未证实）只有自述"
+    ],
+    "card_excludes": ["- 🟢 只有自述", "- 🟢 只有一条第三方"],
+    "line_count_max": 45,
+    "first_screen_max": 14
+  }
+}
