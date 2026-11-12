@@ -1,0 +1,28 @@
+{
+  "id": "A66",
+  "title": "PII 手机号检测：覆盖不同国家手机/座机，排除日期/IP/版本/订单号，已打码不误判",
+  "type": "phone_pii",
+  "input": {
+    "texts": [
+      { "text": "+968 5555 1234", "expect": true },
+      { "text": "+968 5556 7890", "expect": true },
+      { "text": "+96855551234", "expect": true },
+      { "text": "55551234", "expect": true },
+      { "text": "+961 3 555 022", "expect": true },
+      { "text": "+1 (415) 555-2671", "expect": true },
+      { "text": "+86 138 5555 8000", "expect": true },
+      { "text": "+971 50 555 4567", "expect": true },
+      { "text": "+968 5555 1234 ext 12", "expect": true },
+      { "text": "2024-04-08", "expect": false },
+      { "text": "2024/04/08", "expect": false },
+      { "text": "2024.04.08", "expect": false },
+      { "text": "2024 年 04 月 08 日", "expect": false },
+      { "text": "订单号 12345678", "expect": false },
+      { "text": "+968 9* *** 241", "expect": false },
+      { "text": "v1.2.3", "expect": false },
+      { "text": "192.168.1.10", "expect": false },
+      { "text": "500 美元", "expect": false }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

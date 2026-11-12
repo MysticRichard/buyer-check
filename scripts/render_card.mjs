@@ -342,7 +342,35 @@ function isTechnical(value) {
 const FORBIDDEN = ['骗子', '诈骗犯', '确定是假的', '一定有问题'];
 const SCRIPT_FORBIDDEN = ['核实', '背调', '怀疑', '诈骗'];
 const EMAIL_RE = /[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}/;
-const PHONE_RE = /\+?\d[\d\s()\-]{8,}\d/;
+const PHONE_NON_NUMBER_PATTERNS = [
+  '\\b\\d{4}[-/.]\\d{1,2}[-/.]\\d{1,2}\\b',
+  '\\b\\d{1,2}[-/.]\\d{1,2}[-/.]\\d{2,4}\\b',
+  '\\d{4}\\s*年\\s*\\d{1,2}\\s*月(?:\\s*\\d{1,2}\\s*日)?',
+  '\\b\\d{1,2}:\\d{2}(?::\\d{2})?\\b',
+  '\\b(?:\\d{1,3}\\.){3}\\d{1,3}\\b',
+  '\\b\\d+\\.\\d+\\.\\d+(?:\\.\\d+)?\\b',
+  '(?:\\+|00)?\\d[\\d\\s()\\-*]*\\*[\\d\\s()\\-*]*',
+];
+const ID_CONTEXT_RE = /订单|编号|单号|\bID\b|No\./i;
+
+export function containsFullPhone(value) {
+  let cleaned = text(value);
+  for (const source of PHONE_NON_NUMBER_PATTERNS) {
+    cleaned = cleaned.replace(new RegExp(source, 'g'), ' ');
+  }
+  const candidateRe = /(?:\+|00)\d[\d\s().\-]{4,20}\d|\d[\d\s().\-]{4,20}\d/g;
+  let match;
+  while ((match = candidateRe.exec(cleaned)) !== null) {
+    const candidate = match[0];
+    const digits = Array.from(candidate).filter((char) => /\d/.test(char)).length;
+    if (digits < 6 || digits > 15) continue;
+    const hasInternational = candidate.startsWith('+') || candidate.startsWith('00');
+    const hasSeparator = /[\s()\-]/.test(candidate.trim());
+    if (ID_CONTEXT_RE.test(text(value)) && !hasInternational && !hasSeparator) continue;
+    return true;
+  }
+  return false;
+}
 
 export function validateDisplay(evidence, rules) {
   const display = evidence.display;
@@ -477,7 +505,7 @@ export function validateDisplay(evidence, rules) {
     if (isTechnical(value)) add('technical_term', field);
     if (FORBIDDEN.some((phrase) => value.includes(phrase))) add('forbidden_word', field);
     if (EMAIL_RE.test(value)) add('pii_email', field);
-    if (PHONE_RE.test(value)) add('pii_phone', field);
+    if (containsFullPhone(value)) add('pii_phone', field);
   }
 
   const seen = new Set();

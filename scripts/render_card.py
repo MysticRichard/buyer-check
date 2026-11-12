@@ -394,7 +394,36 @@ def is_technical(value):
 FORBIDDEN = ["骗子", "诈骗犯", "确定是假的", "一定有问题"]
 SCRIPT_FORBIDDEN = ["核实", "背调", "怀疑", "诈骗"]
 EMAIL_RE = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}")
-PHONE_RE = re.compile(r"\+?\d[\d\s()\-]{8,}\d")
+PHONE_CANDIDATE_RE = re.compile(r"(?:\+|00)\d[\d\s().\-]{4,20}\d|\d[\d\s().\-]{4,20}\d")
+MASKED_PHONE_RE = re.compile(r"(?:\+|00)?\d[\d\s()\-*]*\*[\d\s()\-*]*")
+PHONE_NON_NUMBER_RES = [
+    re.compile(r"\b\d{4}[-/.]\d{1,2}[-/.]\d{1,2}\b"),
+    re.compile(r"\b\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4}\b"),
+    re.compile(r"\d{4}\s*年\s*\d{1,2}\s*月(?:\s*\d{1,2}\s*日)?"),
+    re.compile(r"\b\d{1,2}:\d{2}(?::\d{2})?\b"),
+    re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b"),
+    re.compile(r"\b\d+\.\d+\.\d+(?:\.\d+)?\b"),
+    MASKED_PHONE_RE,
+]
+ID_CONTEXT_RE = re.compile(r"订单|编号|单号|\bID\b|No\.", re.IGNORECASE)
+
+
+def contains_full_phone(value):
+    raw = text(value)
+    cleaned = raw
+    for pattern in PHONE_NON_NUMBER_RES:
+        cleaned = pattern.sub(" ", cleaned)
+    for match in PHONE_CANDIDATE_RE.finditer(cleaned):
+        candidate = match.group(0)
+        digits = sum(1 for char in candidate if char.isdigit())
+        if not (6 <= digits <= 15):
+            continue
+        has_international = candidate.startswith("+") or candidate.startswith("00")
+        has_separator = bool(re.search(r"[\s()\-]", candidate.strip()))
+        if ID_CONTEXT_RE.search(raw) and not has_international and not has_separator:
+            continue
+        return True
+    return False
 
 
 def validate_display(evidence, rules):
@@ -562,7 +591,7 @@ def validate_display(evidence, rules):
             add("forbidden_word", field)
         if EMAIL_RE.search(value):
             add("pii_email", field)
-        if PHONE_RE.search(value):
+        if contains_full_phone(value):
             add("pii_phone", field)
 
     seen = set()

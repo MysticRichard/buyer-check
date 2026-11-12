@@ -24,10 +24,12 @@ import { analyse as whoisAnalyse } from '../scripts/whois_lookup.mjs';
 
 let renderCard = null;
 let ladderCombinations = null;
+let containsFullPhone = null;
 try {
   const module = await import('../scripts/render_card.mjs');
   renderCard = module.renderCard;
   ladderCombinations = module.ladderCombinations;
+  containsFullPhone = module.containsFullPhone;
 } catch {
   // The lean submission bundle ships only render_card.py.
 }
@@ -777,6 +779,30 @@ const runners = {
     const needles = ['验证范围', '虚构场景表', '已修复的误报', '已知局限', '复现命令', '5,833,851', '19,564', 'sanctionslistservice.ofac.treas.gov', 'privacy_scan'];
     const missing = needles.filter((needle) => !text.includes(needle));
     return { ok: missing.length === 0, actual: { missing } };
+  },
+
+async phone_pii(testCase) {
+    const texts = testCase.input.texts || [];
+    const expected = texts.map((item) => item.expect);
+    const nodeResults = containsFullPhone ? texts.map((item) => containsFullPhone(item.text)) : null;
+    const python = findPython();
+    let pythonResults = null;
+    if (python) {
+      const [cmd, ...rest] = python.split(' ');
+      const code = [
+        'import sys, json',
+        'from render_card import contains_full_phone',
+        'texts = json.load(sys.stdin)',
+        'print(json.dumps([contains_full_phone(t) for t in texts], ensure_ascii=False))',
+      ].join('\n');
+      const run = spawnSync(cmd, [...rest, '-c', code], { cwd: join(ROOT, 'scripts'), input: JSON.stringify(texts.map((item) => item.text)), encoding: 'utf8', timeout: 30000 });
+      if (!run.stdout) throw new Error(run.stderr || 'python phone check failed');
+      pythonResults = JSON.parse(run.stdout);
+    }
+    const matches = (results) => Array.isArray(results) && results.length === expected.length && results.every((value, index) => value === expected[index]);
+    const checks = [matches(pythonResults)];
+    if (containsFullPhone) checks.push(matches(nodeResults));
+    return { ok: checks.every(Boolean), actual: { expected, node: nodeResults, python: pythonResults } };
   },
 
   manual() {
