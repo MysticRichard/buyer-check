@@ -160,7 +160,7 @@ let checked = 0;
   console.log(`✓ domain_similarity: ${domainChecked}/${domainCases.length} cases identical`);
 
   // ---------- render_card ----------
-  const cardFixtures = ['card_harbor.json', 'card_nordic.json', 'card_manual.json', 'legacy_card.json', 'score_mismatch.json', 'card_incomplete.json', 'card_incomplete_base.json', 'card_evidence.json', 'card_user_input.json', 'card_grades.json', 'card_independence.json', 'card_data.json', 'card_conflict.json', 'card_grey_next.json', 'card_benign.json', 'card_flip.json', 'card_bypass.json', 'card_grade_override.json', 'card_many_conflicts.json', 'card_multi_suffix.json', 'card_attention_bypass.json', 'card_explicit_blocked.json'];
+  const cardFixtures = ['card_harbor.json', 'card_nordic.json', 'card_manual.json', 'legacy_card.json', 'score_mismatch.json', 'card_incomplete.json', 'card_incomplete_base.json', 'card_evidence.json', 'card_user_input.json', 'card_grades.json', 'card_independence.json', 'card_data.json', 'card_conflict.json', 'card_grey_next.json', 'card_benign.json', 'card_flip.json', 'card_bypass.json', 'card_grade_override.json', 'card_many_conflicts.json', 'card_multi_suffix.json', 'card_attention_bypass.json', 'card_explicit_blocked.json', 'card_attention_fake.json'];
   let cardChecked = 0;
   for (const fixture of cardFixtures) {
     const [py, js] = runScript(python, 'render_card', [join(ROOT, 'tests', 'fixtures', fixture), '--json']);

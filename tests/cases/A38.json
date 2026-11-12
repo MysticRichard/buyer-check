@@ -3,7 +3,7 @@
   "title": "行数：所有快照用例整卡不超过 45 行，第一屏不超过 14 行",
   "type": "render_card_lines",
   "input": {
-    "fixtures": ["card_harbor.json", "card_nordic.json", "card_manual.json", "legacy_card.json", "card_incomplete.json", "card_incomplete_base.json", "card_evidence.json", "card_user_input.json", "card_grades.json", "card_independence.json", "card_data.json", "card_conflict.json", "card_grey_next.json", "card_benign.json", "card_flip.json", "card_bypass.json", "card_grade_override.json", "card_many_conflicts.json", "card_multi_suffix.json", "card_attention_bypass.json", "card_explicit_blocked.json"]
+    "fixtures": ["card_harbor.json", "card_nordic.json", "card_manual.json", "legacy_card.json", "card_incomplete.json", "card_incomplete_base.json", "card_evidence.json", "card_user_input.json", "card_grades.json", "card_independence.json", "card_data.json", "card_conflict.json", "card_grey_next.json", "card_benign.json", "card_flip.json", "card_bypass.json", "card_grade_override.json", "card_many_conflicts.json", "card_multi_suffix.json", "card_attention_bypass.json", "card_explicit_blocked.json", "card_attention_fake.json"]
   },
   "expect": { "all_pass": true, "max_lines": 45, "max_first_screen": 14 }
 }

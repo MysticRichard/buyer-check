@@ -754,7 +754,7 @@ def apply_evidence_rules(evidence, attention, verified, missing, attention_from_
         return True, "", GRADE_LABEL[top]
 
     count = 0
-    if attention_from_display:
+    if attention:
         kept = []
         dropped = []
         for item in attention:
@@ -924,9 +924,11 @@ def render_card(evidence, rules):
         }
         attention = []
         for flag in flag_attention:
+            item = {"kind": "flag", "flag_id": flag["id"], "text": ""}
             evidence_ids = flag_entries.get(flag["id"], {}).get("evidence_ids")
             if isinstance(evidence_ids, list) and evidence_ids:
-                attention.append({"kind": "flag", "flag_id": flag["id"], "text": "", "evidence_ids": evidence_ids})
+                item["evidence_ids"] = evidence_ids
+            attention.append(item)
     else:
         attention = [{"kind": "flag", "flag_id": flag["id"], "text": ""} for flag in flag_attention]
     indexed = list(enumerate(attention))

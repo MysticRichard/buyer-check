@@ -647,7 +647,7 @@ function applyEvidenceRules(evidence, attention, verified, missing, attentionFro
     return { ok: true, label: '', gradeLabel: GRADE_LABEL[top] };
   };
   let evidenceMissing = 0;
-  if (attentionFromDisplay) {
+  if (attention.length > 0) {
     const kept = [];
     const dropped = [];
     for (const item of attention) {
@@ -801,8 +801,10 @@ export function renderCard(evidence, rules) {
     const flagEntries = new Map((evidence.flags || []).filter((item) => item && typeof item === 'object' && text(item.id)).map((item) => [text(item.id), item]));
     attention = [];
     for (const flag of flagAttention) {
+      const item = { kind: 'flag', flag_id: flag.id, text: '' };
       const ids = (flagEntries.get(flag.id) || {}).evidence_ids;
-      if (Array.isArray(ids) && ids.length > 0) attention.push({ kind: 'flag', flag_id: flag.id, text: '', evidence_ids: ids });
+      if (Array.isArray(ids) && ids.length > 0) item.evidence_ids = ids;
+      attention.push(item);
     }
   } else {
     attention = flagAttention.map((flag) => ({ kind: 'flag', flag_id: flag.id, text: '' }));
