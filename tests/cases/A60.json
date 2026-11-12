@@ -1,0 +1,12 @@
+{
+  "id": "A60",
+  "title": "来源等级显式升级（website→official）必须在校验信息中提示",
+  "type": "render_card",
+  "input": { "fixture": "card_grade_override.json" },
+  "expect": {
+    "status": "ok",
+    "source_grade_warnings": 1,
+    "card_includes": ["- 🟢 官网登记一致 [官方]"],
+    "line_count_max": 45
+  }
+}

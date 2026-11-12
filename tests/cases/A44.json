@@ -1,0 +1,6 @@
+{
+  "id": "A44",
+  "title": "Y3 制裁全部地址失败：返回 all-urls-failed，不崩溃，退出码为 1",
+  "type": "sanctions_update",
+  "input": { "scenario": "all-fail" }
+}

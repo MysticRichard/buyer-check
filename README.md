@@ -2,7 +2,7 @@
 
 > 收到陌生询盘、准备寄样或接单前，用一份有来源依据的风险报告，帮外贸业务员判断"这个客户值不值得往下走"。
 
-> 当前版本：v0.9.0。
+> 当前版本：v0.9.1。
 
 `buyer-check` 是一个 Agent Skill：外贸业务员给出客户的公司名、域名、邮箱、询盘原文等有限信息，Skill 自动检索公开信息、交叉比对，输出**结构固定、每条结论都带来源链接和检索时间**的风险报告与下一步建议。
 
@@ -81,7 +81,7 @@ buyer-check/
 │   ├── identity_check.py / .mjs  # 官网画像、社媒回链、头像比对、地图 POI、注册库（v0.9）
 │   ├── render_card.py / .mjs  # 结论卡渲染：核实度、六维表、动作阶梯、结论句（v0.9）
 │   └── brands.json       # 知名公司域名清单
-├── tests/                # 验收用例 A1–A41、一致性测试、行为评测集
+├── tests/                # 验收用例 A1–A58、一致性测试、行为评测集
 ├── examples/             # 脱敏样例报告
 ├── reports/              # 生成的报告（本地保留，不入仓库）
 └── docs/                 # development.md 开发文档、iteration_plan.md 迭代方案
@@ -104,7 +104,7 @@ buyer-check/
 ## 验证
 
 ```bash
-node tests/run_cases.mjs        # 验收用例 A1–A41
+node tests/run_cases.mjs        # 验收用例 A1–A58
 node tests/consistency.mjs      # V5 分数区间遍历 + V6 Python/Node 一致性
 node tests/consistency_scripts.mjs  # 脚本 Python/Node 一致性（含 render_card）
 node scripts/privacy_scan.mjs   # 提交前隐私扫描

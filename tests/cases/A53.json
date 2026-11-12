@@ -1,0 +1,18 @@
+{
+  "id": "A53",
+  "title": "Y12 灰色卡标题显示“风险 待核实”，不显示数字与分数条",
+  "type": "render_card",
+  "input": { "fixture": "card_grey_next.json" },
+  "expect": {
+    "status": "ok",
+    "level": "需人工核实",
+    "risk_score": 0,
+    "card_includes": [
+      "## ⚪ 需人工核实 · 风险 待核实 ｜ 核实度 0/100（低）",
+      "在注册处按公司名查登记，或要求对方提供注册证书"
+    ],
+    "card_excludes": ["风险 0/100"],
+    "line_count_max": 45,
+    "first_screen_max": 14
+  }
+}

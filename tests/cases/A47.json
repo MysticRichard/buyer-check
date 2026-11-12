@@ -1,0 +1,20 @@
+{
+  "id": "A47",
+  "title": "Y6 缺证据降级：假编号/空编号/重复编号移入没查到并计 evidence-missing",
+  "type": "render_card",
+  "input": { "fixture": "card_evidence.json" },
+  "expect": {
+    "status": "ok",
+    "risk_score": 0,
+    "evidence_missing": 4,
+    "card_includes": [
+      "（缺证据）假编号线索",
+
+      "另有 3 项未列出",
+      "- 🟢 官方登记一致"
+    ],
+    "card_excludes": ["- 🟢 重复编号", "- 🟢 缺编号"],
+    "line_count_max": 45,
+    "first_screen_max": 14
+  }
+}

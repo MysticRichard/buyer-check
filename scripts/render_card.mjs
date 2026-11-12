@@ -63,6 +63,48 @@ const INQUIRY_LABELS = {
 
 const ACTION_LABELS = ['回复和报价', '寄样和小额投入', '定制和大额备货', '收定金和付款'];
 
+const CHECK_LABELS = { sanctions: '制裁名单', registry: '注册处', search: '公开搜索', map: '地图', other: '其他检查' };
+const REASON_LABELS = {
+  'no-network': '网络失败',
+  'download-failed': '下载失败',
+  'invalid-content': '下载内容不合法',
+  'all-urls-failed': '所有地址失败',
+  'login-wall': '需登录',
+  timeout: '超时',
+  stale: '数据陈旧',
+};
+const DEFAULT_NEXT_STEPS = {
+  sanctions: '在 OFAC 官方站按公司名手动查一次',
+  registry: '在注册处按公司名查登记，或要求对方提供注册证书',
+  search: '换一个搜索引擎或换关键词再查一次',
+  map: '在 Google 地图搜公司名，确认建筑和招牌',
+  other: '人工补查一次',
+};
+const INCOMPLETE_COVERAGE = { sanctions: 'sanctions', registry: 'customs', search: 'negative', map: 'map' };
+const DATA_SOURCE_LABELS = { sanctions_list: '制裁名单', registry: '注册处', map: '地图', search: '公开搜索', website: '官网', other: '其他' };
+const DATA_LABEL_ORDER = ['制裁名单', '注册处', '地图', '公开搜索', '官网', '其他'];
+const NEXT_STEPS_DIM = {
+  company: '在注册处按公司名查登记，或要求对方提供注册证书',
+  link: '用公司官方渠道的电话或邮箱回访一次该买家',
+  contact: '比对官网上的联系方式，确认邮箱域名与官网一致',
+  behavior: '核对对方要求的付款方式和收款账户是否与公司名一致',
+  compliance: '在官方制裁名单站点按公司名查一次',
+  scale: '问对方近一年的采购量和主要销售渠道',
+};
+
+function collectDataDates(evidence) {
+  const values = new Map();
+  for (const entry of evidence.evidence || []) {
+    if (!entry || typeof entry !== 'object') continue;
+    const date = text(entry.data_as_of);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+    const label = DATA_SOURCE_LABELS[entry.source_type];
+    if (!label) continue;
+    if (!values.has(label) || date > values.get(label)) values.set(label, date);
+  }
+  return DATA_LABEL_ORDER.filter((label) => values.has(label)).map((label) => [label, values.get(label)]);
+}
+
 const STATUS_TEXT = { '✅': '可以', '⚠️': '有条件', '⛔': '不建议' };
 
 function text(value) {
@@ -300,7 +342,35 @@ function isTechnical(value) {
 const FORBIDDEN = ['骗子', '诈骗犯', '确定是假的', '一定有问题'];
 const SCRIPT_FORBIDDEN = ['核实', '背调', '怀疑', '诈骗'];
 const EMAIL_RE = /[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}/;
-const PHONE_RE = /\+?\d[\d\s()\-]{8,}\d/;
+const PHONE_NON_NUMBER_PATTERNS = [
+  '\\b\\d{4}[-/.]\\d{1,2}[-/.]\\d{1,2}\\b',
+  '\\b\\d{1,2}[-/.]\\d{1,2}[-/.]\\d{2,4}\\b',
+  '\\d{4}\\s*年\\s*\\d{1,2}\\s*月(?:\\s*\\d{1,2}\\s*日)?',
+  '\\b\\d{1,2}:\\d{2}(?::\\d{2})?\\b',
+  '\\b(?:\\d{1,3}\\.){3}\\d{1,3}\\b',
+  '\\b\\d+\\.\\d+\\.\\d+(?:\\.\\d+)?\\b',
+  '(?:\\+|00)?\\d[\\d\\s()\\-*]*\\*[\\d\\s()\\-*]*',
+];
+const ID_CONTEXT_RE = /订单|编号|单号|\bID\b|No\./i;
+
+export function containsFullPhone(value) {
+  let cleaned = text(value);
+  for (const source of PHONE_NON_NUMBER_PATTERNS) {
+    cleaned = cleaned.replace(new RegExp(source, 'g'), ' ');
+  }
+  const candidateRe = /(?:\+|00)\d[\d\s().\-]{4,20}\d|\d[\d\s().\-]{4,20}\d/g;
+  let match;
+  while ((match = candidateRe.exec(cleaned)) !== null) {
+    const candidate = match[0];
+    const digits = Array.from(candidate).filter((char) => /\d/.test(char)).length;
+    if (digits < 6 || digits > 15) continue;
+    const hasInternational = candidate.startsWith('+') || candidate.startsWith('00');
+    const hasSeparator = /[\s()\-]/.test(candidate.trim());
+    if (ID_CONTEXT_RE.test(text(value)) && !hasInternational && !hasSeparator) continue;
+    return true;
+  }
+  return false;
+}
 
 export function validateDisplay(evidence, rules) {
   const display = evidence.display;
@@ -398,6 +468,12 @@ export function validateDisplay(evidence, rules) {
     }
   }
 
+  const flipHint = display.flip_hint;
+  if (flipHint !== undefined && flipHint !== null) {
+    if (typeof flipHint !== 'string') add('invalid_type', 'flip_hint');
+    else if (charLength(flipHint) > 40) add('too_long', 'flip_hint');
+  }
+
   const texts = [];
   const pushText = (field, value) => { if (typeof value === 'string') texts.push([field, value]); };
   pushText('customer_label', display.customer_label);
@@ -429,7 +505,7 @@ export function validateDisplay(evidence, rules) {
     if (isTechnical(value)) add('technical_term', field);
     if (FORBIDDEN.some((phrase) => value.includes(phrase))) add('forbidden_word', field);
     if (EMAIL_RE.test(value)) add('pii_email', field);
-    if (PHONE_RE.test(value)) add('pii_phone', field);
+    if (containsFullPhone(value)) add('pii_phone', field);
   }
 
   const seen = new Set();
@@ -490,10 +566,191 @@ function inquiryText(evidence) {
   return text((evidence.intake && evidence.intake.inquiry_text) || evidence.inquiry_text || (evidence.subject && evidence.subject.inquiry_text));
 }
 
+function validateChecksIncomplete(evidence) {
+  const raw = evidence.checks_incomplete;
+  if (raw === undefined || raw === null) return { items: [], errors: [] };
+  if (!Array.isArray(raw)) return { items: [], errors: [{ code: 'invalid-input', field: 'checks_incomplete' }] };
+  const items = [];
+  const errors = [];
+  raw.forEach((item, index) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) {
+      errors.push({ code: 'invalid-input', field: `checks_incomplete[${index}]` });
+      return;
+    }
+    const check = item.check;
+    const reason = item.reason;
+    if (!(check in CHECK_LABELS)) errors.push({ code: 'invalid-input', field: `checks_incomplete[${index}].check` });
+    if (!(reason in REASON_LABELS)) errors.push({ code: 'invalid-input', field: `checks_incomplete[${index}].reason` });
+    const nextStep = item.next_step === undefined || item.next_step === null ? DEFAULT_NEXT_STEPS[check] || '人工补查一次' : item.next_step;
+    if (typeof nextStep !== 'string' || charLength(nextStep) > 40) {
+      errors.push({ code: 'invalid-input', field: `checks_incomplete[${index}].next_step` });
+    }
+    items.push({ check, reason, next_step: nextStep });
+  });
+  return { items, errors };
+}
+
+const SOURCE_GRADE_DEFAULT = {
+  registry: 'official',
+  sanctions_list: 'official',
+  search: 'third_party',
+  map: 'third_party',
+  website: 'self_declared',
+  user_input: 'self_declared',
+  other: 'self_declared',
+};
+const GRADE_LABEL = { official: '官方', third_party: '第三方', self_declared: '自述' };
+const GRADE_RANK = { self_declared: 0, third_party: 1, official: 2 };
+const MULTI_SUFFIX = new Set(['co.uk', 'org.uk', 'ac.uk', 'com.au', 'net.au', 'co.jp', 'com.br', 'com.cn', 'net.cn', 'org.cn', 'gov.cn', 'edu.cn', 'com.hk', 'com.sg', 'com.tw', 'co.in', 'co.nz']);
+
+function urlHost(url) {
+  try {
+    return new URL(url).hostname.toLowerCase().replace(/^www\./, '');
+  } catch {
+    return '';
+  }
+}
+
+function registrableDomain(host) {
+  const parts = host ? host.split('.') : [];
+  if (parts.length <= 2) return host;
+  if (MULTI_SUFFIX.has(parts.slice(-2).join('.'))) return parts.slice(-3).join('.');
+  return parts.slice(-2).join('.');
+}
+
+function gradeOf(entry) {
+  if (entry.source_grade in GRADE_LABEL) return entry.source_grade;
+  return SOURCE_GRADE_DEFAULT[entry.source_type] || 'self_declared';
+}
+
+function applyEvidenceRules(evidence, attention, verified, missing, attentionFromDisplay, verifiedFromDisplay) {
+  if (!('evidence' in evidence)) {
+    return { attention, verified, missing, evidenceMissing: 0, missingOverflow: 0, gradeWarnings: 0 };
+  }
+  const raw = Array.isArray(evidence.evidence) ? evidence.evidence : [];
+  const index = new Map();
+  const duplicates = new Set();
+  let gradeWarnings = 0;
+  const sourceToCheck = { sanctions_list: 'sanctions', registry: 'registry', search: 'search', map: 'map' };
+  const blockedCheckNames = new Set((evidence.checks_incomplete || []).filter((item) => item && typeof item === 'object').map((item) => item.check));
+  for (const entry of raw) {
+    if (entry && typeof entry === 'object' && text(entry.id)) {
+      const id = text(entry.id);
+      if (index.has(id)) duplicates.add(id);
+      index.set(id, entry);
+    }
+  }
+  const evaluate = (item, target) => {
+    const ids = item && item.evidence_ids;
+    if (!Array.isArray(ids) || ids.length === 0) return { ok: false, label: '缺证据', gradeLabel: null };
+    const entries = [];
+    let allUser = true;
+    for (const id of ids) {
+      if (typeof id !== 'string' || !id || duplicates.has(id) || !index.has(id)) return { ok: false, label: '缺证据', gradeLabel: null };
+      const entry = index.get(id);
+      if (entry.source_type !== 'user_input') {
+        allUser = false;
+        if (!text(entry.url) || !text(entry.retrieved_at)) return { ok: false, label: '缺证据', gradeLabel: null };
+      }
+      if (blockedCheckNames.has(sourceToCheck[entry.source_type])) return { ok: false, label: '本次未完成，不能作为已核实', gradeLabel: null };
+      entries.push(entry);
+    }
+    if (target === 'verified' && allUser) return { ok: false, label: '客户自述，未证实', gradeLabel: null };
+    const grades = entries.map(gradeOf);
+    for (const entry of entries) {
+      const defaultGrade = SOURCE_GRADE_DEFAULT[entry.source_type] || 'self_declared';
+      if (GRADE_RANK[entry.source_grade] > GRADE_RANK[defaultGrade]) gradeWarnings += 1;
+    }
+    if (target === 'verified') {
+      const hasOfficial = grades.includes('official');
+      const thirdDomains = new Set(
+        entries
+          .filter((entry, position) => grades[position] === 'third_party' && entry.url)
+          .map((entry) => registrableDomain(urlHost(entry.url)))
+          .filter(Boolean),
+      );
+      if (!hasOfficial && thirdDomains.size < 2) return { ok: false, label: '客户自述，未证实', gradeLabel: null };
+    }
+    const top = grades.length ? grades.reduce((best, grade) => (GRADE_RANK[grade] > GRADE_RANK[best] ? grade : best), 'self_declared') : 'self_declared';
+    return { ok: true, label: '', gradeLabel: GRADE_LABEL[top] };
+  };
+  let evidenceMissing = 0;
+  if (attention.length > 0) {
+    const kept = [];
+    const dropped = [];
+    for (const item of attention) {
+      const result = evaluate(item, 'attention');
+      if (result.ok) {
+        if (result.gradeLabel) item.grade_label = result.gradeLabel;
+        kept.push(item);
+      } else {
+        const body = text(item.text) || text(item.flag_id);
+        dropped.push({ text: `（${result.label}）${body}` });
+      }
+    }
+    attention = kept;
+    missing.push(...dropped);
+    evidenceMissing += dropped.length;
+  }
+  if (verifiedFromDisplay) {
+    const kept = [];
+    const dropped = [];
+    for (const item of verified) {
+      if (!item || typeof item !== 'object') { kept.push(item); continue; }
+      const result = evaluate(item, 'verified');
+      if (result.ok) {
+        if (result.gradeLabel) item.grade_label = result.gradeLabel;
+        kept.push(item);
+      } else dropped.push({ text: `（${result.label}）${text(item.text)}` });
+    }
+    verified = kept;
+    missing.push(...dropped);
+    evidenceMissing += dropped.length;
+  }
+  const missingOverflow = Math.max(0, missing.length - 2);
+  return { attention, verified, missing, evidenceMissing, missingOverflow, gradeWarnings };
+}
+
+function validateConflicts(evidence) {
+  const raw = evidence.conflicts;
+  if (raw === undefined || raw === null) return { items: [], errors: [] };
+  if (!Array.isArray(raw)) return { items: [], errors: [{ code: 'invalid-input', field: 'conflicts' }] };
+  const evidenceIds = new Set((evidence.evidence || []).filter((entry) => entry && typeof entry === 'object' && text(entry.id)).map((entry) => text(entry.id)));
+  const items = [];
+  const errors = [];
+  raw.forEach((item, index) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) {
+      errors.push({ code: 'invalid-input', field: `conflicts[${index}]` });
+      return;
+    }
+    const claims = [];
+    for (const side of ['a', 'b']) {
+      const value = item[side];
+      if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        errors.push({ code: 'invalid-input', field: `conflicts[${index}].${side}` });
+        continue;
+      }
+      const claim = text(value.claim);
+      if (!claim || charLength(claim) > 30) errors.push({ code: 'invalid-input', field: `conflicts[${index}].${side}.claim` });
+      if (!evidenceIds.has(text(value.evidence_id))) errors.push({ code: 'invalid-input', field: `conflicts[${index}].${side}.evidence_id` });
+      claims.push(claim);
+    }
+    if (claims.length === 2) items.push({ kind: 'conflict', text: `来源冲突：${claims[0]}，${claims[1]}` });
+  });
+  return { items, errors };
+}
+
 export function renderCard(evidence, rules) {
   const display = evidence.display || {};
   const errors = validateDisplay(evidence, rules);
   if (errors.length > 0) return { status: 'invalid-display', errors };
+  const incomplete = validateChecksIncomplete(evidence);
+  if (incomplete.errors.length > 0) return { status: 'invalid-input', errors: incomplete.errors };
+  if (evidence.evidence !== undefined && !Array.isArray(evidence.evidence)) {
+    return { status: 'invalid-input', errors: [{ code: 'invalid-input', field: 'evidence' }] };
+  }
+  const conflicts = validateConflicts(evidence);
+  if (conflicts.errors.length > 0) return { status: 'invalid-input', errors: conflicts.errors };
 
   const ids = flagIdsOf(evidence);
   const flagIndex = new Map((rules.flags || []).map((flag) => [flag.id, flag]));
@@ -502,6 +759,8 @@ export function renderCard(evidence, rules) {
   const coverage = evidence.coverage || {};
   const covered = coverage.checked === undefined ? null : coverage.checked;
   const total = coverage.total === undefined ? 8 : coverage.total;
+  const incompleteCoverage = incomplete.items.filter((item) => item.check in INCOMPLETE_COVERAGE).length;
+  const effectiveCovered = covered === null ? null : Math.max(0, covered - incompleteCoverage);
   const anchors = anchorCount(evidence);
 
   const layers = evidence.layers || {};
@@ -548,8 +807,15 @@ export function renderCard(evidence, rules) {
   const conclusion = computeConclusion(level, actions, firstUncovered);
 
   const dimNotes = display.dim_notes || {};
-  const dims = credit.dims.map((dim) => ({ ...dim, note: text(dimNotes[dim.key]) || defaultDimNote(dim.key, dim.status) }));
-  dims.splice(3, 0, { key: 'behavior', label: '交易行为', status: behaviorStatus, symbol: behaviorSymbol, bar: '—', note: text(dimNotes.behavior) || (behaviorStatus === '有异常' ? '发现异常交易要求' : behaviorStatus === '无异常' ? '没发现异常交易要求' : '没有询盘原文') });
+  const newMode = ['evidence', 'checks_incomplete', 'conflicts'].some((key) => key in evidence);
+  const dims = credit.dims.map((dim) => {
+    let note = text(dimNotes[dim.key]);
+    if (newMode && dim.status === '未核实' && (!note || note === '暂未核实')) note = NEXT_STEPS_DIM[dim.key] || '人工补查一次';
+    return { ...dim, note: note || defaultDimNote(dim.key, dim.status) };
+  });
+  let behaviorNote = text(dimNotes.behavior);
+  if (newMode && behaviorStatus === '未核实' && (!behaviorNote || behaviorNote === '暂未核实')) behaviorNote = NEXT_STEPS_DIM.behavior;
+  dims.splice(3, 0, { key: 'behavior', label: '交易行为', status: behaviorStatus, symbol: behaviorSymbol, bar: '—', note: behaviorNote || (behaviorStatus === '有异常' ? '发现异常交易要求' : behaviorStatus === '无异常' ? '没发现异常交易要求' : '没有询盘原文') });
 
   const flagAttention = ids
     .filter((id) => flagIndex.has(id))
@@ -559,6 +825,15 @@ export function renderCard(evidence, rules) {
   let attention = [];
   if (Array.isArray(display.attention) && display.attention.length > 0) {
     attention = display.attention.map((item) => ({ ...item }));
+  } else if ('evidence' in evidence) {
+    const flagEntries = new Map((evidence.flags || []).filter((item) => item && typeof item === 'object' && text(item.id)).map((item) => [text(item.id), item]));
+    attention = [];
+    for (const flag of flagAttention) {
+      const item = { kind: 'flag', flag_id: flag.id, text: '' };
+      const ids = (flagEntries.get(flag.id) || {}).evidence_ids;
+      if (Array.isArray(ids) && ids.length > 0) item.evidence_ids = ids;
+      attention.push(item);
+    }
   } else {
     attention = flagAttention.map((flag) => ({ kind: 'flag', flag_id: flag.id, text: '' }));
   }
@@ -572,11 +847,20 @@ export function renderCard(evidence, rules) {
     .map(({ item }) => item);
 
   let verified = [];
+  const blockedChecks = new Set(incomplete.items.map((item) => item.check));
+  const checkIsBlocked = (checkId) => {
+    if (blockedChecks.has(checkId)) return true;
+    if ((checkId === 'registry' || checkId === 'customs') && blockedChecks.has('registry')) return true;
+    if (checkId === 'negative' && blockedChecks.has('search')) return true;
+    return false;
+  };
   if (Array.isArray(display.verified) && display.verified.length > 0) {
-    verified = display.verified.map((item) => text(item.text));
+    verified = display.verified.filter((item) => item && typeof item === 'object').map((item) => ({ ...item }));
+  } else if ('evidence' in evidence) {
+    verified = [];
   } else {
     verified = (evidence.checks || [])
-      .filter((check) => check && check.result === 'normal')
+      .filter((check) => check && check.result === 'normal' && !checkIsBlocked(check.id || check.dimension))
       .slice(0, 3)
       .map((check) => checkLabel(check.id || check.dimension));
     if (verified.length === 0) verified = ['暂无可列出的已核实项'];
@@ -591,6 +875,21 @@ export function renderCard(evidence, rules) {
       return { text: `${CHECKPOINT_NAMES[parsed.checkpoint] || parsed.checkpoint}：${reasonText(parsed.checkpoint, parsed.reason)}` };
     });
     if (missing.length === 0) missing = [{ text: '暂无可补充的公开信息' }];
+  }
+
+  const applied = applyEvidenceRules(
+    evidence,
+    attention,
+    verified,
+    missing,
+    Array.isArray(display.attention) && display.attention.length > 0,
+    Array.isArray(display.verified) && display.verified.length > 0,
+  );
+  attention = applied.attention;
+  verified = applied.verified;
+  missing = applied.missing;
+  if (conflicts.items.length > 0) {
+    attention = attention.slice(0, Math.max(0, 3 - Math.min(3, conflicts.items.length))).concat(conflicts.items.slice(0, 3));
   }
 
   const actionRows = missing
@@ -608,8 +907,26 @@ export function renderCard(evidence, rules) {
   const bar = `${'■'.repeat(filled)}${'□'.repeat(10 - filled)}`;
 
   const lines = [];
-  lines.push(`## ${color} ${levelLabel} · 风险 ${score}/100 ${bar} ｜ 核实度 ${credit.score}/100（${credit.tier}）`);
-  lines.push(`置信度：${confidence}（锚点 ${anchors}/3）｜覆盖：${covered === null ? 0 : covered}/${total}｜未覆盖：${uncoveredText}`);
+  let benignId = null;
+  if (newMode) {
+    const flagItems = attention.filter((item) => item.kind === 'flag' && flagIndex.has(item.flag_id));
+    if (flagItems.length > 0) {
+      benignId = flagItems.reduce((best, item) => (flagIndex.get(item.flag_id).weight > flagIndex.get(best.flag_id).weight ? item : best), flagItems[0]).flag_id;
+    }
+  }
+  const incompleteSuffix = incomplete.items.length > 0 ? ` · 有 ${incomplete.items.length} 项未完成` : '';
+  if (level === '需人工核实' && newMode) {
+    lines.push(`## ⚪ 需人工核实 · 风险 待核实 ｜ 核实度 ${credit.score}/100（${credit.tier}）${incompleteSuffix}`);
+  } else {
+    lines.push(`## ${color} ${levelLabel} · 风险 ${score}/100 ${bar} ｜ 核实度 ${credit.score}/100（${credit.tier}）${incompleteSuffix}`);
+  }
+  lines.push(`置信度：${confidence}（锚点 ${anchors}/3）｜覆盖：${effectiveCovered === null ? 0 : effectiveCovered}/${total}｜未覆盖：${uncoveredText}`);
+  if (incomplete.items.length > 0) {
+    const details = incomplete.items
+      .map((item) => `${CHECK_LABELS[item.check] || item.check}未完成（${REASON_LABELS[item.reason] || item.reason}）→ ${item.next_step}`)
+      .join('；');
+    lines.push(`⚠ 本次未完成：${details}`);
+  }
   lines.push(`**结论：${conclusion}** 客户：${customerLabel(evidence, display)} · ${inquiryLabel(evidence, display)}`);
   lines.push('');
   lines.push('| 动作 | 建议 | 条件 |');
@@ -621,27 +938,39 @@ export function renderCard(evidence, rules) {
   lines.push('| --- | --- | --- |');
   for (const dim of dims) lines.push(`| ${dim.label} | ${dim.symbol} ${dim.bar} ${dim.status} | ${dim.note} |`);
   lines.push('');
+  const dataDates = collectDataDates(evidence);
+  if (dataDates.length > 0) lines.push(`数据日期：${dataDates.map(([label, date]) => `${label} ${date}`).join(' · ')}`);
+  const flipHint = text(display.flip_hint);
+  if (newMode && flipHint) lines.push(`什么会改变结论：${flipHint}`);
   lines.push('**需要注意**');
   if (attention.length === 0) {
     lines.push('- 未发现需要注意的信号');
   } else {
     for (const item of attention) {
+      const gradeLabel = item.grade_label ? ` [${item.grade_label}]` : '';
       if (item.kind === 'flag') {
         const info = flagIndex.get(item.flag_id) || { name: item.flag_id, weight: 0 };
         const symbol = info.weight >= 4 ? '🔴' : '🟡';
         const body = text(item.text);
-        lines.push(`- ${symbol} ${info.name}（${item.flag_id}）${body ? `：${body}` : ''}`);
+        const benign = item.flag_id === benignId && info.benign ? ` · 可能无害：${info.benign}` : '';
+        lines.push(`- ${symbol} ${info.name}（${item.flag_id}）${body ? `：${body}` : ''}${gradeLabel}${benign}`);
+      } else if (item.kind === 'conflict') {
+        lines.push(`- ⚠ ${text(item.text)}`);
       } else {
-        lines.push(`- 🟡 ${text(item.text)}`);
+        lines.push(`- 🟡 ${text(item.text)}${gradeLabel}`);
       }
     }
   }
   lines.push('');
   lines.push('**已核实**');
-  for (const item of verified.slice(0, 3)) lines.push(`- 🟢 ${item}`);
+  for (const item of verified.slice(0, 3)) {
+    if (typeof item === 'string') lines.push(`- 🟢 ${item}`);
+    else lines.push(`- 🟢 ${text(item.text)}${item.grade_label ? ` [${item.grade_label}]` : ''}`);
+  }
   lines.push('');
   lines.push('**没查到（没查到不代表没问题）**');
   for (const item of missing.slice(0, 2)) lines.push(`- ⚪ ${text(item.text)}`);
+  if (applied.missingOverflow > 0) lines.push(`- ⚪ 另有 ${applied.missingOverflow} 项未列出`);
   lines.push('');
   if (actionRows.length > 0) {
     lines.push('**一次动作**');
@@ -669,7 +998,7 @@ export function renderCard(evidence, rules) {
   if (!supplement) supplement = actionRows.length > 0 ? `补充${text(actionRows[0].label)}结果后，核实度会更高。` : '信息越多，判断越准。';
   const punctuation = /[。！？]$/.test(supplement) ? '' : '。';
   lines.push(`${supplement}${punctuation}需要完整报告请回复“出完整报告”。`);
-  lines.push('仅为基于公开信息的风险提示，不构成法律意见。');
+  lines.push(newMode ? '仅基于公开信息的风险信号筛查，不构成对客户的定性。' : '仅为基于公开信息的风险提示，不构成法律意见。');
 
   return {
     status: 'ok',
@@ -680,6 +1009,8 @@ export function renderCard(evidence, rules) {
     dimensions: dims,
     actions,
     conclusion,
+    evidence_missing: applied.evidenceMissing,
+    source_grade_warnings: applied.gradeWarnings,
     line_count: lines.length,
     first_screen_lines: firstScreenLines,
     card: lines.join('\n'),

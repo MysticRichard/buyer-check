@@ -1,0 +1,14 @@
+{
+  "id": "A46",
+  "title": "Y5 标题追加未完成数，风险分/颜色/动作阶梯与不带该字段时一致",
+  "type": "render_card",
+  "input": { "fixture": "card_incomplete.json", "compare_fixture": "card_incomplete_base.json" },
+  "expect": {
+    "status": "ok",
+    "risk_score": 0,
+    "level": "低",
+    "card_includes": ["· 有 1 项未完成"],
+    "line_count_max": 45,
+    "first_screen_max": 14
+  }
+}

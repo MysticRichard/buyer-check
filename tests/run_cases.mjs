@@ -11,7 +11,8 @@
  */
 
 import { existsSync, readdirSync, readFileSync, writeFileSync, mkdtempSync, mkdirSync } from 'node:fs';
-import { spawnSync } from 'node:child_process';
+import { createServer } from 'node:http';
+import { spawn, spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -23,10 +24,12 @@ import { analyse as whoisAnalyse } from '../scripts/whois_lookup.mjs';
 
 let renderCard = null;
 let ladderCombinations = null;
+let containsFullPhone = null;
 try {
   const module = await import('../scripts/render_card.mjs');
   renderCard = module.renderCard;
   ladderCombinations = module.ladderCombinations;
+  containsFullPhone = module.containsFullPhone;
 } catch {
   // The lean submission bundle ships only render_card.py.
 }
@@ -105,6 +108,25 @@ function loadAllCases() {
     .filter((name) => name.endsWith('.json'))
     .sort()
     .map((name) => loadCase(name));
+}
+
+function runProcess(cmd, args, options = {}) {
+  return new Promise((resolve) => {
+    const child = spawn(cmd, args, options);
+    let stdout = '';
+    let stderr = '';
+    const timer = setTimeout(() => child.kill(), options.timeout || 60000);
+    child.stdout.on('data', (chunk) => { stdout += chunk; });
+    child.stderr.on('data', (chunk) => { stderr += chunk; });
+    child.on('error', (error) => {
+      clearTimeout(timer);
+      resolve({ status: -1, stdout, stderr: String(error) });
+    });
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      resolve({ status: code, stdout, stderr });
+    });
+  });
 }
 
 const runners = {
@@ -322,6 +344,86 @@ const runners = {
     };
   },
 
+  async sanctions_update(testCase) {
+    const python = findPython();
+    const scenario = testCase.input.scenario;
+    const validRows = [];
+    for (let i = 1; i <= 15000; i += 1) {
+      validRows.push(`${i},entity,"SYNTHETIC ENTITY ${String(i).padStart(5, '0')}",-0-,-0-,-0-,-0-,-0-,-0-,-0-,-0-,-0-`);
+    }
+    const validCsv = `${validRows.join('\n')}\n`;
+    const invalidCsv = 'not,a,csv\n1,2,3\n';
+    const hits = [];
+    const server = createServer((req, res) => {
+      hits.push(req.url);
+      if (req.url === '/good' || req.url === '/third') {
+        res.writeHead(200, { 'content-type': 'text/csv', 'last-modified': 'Mon, 09 Nov 2026 19:36:11 GMT' });
+        res.end(validCsv);
+      } else if (req.url === '/invalid' || req.url === '/bad') {
+        res.writeHead(200, { 'content-type': 'text/plain' });
+        res.end(invalidCsv);
+      } else if (req.url === '/fail' || req.url === '/fail2') {
+        res.writeHead(500);
+        res.end('error');
+      } else {
+        res.writeHead(404);
+        res.end('not found');
+      }
+    });
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const port = server.address().port;
+    const base = `http://127.0.0.1:${port}`;
+    const paths = scenario === 'chain' ? ['/invalid', '/good', '/third'] : scenario === 'invalid' ? ['/bad'] : ['/fail', '/fail2'];
+    const oldCache = scenario === 'invalid' ? 'OLD-CACHE-BYTES' : null;
+    const [pyCmd, ...pyRest] = (python || '').split(' ');
+    const impls = [];
+    const updateScript = join(ROOT, 'scripts', 'update_sanctions.py');
+    const hasUpdateScript = existsSync(updateScript);
+    if (python) impls.push({ name: 'python', cmd: pyCmd, rest: pyRest, script: hasUpdateScript ? updateScript : join(ROOT, 'scripts', 'sanctions_check.py'), prefix: hasUpdateScript ? [] : ['--self-update'] });
+    const updateNodeScript = join(ROOT, 'scripts', 'update_sanctions.mjs');
+    if (existsSync(updateNodeScript)) impls.push({ name: 'node', cmd: 'node', rest: [], script: updateNodeScript, prefix: [] });
+    const outcomes = [];
+    for (const impl of impls) {
+      hits.length = 0;
+      const dir = mkdtempSync(join(tmpdir(), 'buyer-check-sanctions-'));
+      if (oldCache) writeFileSync(join(dir, 'ofac_sdn.csv'), oldCache, 'utf8');
+      const args = [impl.script, ...(impl.prefix || []), '--urls', paths.map((item) => base + item).join(','), '--cache-dir', dir];
+      const run = await runProcess(impl.cmd, [...impl.rest, ...args], {
+        cwd: ROOT,
+        env: { ...process.env, NO_PROXY: '127.0.0.1,localhost', no_proxy: '127.0.0.1,localhost' },
+      });
+      if (!run.stdout) throw new Error(run.stderr || `${impl.name} no output`);
+      const result = JSON.parse(run.stdout);
+      const item = (result.results && result.results[0]) || {};
+      const cachePath = join(dir, 'ofac_sdn.csv');
+      outcomes.push({
+        impl: impl.name,
+        status: result.status,
+        reason: item.reason || null,
+        source_path: item.source_url ? item.source_url.replace(base, '') : null,
+        hits: [...hits],
+        cache: oldCache && existsSync(cachePath) ? readFileSync(cachePath, 'utf8') : null,
+        exit: run.status,
+        attempt_statuses: (item.attempts || []).map((attempt) => attempt.status),
+      });
+    }
+    await new Promise((resolve) => server.close(resolve));
+    const checks = outcomes.map((outcome) => {
+      if (scenario === 'chain') {
+        return outcome.status === 'ok' && outcome.source_path === '/good' && isDeepStrictEqual(outcome.hits, ['/invalid', '/good']) && outcome.exit === 0;
+      }
+      if (scenario === 'invalid') {
+        return outcome.status === 'unavailable' && outcome.reason === 'invalid-content' && outcome.cache === oldCache && outcome.exit === 1;
+      }
+      return outcome.status === 'unavailable' && outcome.reason === 'all-urls-failed' && outcome.exit === 1;
+    });
+    const parity = outcomes.length === 1 || (outcomes.length === 2
+      && outcomes[0].status === outcomes[1].status
+      && outcomes[0].reason === outcomes[1].reason
+      && outcomes[0].source_path === outcomes[1].source_path);
+    return { ok: checks.every(Boolean) && parity, actual: outcomes };
+  },
+
   sanctions(testCase) {
     const python = findPython();
     if (!python) return { skipped: true, actual: 'python not found' };
@@ -427,6 +529,17 @@ const runners = {
     }
     if (expect.line_count_max !== undefined) checks.push(result.line_count <= expect.line_count_max);
     if (expect.first_screen_max !== undefined) checks.push(result.first_screen_lines <= expect.first_screen_max);
+    if (expect.evidence_missing !== undefined) checks.push(result.evidence_missing === expect.evidence_missing);
+    if (expect.declaration_count !== undefined) {
+      const hits = (String(result.card || '').match(/仅基于公开信息的风险信号筛查，不构成对客户的定性。/g) || []).length;
+      checks.push(hits === expect.declaration_count);
+    }
+    if (testCase.input.compare_fixture || testCase.input.compare_fixture_data) {
+      const baseEvidence = testCase.input.compare_fixture_data ? cloneJson(testCase.input.compare_fixture_data) : loadFixture(testCase.input.compare_fixture);
+      const base = renderCard ? renderCard(baseEvidence, loadRules()) : pyRenderEvidence(findPython(), baseEvidence);
+      checks.push(isDeepStrictEqual(result.actions, base.actions));
+      checks.push(result.risk_score === base.risk_score && result.level === base.level && result.credit?.score === base.credit?.score);
+    }
     return {
       ok: checks.every(Boolean),
       actual: {
@@ -657,6 +770,39 @@ const runners = {
       ok: outcomes.every((item) => item.ok) && isDeepStrictEqual(types, testCase.expect?.types || types),
       actual: outcomes,
     };
+  },
+
+  validation_doc(testCase) {
+    const path = join(ROOT, testCase.input.path || 'docs/validation.md');
+    if (!existsSync(path)) return { skipped: true, actual: 'docs/validation.md not shipped in lean bundle' };
+    const text = readFileSync(path, 'utf8');
+    const needles = ['验证范围', '虚构场景表', '已修复的误报', '已知局限', '复现命令', '5,833,851', '19,564', 'sanctionslistservice.ofac.treas.gov', 'privacy_scan'];
+    const missing = needles.filter((needle) => !text.includes(needle));
+    return { ok: missing.length === 0, actual: { missing } };
+  },
+
+async phone_pii(testCase) {
+    const texts = testCase.input.texts || [];
+    const expected = texts.map((item) => item.expect);
+    const nodeResults = containsFullPhone ? texts.map((item) => containsFullPhone(item.text)) : null;
+    const python = findPython();
+    let pythonResults = null;
+    if (python) {
+      const [cmd, ...rest] = python.split(' ');
+      const code = [
+        'import sys, json',
+        'from render_card import contains_full_phone',
+        'texts = json.load(sys.stdin)',
+        'print(json.dumps([contains_full_phone(t) for t in texts], ensure_ascii=False))',
+      ].join('\n');
+      const run = spawnSync(cmd, [...rest, '-c', code], { cwd: join(ROOT, 'scripts'), input: JSON.stringify(texts.map((item) => item.text)), encoding: 'utf8', timeout: 30000 });
+      if (!run.stdout) throw new Error(run.stderr || 'python phone check failed');
+      pythonResults = JSON.parse(run.stdout);
+    }
+    const matches = (results) => Array.isArray(results) && results.length === expected.length && results.every((value, index) => value === expected[index]);
+    const checks = [matches(pythonResults)];
+    if (containsFullPhone) checks.push(matches(nodeResults));
+    return { ok: checks.every(Boolean), actual: { expected, node: nodeResults, python: pythonResults } };
   },
 
   manual() {

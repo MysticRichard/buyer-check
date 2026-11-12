@@ -1,0 +1,15 @@
+{
+  "id": "A63",
+  "title": "反绕过：带 evidence 时省略 display.attention，无证据红旗必须移入没查到（缺证据），不得展示或丢弃",
+  "type": "render_card",
+  "input": { "fixture": "card_attention_bypass.json" },
+  "expect": {
+    "status": "ok",
+    "risk_score": 70,
+    "evidence_missing": 1,
+    "card_includes": ["（缺证据）RF-PAY-001"],
+    "card_excludes": ["要求先付款（RF-PAY-001）"],
+    "line_count_max": 45,
+    "first_screen_max": 14
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "id": "A42",
+  "title": "Y1 制裁地址链：按顺序尝试，第一个通过校验即停，后面不再请求",
+  "type": "sanctions_update",
+  "input": { "scenario": "chain" }
+}

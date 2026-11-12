@@ -1,0 +1,17 @@
+{
+  "id": "A51",
+  "title": "Y10 数据日期行：按来源显示 data_as_of；制裁超过 7 天以 stale 出现在未完成行",
+  "type": "render_card",
+  "input": { "fixture": "card_data.json" },
+  "expect": {
+    "status": "ok",
+    "card_includes": [
+      "数据日期：制裁名单 2026-11-09 · 注册处 2026-11-11 · 地图 2026-11-01",
+      "（数据陈旧）",
+      " · 有 1 项未完成",
+      "覆盖：6/8"
+    ],
+    "line_count_max": 45,
+    "first_screen_max": 14
+  }
+}

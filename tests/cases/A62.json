@@ -1,0 +1,13 @@
+{
+  "id": "A62",
+  "title": "多级后缀 eTLD+1：a.example.com.cn 与 b.other.com.cn 视为不同主域",
+  "type": "render_card",
+  "input": { "fixture": "card_multi_suffix.json" },
+  "expect": {
+    "status": "ok",
+    "evidence_missing": 0,
+    "card_includes": ["- 🟢 不同主域两条 [第三方]"],
+    "card_excludes": ["（客户自述，未证实）不同主域两条"],
+    "line_count_max": 45
+  }
+}

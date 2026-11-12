@@ -1,0 +1,17 @@
+{
+  "id": "A50",
+  "title": "Y9 独立来源：同主域两条不算独立，不同主域两条才算；只有自述的进没查到",
+  "type": "render_card",
+  "input": { "fixture": "card_independence.json" },
+  "expect": {
+    "status": "ok",
+    "evidence_missing": 1,
+    "card_includes": [
+      "- 🟢 不同主域两条 [第三方]",
+      "（客户自述，未证实）同一主域两条"
+    ],
+    "card_excludes": ["- 🟢 同一主域两条"],
+    "line_count_max": 45,
+    "first_screen_max": 14
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "subject": { "company": "ACME TRADING LTD", "country": "AE" },
+  "stage": "inquiry",
+  "checks": [],
+  "flags": [],
+  "anchors": { "closure": "single" },
+  "coverage": { "checked": 7, "total": 8, "uncovered": [] },
+  "confidence": "中",
+  "layers": {
+    "company": { "credibility": "medium" },
+    "person_company_link": { "strength": "none" },
+    "person_authenticity": { "level": "unknown" },
+    "contact": { "phone_matches": false, "business_email": true, "domain_aged": true },
+    "compliance": { "sanctions": "unchecked", "negative": "unchecked" },
+    "scale": { "map": "unknown", "customs": "unknown" }
+  },
+  "score": { "risk_score": 0, "level": "低" },
+  "evidence": [
+    {
+      "id": "E1",
+      "retrieved_at": "2026-11-11T09:30:00Z",
+      "source_type": "user_input"
+    }
+  ],
+  "display": {
+    "customer_label": "ACME TRADING LTD",
+    "inquiry_type": "一般询盘",
+    "dim_notes": {
+      "company": "官网已核对",
+      "link": "暂未核实",
+      "contact": "邮箱域名与官网一致",
+      "behavior": "没有询盘原文",
+      "compliance": "制裁名单未更新",
+      "scale": "地图和海关都没查到"
+    },
+    "attention": [
+      { "kind": "clue", "text": "用户自述线索", "evidence_ids": ["E1"] }
+    ],
+    "verified": [
+      { "text": "用户自述已核实", "evidence_ids": ["E1"] }
+    ],
+    "missing": [{ "text": "原有没查到" }],
+    "open_questions": [],
+    "scripts": []
+  }
+}

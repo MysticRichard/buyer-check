@@ -1,0 +1,13 @@
+{
+  "id": "A57",
+  "title": "Y16 固定声明：卡片末尾恰好出现一次“仅基于公开信息的风险信号筛查，不构成对客户的定性。”",
+  "type": "render_card",
+  "input": { "fixture": "card_flip.json" },
+  "expect": {
+    "status": "ok",
+    "declaration_count": 1,
+    "card_includes": ["仅基于公开信息的风险信号筛查，不构成对客户的定性。"],
+    "card_excludes": ["仅为基于公开信息的风险提示，不构成法律意见。"],
+    "line_count_max": 45
+  }
+}

@@ -16,7 +16,7 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
 
-import { updateSanctions } from './update_sanctions.mjs';
+import { downloadSanctions } from './update_sanctions.mjs';
 
 const DIR = dirname(fileURLToPath(import.meta.url));
 const CACHE_DIR = join(DIR, '..', '.cache', 'sanctions');
@@ -106,12 +106,12 @@ export async function ensureCache(cacheDir, noUpdate = false) {
   if (noUpdate) return existsSync(ofacPath) ? null : 'no-network';
   let result;
   try {
-    result = await updateSanctions({ cacheDir });
+    result = await downloadSanctions({ cacheDir });
   } catch {
     return 'download-failed';
   }
   if (result.status === 'ok' && existsSync(ofacPath)) return null;
-  return 'download-failed';
+  return result.reason || 'download-failed';
 }
 
 export async function analyse(query, cacheDir = CACHE_DIR, noUpdate = false) {
@@ -139,7 +139,18 @@ export async function analyse(query, cacheDir = CACHE_DIR, noUpdate = false) {
       continue;
     }
     const updated = new Date(statSync(path).mtimeMs).toISOString().slice(0, 10);
-    result.lists_checked.push({ list: listName, updated_at: updated });
+    const entry = { list: listName, updated_at: updated };
+    if (listName === 'OFAC SDN') {
+      try {
+        const meta = JSON.parse(readFileSync(join(cacheDir, 'ofac_sdn.meta.json'), 'utf8'));
+        for (const key of ['source_url', 'list_date', 'list_age_days']) {
+          if (meta[key] !== undefined && meta[key] !== null) entry[key] = meta[key];
+        }
+      } catch {
+        // legacy cache without metadata
+      }
+    }
+    result.lists_checked.push(entry);
     for (const hit of match(query, entries)) {
       result.possible_matches.push({ list: listName, entry: hit.entry, match_type: hit.match_type });
     }

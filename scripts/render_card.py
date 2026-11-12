@@ -20,6 +20,7 @@ import json
 import os
 import re
 import sys
+from urllib.parse import urlparse
 
 from risk_score import load_rules, score as risk_score
 
@@ -65,6 +66,49 @@ INQUIRY_LABELS = {
 }
 
 ACTION_LABELS = ["回复和报价", "寄样和小额投入", "定制和大额备货", "收定金和付款"]
+
+CHECK_LABELS = {"sanctions": "制裁名单", "registry": "注册处", "search": "公开搜索", "map": "地图", "other": "其他检查"}
+REASON_LABELS = {
+    "no-network": "网络失败",
+    "download-failed": "下载失败",
+    "invalid-content": "下载内容不合法",
+    "all-urls-failed": "所有地址失败",
+    "login-wall": "需登录",
+    "timeout": "超时",
+    "stale": "数据陈旧",
+}
+DEFAULT_NEXT_STEPS = {
+    "sanctions": "在 OFAC 官方站按公司名手动查一次",
+    "registry": "在注册处按公司名查登记，或要求对方提供注册证书",
+    "search": "换一个搜索引擎或换关键词再查一次",
+    "map": "在 Google 地图搜公司名，确认建筑和招牌",
+    "other": "人工补查一次",
+}
+INCOMPLETE_COVERAGE = {"sanctions": "sanctions", "registry": "customs", "search": "negative", "map": "map"}
+DATA_SOURCE_LABELS = {"sanctions_list": "制裁名单", "registry": "注册处", "map": "地图", "search": "公开搜索", "website": "官网", "other": "其他"}
+DATA_LABEL_ORDER = ["制裁名单", "注册处", "地图", "公开搜索", "官网", "其他"]
+NEXT_STEPS_DIM = {
+    "company": "在注册处按公司名查登记，或要求对方提供注册证书",
+    "link": "用公司官方渠道的电话或邮箱回访一次该买家",
+    "contact": "比对官网上的联系方式，确认邮箱域名与官网一致",
+    "behavior": "核对对方要求的付款方式和收款账户是否与公司名一致",
+    "compliance": "在官方制裁名单站点按公司名查一次",
+    "scale": "问对方近一年的采购量和主要销售渠道",
+}
+
+
+def collect_data_dates(evidence):
+    values = {}
+    for entry in evidence.get("evidence") or []:
+        if not isinstance(entry, dict):
+            continue
+        date = text(entry.get("data_as_of"))
+        if not re.match(r"^\d{4}-\d{2}-\d{2}$", date):
+            continue
+        label = DATA_SOURCE_LABELS.get(entry.get("source_type"))
+        if label:
+            values[label] = max(values.get(label, ""), date)
+    return [(label, values[label]) for label in DATA_LABEL_ORDER if label in values]
 
 STATUS_TEXT = {"✅": "可以", "⚠️": "有条件", "⛔": "不建议"}
 
@@ -350,7 +394,36 @@ def is_technical(value):
 FORBIDDEN = ["骗子", "诈骗犯", "确定是假的", "一定有问题"]
 SCRIPT_FORBIDDEN = ["核实", "背调", "怀疑", "诈骗"]
 EMAIL_RE = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}")
-PHONE_RE = re.compile(r"\+?\d[\d\s()\-]{8,}\d")
+PHONE_CANDIDATE_RE = re.compile(r"(?:\+|00)\d[\d\s().\-]{4,20}\d|\d[\d\s().\-]{4,20}\d")
+MASKED_PHONE_RE = re.compile(r"(?:\+|00)?\d[\d\s()\-*]*\*[\d\s()\-*]*")
+PHONE_NON_NUMBER_RES = [
+    re.compile(r"\b\d{4}[-/.]\d{1,2}[-/.]\d{1,2}\b"),
+    re.compile(r"\b\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4}\b"),
+    re.compile(r"\d{4}\s*年\s*\d{1,2}\s*月(?:\s*\d{1,2}\s*日)?"),
+    re.compile(r"\b\d{1,2}:\d{2}(?::\d{2})?\b"),
+    re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b"),
+    re.compile(r"\b\d+\.\d+\.\d+(?:\.\d+)?\b"),
+    MASKED_PHONE_RE,
+]
+ID_CONTEXT_RE = re.compile(r"订单|编号|单号|\bID\b|No\.", re.IGNORECASE)
+
+
+def contains_full_phone(value):
+    raw = text(value)
+    cleaned = raw
+    for pattern in PHONE_NON_NUMBER_RES:
+        cleaned = pattern.sub(" ", cleaned)
+    for match in PHONE_CANDIDATE_RE.finditer(cleaned):
+        candidate = match.group(0)
+        digits = sum(1 for char in candidate if char.isdigit())
+        if not (6 <= digits <= 15):
+            continue
+        has_international = candidate.startswith("+") or candidate.startswith("00")
+        has_separator = bool(re.search(r"[\s()\-]", candidate.strip()))
+        if ID_CONTEXT_RE.search(raw) and not has_international and not has_separator:
+            continue
+        return True
+    return False
 
 
 def validate_display(evidence, rules):
@@ -469,6 +542,13 @@ def validate_display(evidence, rules):
                 elif han_length(item) > 12:
                     add("too_long", "open_questions")
 
+    flip_hint = display.get("flip_hint")
+    if flip_hint is not None:
+        if not isinstance(flip_hint, str):
+            add("invalid_type", "flip_hint")
+        elif char_length(flip_hint) > 40:
+            add("too_long", "flip_hint")
+
     texts = []
 
     def push_text(field, value):
@@ -511,7 +591,7 @@ def validate_display(evidence, rules):
             add("forbidden_word", field)
         if EMAIL_RE.search(value):
             add("pii_email", field)
-        if PHONE_RE.search(value):
+        if contains_full_phone(value):
             add("pii_phone", field)
 
     seen = set()
@@ -580,11 +660,212 @@ def inquiry_text(evidence):
     return text(intake.get("inquiry_text") or evidence.get("inquiry_text") or subject.get("inquiry_text"))
 
 
+def validate_checks_incomplete(evidence):
+    raw = evidence.get("checks_incomplete")
+    if raw is None:
+        return [], []
+    if not isinstance(raw, list):
+        return [], [{"code": "invalid-input", "field": "checks_incomplete"}]
+    items = []
+    errors = []
+    for index, item in enumerate(raw):
+        if not isinstance(item, dict):
+            errors.append({"code": "invalid-input", "field": f"checks_incomplete[{index}]"})
+            continue
+        check = item.get("check")
+        reason = item.get("reason")
+        if check not in CHECK_LABELS:
+            errors.append({"code": "invalid-input", "field": f"checks_incomplete[{index}].check"})
+        if reason not in REASON_LABELS:
+            errors.append({"code": "invalid-input", "field": f"checks_incomplete[{index}].reason"})
+        next_step = item.get("next_step")
+        if next_step is None:
+            next_step = DEFAULT_NEXT_STEPS.get(check, "人工补查一次")
+        if not isinstance(next_step, str) or len(next_step) > 40:
+            errors.append({"code": "invalid-input", "field": f"checks_incomplete[{index}].next_step"})
+        items.append({"check": check, "reason": reason, "next_step": next_step})
+    return items, errors
+
+
+SOURCE_GRADE_DEFAULT = {
+    "registry": "official",
+    "sanctions_list": "official",
+    "search": "third_party",
+    "map": "third_party",
+    "website": "self_declared",
+    "user_input": "self_declared",
+    "other": "self_declared",
+}
+GRADE_LABEL = {"official": "官方", "third_party": "第三方", "self_declared": "自述"}
+GRADE_RANK = {"self_declared": 0, "third_party": 1, "official": 2}
+MULTI_SUFFIX = {"co.uk", "org.uk", "ac.uk", "com.au", "net.au", "co.jp", "com.br", "com.cn", "net.cn", "org.cn", "gov.cn", "edu.cn", "com.hk", "com.sg", "com.tw", "co.in", "co.nz"}
+
+
+def url_host(url):
+    try:
+        return urlparse(url).netloc.lower().removeprefix("www.")
+    except ValueError:
+        return ""
+
+
+def registrable_domain(host):
+    parts = host.split(".") if host else []
+    if len(parts) <= 2:
+        return host
+    if ".".join(parts[-2:]) in MULTI_SUFFIX:
+        return ".".join(parts[-3:])
+    return ".".join(parts[-2:])
+
+
+def grade_of(entry):
+    explicit = entry.get("source_grade")
+    if explicit in GRADE_LABEL:
+        return explicit
+    return SOURCE_GRADE_DEFAULT.get(entry.get("source_type"), "self_declared")
+
+
+def apply_evidence_rules(evidence, attention, verified, missing, attention_from_display, verified_from_display):
+    if "evidence" not in evidence:
+        return attention, verified, missing, 0, 0, 0
+    raw = evidence.get("evidence")
+    index = {}
+    duplicates = set()
+    grade_warnings = 0
+    source_to_check = {"sanctions_list": "sanctions", "registry": "registry", "search": "search", "map": "map"}
+    blocked_check_names = {
+        item.get("check")
+        for item in (evidence.get("checks_incomplete") or [])
+        if isinstance(item, dict)
+    }
+    for entry in raw if isinstance(raw, list) else []:
+        if isinstance(entry, dict) and text(entry.get("id")):
+            evidence_id = text(entry.get("id"))
+            if evidence_id in index:
+                duplicates.add(evidence_id)
+            index[evidence_id] = entry
+
+    def evaluate(item, target):
+        nonlocal grade_warnings
+        ids = item.get("evidence_ids")
+        if not isinstance(ids, list) or not ids:
+            return False, "缺证据", None
+        entries = []
+        all_user = True
+        for evidence_id in ids:
+            if not isinstance(evidence_id, str) or not evidence_id or evidence_id in duplicates or evidence_id not in index:
+                return False, "缺证据", None
+            entry = index[evidence_id]
+            if entry.get("source_type") != "user_input":
+                all_user = False
+                if not text(entry.get("url")) or not text(entry.get("retrieved_at")):
+                    return False, "缺证据", None
+            if source_to_check.get(entry.get("source_type")) in blocked_check_names:
+                return False, "本次未完成，不能作为已核实", None
+            entries.append(entry)
+        if target == "verified" and all_user:
+            return False, "客户自述，未证实", None
+        grades = [grade_of(entry) for entry in entries]
+        for entry in entries:
+            default_grade = SOURCE_GRADE_DEFAULT.get(entry.get("source_type"), "self_declared")
+            explicit = entry.get("source_grade")
+            if explicit in GRADE_LABEL and GRADE_RANK.get(explicit, 0) > GRADE_RANK.get(default_grade, 0):
+                grade_warnings += 1
+        if target == "verified":
+            has_official = "official" in grades
+            third_domains = {
+                registrable_domain(url_host(entry.get("url")))
+                for entry, grade in zip(entries, grades)
+                if grade == "third_party" and entry.get("url")
+            }
+            if not has_official and len(third_domains) < 2:
+                return False, "客户自述，未证实", None
+        top = max(grades, key=lambda item: GRADE_RANK.get(item, 0)) if grades else "self_declared"
+        return True, "", GRADE_LABEL[top]
+
+    count = 0
+    if attention:
+        kept = []
+        dropped = []
+        for item in attention:
+            ok, label, grade_label = evaluate(item, "attention")
+            if ok:
+                if grade_label:
+                    item["grade_label"] = grade_label
+                kept.append(item)
+            else:
+                body = text(item.get("text")) or text(item.get("flag_id"))
+                dropped.append({"text": f"（{label}）{body}"})
+        attention = kept
+        missing.extend(dropped)
+        count += len(dropped)
+    if verified_from_display:
+        kept = []
+        dropped = []
+        for item in verified:
+            if not isinstance(item, dict):
+                kept.append(item)
+                continue
+            ok, label, grade_label = evaluate(item, "verified")
+            if ok:
+                if grade_label:
+                    item["grade_label"] = grade_label
+                kept.append(item)
+            else:
+                dropped.append({"text": f"（{label}）{text(item.get('text'))}"})
+        verified = kept
+        missing.extend(dropped)
+        count += len(dropped)
+    overflow = max(0, len(missing) - 2)
+    return attention, verified, missing, count, overflow, grade_warnings
+
+
+def validate_conflicts(evidence):
+    raw = evidence.get("conflicts")
+    if raw is None:
+        return [], []
+    if not isinstance(raw, list):
+        return [], [{"code": "invalid-input", "field": "conflicts"}]
+    evidence_ids = {
+        text(entry.get("id"))
+        for entry in (evidence.get("evidence") or [])
+        if isinstance(entry, dict) and text(entry.get("id"))
+    }
+    items = []
+    errors = []
+    for index, item in enumerate(raw):
+        if not isinstance(item, dict):
+            errors.append({"code": "invalid-input", "field": f"conflicts[{index}]"})
+            continue
+        claims = []
+        for side in ("a", "b"):
+            value = item.get(side)
+            if not isinstance(value, dict):
+                errors.append({"code": "invalid-input", "field": f"conflicts[{index}].{side}"})
+                continue
+            claim = text(value.get("claim"))
+            if not claim or len(claim) > 30:
+                errors.append({"code": "invalid-input", "field": f"conflicts[{index}].{side}.claim"})
+            if text(value.get("evidence_id")) not in evidence_ids:
+                errors.append({"code": "invalid-input", "field": f"conflicts[{index}].{side}.evidence_id"})
+            claims.append(claim)
+        if len(claims) == 2:
+            items.append({"kind": "conflict", "text": f"来源冲突：{claims[0]}，{claims[1]}"})
+    return items, errors
+
+
 def render_card(evidence, rules):
     display = evidence.get("display") or {}
     errors = validate_display(evidence, rules)
     if errors:
         return {"status": "invalid-display", "errors": errors}
+    incomplete, incomplete_errors = validate_checks_incomplete(evidence)
+    if incomplete_errors:
+        return {"status": "invalid-input", "errors": incomplete_errors}
+    if evidence.get("evidence") is not None and not isinstance(evidence.get("evidence"), list):
+        return {"status": "invalid-input", "errors": [{"code": "invalid-input", "field": "evidence"}]}
+    conflicts, conflict_errors = validate_conflicts(evidence)
+    if conflict_errors:
+        return {"status": "invalid-input", "errors": conflict_errors}
 
     ids = flag_ids_of(evidence)
     flag_index = {flag.get("id"): flag for flag in (rules.get("flags") or [])}
@@ -593,6 +874,8 @@ def render_card(evidence, rules):
     coverage = evidence.get("coverage") or {}
     covered = coverage.get("checked")
     total = 8 if coverage.get("total") is None else coverage.get("total")
+    incomplete_coverage = sum(1 for item in incomplete if item.get("check") in INCOMPLETE_COVERAGE)
+    effective_covered = None if covered is None else max(0, covered - incomplete_coverage)
     anchors = anchor_count(evidence)
 
     layers = evidence.get("layers") or {}
@@ -637,13 +920,20 @@ def render_card(evidence, rules):
     conclusion = compute_conclusion(level, actions, first_uncovered)
 
     dim_notes = display.get("dim_notes") or {}
+    new_mode = any(key in evidence for key in ("evidence", "checks_incomplete", "conflicts"))
     dims = []
     for dim in credit["dims"]:
         item = dict(dim)
-        item["note"] = text(dim_notes.get(dim["key"])) or default_dim_note(dim["key"], dim["status"])
+        note = text(dim_notes.get(dim["key"]))
+        if new_mode and dim["status"] == "未核实" and (not note or note == "暂未核实"):
+            note = NEXT_STEPS_DIM.get(dim["key"], "人工补查一次")
+        item["note"] = note or default_dim_note(dim["key"], dim["status"])
         dims.append(item)
     behavior_note = "发现异常交易要求" if behavior_status == "有异常" else "没发现异常交易要求" if behavior_status == "无异常" else "没有询盘原文"
-    dims.insert(3, {"key": "behavior", "label": "交易行为", "status": behavior_status, "symbol": behavior_symbol, "bar": "—", "note": text(dim_notes.get("behavior")) or behavior_note})
+    behavior_display = text(dim_notes.get("behavior"))
+    if new_mode and behavior_status == "未核实" and (not behavior_display or behavior_display == "暂未核实"):
+        behavior_display = NEXT_STEPS_DIM["behavior"]
+    dims.insert(3, {"key": "behavior", "label": "交易行为", "status": behavior_status, "symbol": behavior_symbol, "bar": "—", "note": behavior_display or behavior_note})
 
     flag_attention = [
         {"id": flag_id, "name": flag_index[flag_id].get("name"), "weight": flag_index[flag_id].get("weight", 0)}
@@ -655,6 +945,19 @@ def render_card(evidence, rules):
     raw_attention = display.get("attention")
     if isinstance(raw_attention, list) and raw_attention:
         attention = [dict(item) for item in raw_attention]
+    elif "evidence" in evidence:
+        flag_entries = {
+            text(item.get("id")): item
+            for item in (evidence.get("flags") or [])
+            if isinstance(item, dict) and text(item.get("id"))
+        }
+        attention = []
+        for flag in flag_attention:
+            item = {"kind": "flag", "flag_id": flag["id"], "text": ""}
+            evidence_ids = flag_entries.get(flag["id"], {}).get("evidence_ids")
+            if isinstance(evidence_ids, list) and evidence_ids:
+                item["evidence_ids"] = evidence_ids
+            attention.append(item)
     else:
         attention = [{"kind": "flag", "flag_id": flag["id"], "text": ""} for flag in flag_attention]
     indexed = list(enumerate(attention))
@@ -662,10 +965,27 @@ def render_card(evidence, rules):
     attention = [item for _, item in indexed]
 
     raw_verified = display.get("verified")
+    blocked_checks = {item.get("check") for item in incomplete}
+
+    def check_is_blocked(check_id):
+        if check_id in blocked_checks:
+            return True
+        if check_id in ("registry", "customs") and "registry" in blocked_checks:
+            return True
+        if check_id == "negative" and "search" in blocked_checks:
+            return True
+        return False
+
     if isinstance(raw_verified, list) and raw_verified:
-        verified = [text(item.get("text")) for item in raw_verified if isinstance(item, dict)]
+        verified = [dict(item) for item in raw_verified if isinstance(item, dict)]
+    elif "evidence" in evidence:
+        verified = []
     else:
-        verified = [check_label(check.get("id") or check.get("dimension")) for check in (evidence.get("checks") or []) if isinstance(check, dict) and check.get("result") == "normal"][:3]
+        verified = [
+            check_label(check.get("id") or check.get("dimension"))
+            for check in (evidence.get("checks") or [])
+            if isinstance(check, dict) and check.get("result") == "normal" and not check_is_blocked(check.get("id") or check.get("dimension"))
+        ][:3]
         if not verified:
             verified = ["暂无可列出的已核实项"]
 
@@ -680,6 +1000,17 @@ def render_card(evidence, rules):
         if not missing:
             missing = [{"text": "暂无可补充的公开信息"}]
 
+    attention, verified, missing, evidence_missing, missing_overflow, source_grade_warnings = apply_evidence_rules(
+        evidence,
+        attention,
+        verified,
+        missing,
+        bool(isinstance(raw_attention, list) and raw_attention),
+        bool(isinstance(raw_verified, list) and raw_verified),
+    )
+    if conflicts:
+        attention = attention[: max(0, 3 - min(3, len(conflicts)))] + conflicts[:3]
+
     action_indexed = list(enumerate(item for item in missing if item.get("action")))
     action_indexed.sort(key=lambda pair: (-(pair[1].get("gain") or 0), pair[0]))
     action_rows = [item["action"] for _, item in action_indexed][:4]
@@ -692,8 +1023,23 @@ def render_card(evidence, rules):
     bar = "■" * filled + "□" * (10 - filled)
 
     lines = []
-    lines.append(f"## {color} {level_label} · 风险 {score}/100 {bar} ｜ 核实度 {credit['score']}/100（{credit['tier']}）")
-    lines.append(f"置信度：{confidence}（锚点 {anchors}/3）｜覆盖：{0 if covered is None else covered}/{total}｜未覆盖：{uncovered_text}")
+    benign_id = None
+    if new_mode:
+        flag_items = [item for item in attention if item.get("kind") == "flag" and item.get("flag_id") in flag_index]
+        if flag_items:
+            benign_id = max(flag_items, key=lambda item: flag_index[item["flag_id"]].get("weight", 0)).get("flag_id")
+    incomplete_suffix = f" · 有 {len(incomplete)} 项未完成" if incomplete else ""
+    if level == "需人工核实" and new_mode:
+        lines.append(f"## ⚪ 需人工核实 · 风险 待核实 ｜ 核实度 {credit['score']}/100（{credit['tier']}）{incomplete_suffix}")
+    else:
+        lines.append(f"## {color} {level_label} · 风险 {score}/100 {bar} ｜ 核实度 {credit['score']}/100（{credit['tier']}）{incomplete_suffix}")
+    lines.append(f"置信度：{confidence}（锚点 {anchors}/3）｜覆盖：{0 if effective_covered is None else effective_covered}/{total}｜未覆盖：{uncovered_text}")
+    if incomplete:
+        details = "；".join(
+            f"{CHECK_LABELS.get(item['check'], item['check'])}未完成（{REASON_LABELS.get(item['reason'], item['reason'])}）→ {item['next_step']}"
+            for item in incomplete
+        )
+        lines.append(f"⚠ 本次未完成：{details}")
     lines.append(f"**结论：{conclusion}** 客户：{customer_label(evidence, display)} · {inquiry_label(evidence, display)}")
     lines.append("")
     lines.append("| 动作 | 建议 | 条件 |")
@@ -708,26 +1054,44 @@ def render_card(evidence, rules):
     for dim in dims:
         lines.append(f"| {dim['label']} | {dim['symbol']} {dim['bar']} {dim['status']} | {dim['note']} |")
     lines.append("")
+    data_dates = collect_data_dates(evidence)
+    if data_dates:
+        lines.append("数据日期：" + " · ".join(f"{label} {date}" for label, date in data_dates))
+    flip_hint = text(display.get("flip_hint"))
+    if new_mode and flip_hint:
+        lines.append(f"什么会改变结论：{flip_hint}")
     lines.append("**需要注意**")
     if not attention:
         lines.append("- 未发现需要注意的信号")
     else:
         for item in attention:
+            grade_label = f" [{item.get('grade_label')}]" if item.get("grade_label") else ""
             if item.get("kind") == "flag":
                 info = flag_index.get(item.get("flag_id")) or {"name": item.get("flag_id"), "weight": 0}
                 symbol = "🔴" if info.get("weight", 0) >= 4 else "🟡"
                 body = text(item.get("text"))
-                lines.append(f"- {symbol} {info.get('name')}（{item.get('flag_id')}）{('：' + body) if body else ''}")
+                benign = ""
+                if item.get("flag_id") == benign_id and info.get("benign"):
+                    benign = f" · 可能无害：{info.get('benign')}"
+                lines.append(f"- {symbol} {info.get('name')}（{item.get('flag_id')}）{('：' + body) if body else ''}{grade_label}{benign}")
+            elif item.get("kind") == "conflict":
+                lines.append(f"- ⚠ {text(item.get('text'))}")
             else:
-                lines.append(f"- 🟡 {text(item.get('text'))}")
+                lines.append(f"- 🟡 {text(item.get('text'))}{grade_label}")
     lines.append("")
     lines.append("**已核实**")
     for item in verified[:3]:
-        lines.append(f"- 🟢 {item}")
+        if isinstance(item, dict):
+            grade_label = f" [{item.get('grade_label')}]" if item.get("grade_label") else ""
+            lines.append(f"- 🟢 {text(item.get('text'))}{grade_label}")
+        else:
+            lines.append(f"- 🟢 {item}")
     lines.append("")
     lines.append("**没查到（没查到不代表没问题）**")
     for item in missing[:2]:
         lines.append(f"- ⚪ {text(item.get('text'))}")
+    if missing_overflow:
+        lines.append(f"- ⚪ 另有 {missing_overflow} 项未列出")
     lines.append("")
     if action_rows:
         lines.append("**一次动作**")
@@ -751,7 +1115,10 @@ def render_card(evidence, rules):
         supplement = f"补充{text(action_rows[0].get('label'))}结果后，核实度会更高。" if action_rows else "信息越多，判断越准。"
     punctuation = "" if re.search(r"[。！？]$", supplement) else "。"
     lines.append(f"{supplement}{punctuation}需要完整报告请回复“出完整报告”。")
-    lines.append("仅为基于公开信息的风险提示，不构成法律意见。")
+    if new_mode:
+        lines.append("仅基于公开信息的风险信号筛查，不构成对客户的定性。")
+    else:
+        lines.append("仅为基于公开信息的风险提示，不构成法律意见。")
 
     return {
         "status": "ok",
@@ -762,6 +1129,8 @@ def render_card(evidence, rules):
         "dimensions": dims,
         "actions": actions,
         "conclusion": conclusion,
+        "evidence_missing": evidence_missing,
+        "source_grade_warnings": source_grade_warnings,
         "line_count": len(lines),
         "first_screen_lines": first_screen_lines,
         "card": "\n".join(lines),

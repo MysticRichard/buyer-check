@@ -1,0 +1,6 @@
+{
+  "id": "A43",
+  "title": "Y2 制裁下载内容不合法：返回 invalid-content，旧缓存字节不变",
+  "type": "sanctions_update",
+  "input": { "scenario": "invalid" }
+}
