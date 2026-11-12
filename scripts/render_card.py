@@ -669,7 +669,7 @@ SOURCE_GRADE_DEFAULT = {
 }
 GRADE_LABEL = {"official": "官方", "third_party": "第三方", "self_declared": "自述"}
 GRADE_RANK = {"self_declared": 0, "third_party": 1, "official": 2}
-MULTI_SUFFIX = {"co.uk", "org.uk", "com.au", "co.jp", "com.br", "co.nz"}
+MULTI_SUFFIX = {"co.uk", "org.uk", "ac.uk", "com.au", "net.au", "co.jp", "com.br", "com.cn", "net.cn", "org.cn", "gov.cn", "edu.cn", "com.hk", "com.sg", "com.tw", "co.in", "co.nz"}
 
 
 def url_host(url):
@@ -697,10 +697,11 @@ def grade_of(entry):
 
 def apply_evidence_rules(evidence, attention, verified, missing, attention_from_display, verified_from_display):
     if "evidence" not in evidence:
-        return attention, verified, missing, 0, 0
+        return attention, verified, missing, 0, 0, 0
     raw = evidence.get("evidence")
     index = {}
     duplicates = set()
+    grade_warnings = 0
     for entry in raw if isinstance(raw, list) else []:
         if isinstance(entry, dict) and text(entry.get("id")):
             evidence_id = text(entry.get("id"))
@@ -709,6 +710,7 @@ def apply_evidence_rules(evidence, attention, verified, missing, attention_from_
             index[evidence_id] = entry
 
     def evaluate(item, target):
+        nonlocal grade_warnings
         ids = item.get("evidence_ids")
         if not isinstance(ids, list) or not ids:
             return False, "缺证据", None
@@ -726,6 +728,11 @@ def apply_evidence_rules(evidence, attention, verified, missing, attention_from_
         if target == "verified" and all_user:
             return False, "客户自述，未证实", None
         grades = [grade_of(entry) for entry in entries]
+        for entry in entries:
+            default_grade = SOURCE_GRADE_DEFAULT.get(entry.get("source_type"), "self_declared")
+            explicit = entry.get("source_grade")
+            if explicit in GRADE_LABEL and GRADE_RANK.get(explicit, 0) > GRADE_RANK.get(default_grade, 0):
+                grade_warnings += 1
         if target == "verified":
             has_official = "official" in grades
             third_domains = {
@@ -772,7 +779,7 @@ def apply_evidence_rules(evidence, attention, verified, missing, attention_from_
         missing.extend(dropped)
         count += len(dropped)
     overflow = max(0, len(missing) - 2)
-    return attention, verified, missing, count, overflow
+    return attention, verified, missing, count, overflow, grade_warnings
 
 
 def validate_conflicts(evidence):
@@ -908,10 +915,27 @@ def render_card(evidence, rules):
     attention = [item for _, item in indexed]
 
     raw_verified = display.get("verified")
+    blocked_checks = {item.get("check") for item in incomplete}
+
+    def check_is_blocked(check_id):
+        if check_id in blocked_checks:
+            return True
+        if check_id in ("registry", "customs") and "registry" in blocked_checks:
+            return True
+        if check_id == "negative" and "search" in blocked_checks:
+            return True
+        return False
+
     if isinstance(raw_verified, list) and raw_verified:
         verified = [dict(item) for item in raw_verified if isinstance(item, dict)]
+    elif "evidence" in evidence:
+        verified = []
     else:
-        verified = [check_label(check.get("id") or check.get("dimension")) for check in (evidence.get("checks") or []) if isinstance(check, dict) and check.get("result") == "normal"][:3]
+        verified = [
+            check_label(check.get("id") or check.get("dimension"))
+            for check in (evidence.get("checks") or [])
+            if isinstance(check, dict) and check.get("result") == "normal" and not check_is_blocked(check.get("id") or check.get("dimension"))
+        ][:3]
         if not verified:
             verified = ["暂无可列出的已核实项"]
 
@@ -926,7 +950,7 @@ def render_card(evidence, rules):
         if not missing:
             missing = [{"text": "暂无可补充的公开信息"}]
 
-    attention, verified, missing, evidence_missing, missing_overflow = apply_evidence_rules(
+    attention, verified, missing, evidence_missing, missing_overflow, source_grade_warnings = apply_evidence_rules(
         evidence,
         attention,
         verified,
@@ -935,7 +959,7 @@ def render_card(evidence, rules):
         bool(isinstance(raw_verified, list) and raw_verified),
     )
     if conflicts:
-        attention = attention[: max(0, 3 - len(conflicts))] + conflicts
+        attention = attention[: max(0, 3 - min(3, len(conflicts)))] + conflicts[:3]
 
     action_indexed = list(enumerate(item for item in missing if item.get("action")))
     action_indexed.sort(key=lambda pair: (-(pair[1].get("gain") or 0), pair[0]))
@@ -1056,6 +1080,7 @@ def render_card(evidence, rules):
         "actions": actions,
         "conclusion": conclusion,
         "evidence_missing": evidence_missing,
+        "source_grade_warnings": source_grade_warnings,
         "line_count": len(lines),
         "first_screen_lines": first_screen_lines,
         "card": "\n".join(lines),

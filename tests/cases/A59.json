@@ -1,0 +1,13 @@
+{
+  "id": "A59",
+  "title": "反绕过：带 evidence 时省略 display.verified 不得自动生成已核实；制裁未完成时不得出现“制裁名单没有匹配”",
+  "type": "render_card",
+  "input": { "fixture": "card_bypass.json" },
+  "expect": {
+    "status": "ok",
+    "evidence_missing": 0,
+    "card_excludes": ["- 🟢 公司信息已核实", "- 🟢 制裁名单没有匹配", "- 🟢 域名信息已核实"],
+    "line_count_max": 45,
+    "first_screen_max": 14
+  }
+}

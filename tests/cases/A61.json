@@ -1,0 +1,14 @@
+{
+  "id": "A61",
+  "title": "冲突超过 3 条时只显示前 3 条，保持需要注意 ≤3 与卡片 ≤45 行",
+  "type": "render_card",
+  "input": { "fixture": "card_many_conflicts.json" },
+  "expect": {
+    "status": "ok",
+    "risk_score": 0,
+    "card_includes": ["来源冲突：说法一A，说法一B", "来源冲突：说法三A，说法三B"],
+    "card_excludes": ["来源冲突：说法四A，说法四B"],
+    "line_count_max": 45,
+    "first_screen_max": 14
+  }
+}

@@ -573,7 +573,7 @@ const SOURCE_GRADE_DEFAULT = {
 };
 const GRADE_LABEL = { official: '官方', third_party: '第三方', self_declared: '自述' };
 const GRADE_RANK = { self_declared: 0, third_party: 1, official: 2 };
-const MULTI_SUFFIX = new Set(['co.uk', 'org.uk', 'com.au', 'co.jp', 'com.br', 'co.nz']);
+const MULTI_SUFFIX = new Set(['co.uk', 'org.uk', 'ac.uk', 'com.au', 'net.au', 'co.jp', 'com.br', 'com.cn', 'net.cn', 'org.cn', 'gov.cn', 'edu.cn', 'com.hk', 'com.sg', 'com.tw', 'co.in', 'co.nz']);
 
 function urlHost(url) {
   try {
@@ -597,11 +597,12 @@ function gradeOf(entry) {
 
 function applyEvidenceRules(evidence, attention, verified, missing, attentionFromDisplay, verifiedFromDisplay) {
   if (!('evidence' in evidence)) {
-    return { attention, verified, missing, evidenceMissing: 0, missingOverflow: 0 };
+    return { attention, verified, missing, evidenceMissing: 0, missingOverflow: 0, gradeWarnings: 0 };
   }
   const raw = Array.isArray(evidence.evidence) ? evidence.evidence : [];
   const index = new Map();
   const duplicates = new Set();
+  let gradeWarnings = 0;
   for (const entry of raw) {
     if (entry && typeof entry === 'object' && text(entry.id)) {
       const id = text(entry.id);
@@ -625,6 +626,10 @@ function applyEvidenceRules(evidence, attention, verified, missing, attentionFro
     }
     if (target === 'verified' && allUser) return { ok: false, label: '客户自述，未证实', gradeLabel: null };
     const grades = entries.map(gradeOf);
+    for (const entry of entries) {
+      const defaultGrade = SOURCE_GRADE_DEFAULT[entry.source_type] || 'self_declared';
+      if (GRADE_RANK[entry.source_grade] > GRADE_RANK[defaultGrade]) gradeWarnings += 1;
+    }
     if (target === 'verified') {
       const hasOfficial = grades.includes('official');
       const thirdDomains = new Set(
@@ -672,7 +677,7 @@ function applyEvidenceRules(evidence, attention, verified, missing, attentionFro
     evidenceMissing += dropped.length;
   }
   const missingOverflow = Math.max(0, missing.length - 2);
-  return { attention, verified, missing, evidenceMissing, missingOverflow };
+  return { attention, verified, missing, evidenceMissing, missingOverflow, gradeWarnings };
 }
 
 function validateConflicts(evidence) {
@@ -802,11 +807,20 @@ export function renderCard(evidence, rules) {
     .map(({ item }) => item);
 
   let verified = [];
+  const blockedChecks = new Set(incomplete.items.map((item) => item.check));
+  const checkIsBlocked = (checkId) => {
+    if (blockedChecks.has(checkId)) return true;
+    if ((checkId === 'registry' || checkId === 'customs') && blockedChecks.has('registry')) return true;
+    if (checkId === 'negative' && blockedChecks.has('search')) return true;
+    return false;
+  };
   if (Array.isArray(display.verified) && display.verified.length > 0) {
     verified = display.verified.filter((item) => item && typeof item === 'object').map((item) => ({ ...item }));
+  } else if ('evidence' in evidence) {
+    verified = [];
   } else {
     verified = (evidence.checks || [])
-      .filter((check) => check && check.result === 'normal')
+      .filter((check) => check && check.result === 'normal' && !checkIsBlocked(check.id || check.dimension))
       .slice(0, 3)
       .map((check) => checkLabel(check.id || check.dimension));
     if (verified.length === 0) verified = ['暂无可列出的已核实项'];
@@ -835,7 +849,7 @@ export function renderCard(evidence, rules) {
   verified = applied.verified;
   missing = applied.missing;
   if (conflicts.items.length > 0) {
-    attention = attention.slice(0, Math.max(0, 3 - conflicts.items.length)).concat(conflicts.items);
+    attention = attention.slice(0, Math.max(0, 3 - Math.min(3, conflicts.items.length))).concat(conflicts.items.slice(0, 3));
   }
 
   const actionRows = missing
@@ -956,6 +970,7 @@ export function renderCard(evidence, rules) {
     actions,
     conclusion,
     evidence_missing: applied.evidenceMissing,
+    source_grade_warnings: applied.gradeWarnings,
     line_count: lines.length,
     first_screen_lines: firstScreenLines,
     card: lines.join('\n'),
