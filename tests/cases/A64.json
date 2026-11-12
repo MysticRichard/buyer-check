@@ -1,0 +1,14 @@
+{
+  "id": "A64",
+  "title": "反绕过：制裁未完成时，显式“制裁名单没有匹配”不得进入已核实",
+  "type": "render_card",
+  "input": { "fixture": "card_explicit_blocked.json" },
+  "expect": {
+    "status": "ok",
+    "evidence_missing": 1,
+    "card_excludes": ["- 🟢 制裁名单没有匹配"],
+    "card_includes": ["（本次未完成，不能作为已核实）制裁名单没有匹配", "⚠ 本次未完成：制裁名单未完成（下载失败）"],
+    "line_count_max": 45,
+    "first_screen_max": 14
+  }
+}

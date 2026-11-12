@@ -603,6 +603,8 @@ function applyEvidenceRules(evidence, attention, verified, missing, attentionFro
   const index = new Map();
   const duplicates = new Set();
   let gradeWarnings = 0;
+  const sourceToCheck = { sanctions_list: 'sanctions', registry: 'registry', search: 'search', map: 'map' };
+  const blockedCheckNames = new Set((evidence.checks_incomplete || []).filter((item) => item && typeof item === 'object').map((item) => item.check));
   for (const entry of raw) {
     if (entry && typeof entry === 'object' && text(entry.id)) {
       const id = text(entry.id);
@@ -622,6 +624,7 @@ function applyEvidenceRules(evidence, attention, verified, missing, attentionFro
         allUser = false;
         if (!text(entry.url) || !text(entry.retrieved_at)) return { ok: false, label: '缺证据', gradeLabel: null };
       }
+      if (blockedCheckNames.has(sourceToCheck[entry.source_type])) return { ok: false, label: '本次未完成，不能作为已核实', gradeLabel: null };
       entries.push(entry);
     }
     if (target === 'verified' && allUser) return { ok: false, label: '客户自述，未证实', gradeLabel: null };
@@ -794,6 +797,13 @@ export function renderCard(evidence, rules) {
   let attention = [];
   if (Array.isArray(display.attention) && display.attention.length > 0) {
     attention = display.attention.map((item) => ({ ...item }));
+  } else if ('evidence' in evidence) {
+    const flagEntries = new Map((evidence.flags || []).filter((item) => item && typeof item === 'object' && text(item.id)).map((item) => [text(item.id), item]));
+    attention = [];
+    for (const flag of flagAttention) {
+      const ids = (flagEntries.get(flag.id) || {}).evidence_ids;
+      if (Array.isArray(ids) && ids.length > 0) attention.push({ kind: 'flag', flag_id: flag.id, text: '', evidence_ids: ids });
+    }
   } else {
     attention = flagAttention.map((flag) => ({ kind: 'flag', flag_id: flag.id, text: '' }));
   }

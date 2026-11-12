@@ -702,6 +702,12 @@ def apply_evidence_rules(evidence, attention, verified, missing, attention_from_
     index = {}
     duplicates = set()
     grade_warnings = 0
+    source_to_check = {"sanctions_list": "sanctions", "registry": "registry", "search": "search", "map": "map"}
+    blocked_check_names = {
+        item.get("check")
+        for item in (evidence.get("checks_incomplete") or [])
+        if isinstance(item, dict)
+    }
     for entry in raw if isinstance(raw, list) else []:
         if isinstance(entry, dict) and text(entry.get("id")):
             evidence_id = text(entry.get("id"))
@@ -724,6 +730,8 @@ def apply_evidence_rules(evidence, attention, verified, missing, attention_from_
                 all_user = False
                 if not text(entry.get("url")) or not text(entry.get("retrieved_at")):
                     return False, "缺证据", None
+            if source_to_check.get(entry.get("source_type")) in blocked_check_names:
+                return False, "本次未完成，不能作为已核实", None
             entries.append(entry)
         if target == "verified" and all_user:
             return False, "客户自述，未证实", None
@@ -908,6 +916,17 @@ def render_card(evidence, rules):
     raw_attention = display.get("attention")
     if isinstance(raw_attention, list) and raw_attention:
         attention = [dict(item) for item in raw_attention]
+    elif "evidence" in evidence:
+        flag_entries = {
+            text(item.get("id")): item
+            for item in (evidence.get("flags") or [])
+            if isinstance(item, dict) and text(item.get("id"))
+        }
+        attention = []
+        for flag in flag_attention:
+            evidence_ids = flag_entries.get(flag["id"], {}).get("evidence_ids")
+            if isinstance(evidence_ids, list) and evidence_ids:
+                attention.append({"kind": "flag", "flag_id": flag["id"], "text": "", "evidence_ids": evidence_ids})
     else:
         attention = [{"kind": "flag", "flag_id": flag["id"], "text": ""} for flag in flag_attention]
     indexed = list(enumerate(attention))

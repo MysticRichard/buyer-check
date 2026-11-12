@@ -1,0 +1,37 @@
+{
+  "subject": { "company": "ACME TRADING LTD", "country": "AE" },
+  "stage": "inquiry",
+  "checks": [],
+  "flags": [{ "id": "RF-PAY-001" }],
+  "anchors": { "closure": "single" },
+  "coverage": { "checked": 7, "total": 8, "uncovered": [] },
+  "confidence": "中",
+  "layers": {
+    "company": { "credibility": "medium" },
+    "person_company_link": { "strength": "none" },
+    "person_authenticity": { "level": "unknown" },
+    "contact": { "phone_matches": false, "business_email": true, "domain_aged": true },
+    "compliance": { "sanctions": "unchecked", "negative": "unchecked" },
+    "scale": { "map": "unknown", "customs": "unknown" }
+  },
+  "score": { "risk_score": 70, "level": "高" },
+  "evidence": [],
+  "checks_incomplete": [],
+  "display": {
+    "customer_label": "ACME TRADING LTD",
+    "inquiry_type": "一般询盘",
+    "dim_notes": {
+      "company": "官网已核对",
+      "link": "暂未核实",
+      "contact": "邮箱域名与官网一致",
+      "behavior": "要求先付款",
+      "compliance": "制裁名单未更新",
+      "scale": "地图和海关都没查到"
+    },
+    "attention": [],
+    "verified": [],
+    "missing": [{ "text": "原有没查到" }],
+    "open_questions": [],
+    "scripts": []
+  }
+}
