@@ -2,6 +2,14 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与语义化版本。迭代方案见 [docs/iteration_plan.md](docs/iteration_plan.md)（v0.4.1–v0.6.0）、[docs/iteration_plan_v0.7.md](docs/iteration_plan_v0.7.md)（v0.7.0）、[docs/iteration_plan_v0.8.md](docs/iteration_plan_v0.8.md)（v0.8.0）与 [docs/iteration_plan_v0.9.md](docs/iteration_plan_v0.9.md)（v0.9.0，含 v0.8.1）。
 
+## [0.9.2] - 2026-11-13
+
+### 修复
+
+- **域名过新不再被当作积极矛盾**：`RF-DOM-002` 仍是风险信号（权重 3），但不再把公司真实度/联系方式完成度清零；新增 A67 回归，域名仅 42 天的真实询盘核实度恢复为 59（中），寄样恢复为 ✅。
+- **手机号 PII 检测不再写死长度**：排除日期、时间、IP、版本号、订单号、RNC/税号/注册号等 ID 与已打码号码后，识别 6–15 位电话候选；覆盖阿曼/黎巴嫩/美国/中国/UAE 手机与座机，RNC 101657342 与 1-01-65734-2 不误判；A66 扩展。
+- 版本号 0.9.2；评分公式、23 红旗编号/权重/触发条件、分档、覆盖分母 8 未改；精简包仍 28 文件。
+
 ## [0.9.1] - 2026-11-11
 
 ### 新增：可信度增强（R1–R11）

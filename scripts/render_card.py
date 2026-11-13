@@ -51,8 +51,8 @@ REASON_TEXT = {
     "no-company-level-data": "该国无公开数据",
 }
 
-COMPANY_CONTRA = ["RF-DOM-001", "RF-DOM-002", "RF-CORP-001", "RF-CORP-002", "RF-CORP-003", "RF-CORP-004", "RF-CORP-006", "RF-NEG-001", "RF-SAN-001"]
-CONTACT_CONTRA = ["RF-DOM-001", "RF-DOM-002", "RF-MAIL-001", "RF-CORP-005"]
+COMPANY_CONTRA = ["RF-DOM-001", "RF-CORP-001", "RF-CORP-002", "RF-CORP-003", "RF-CORP-004", "RF-CORP-006", "RF-NEG-001", "RF-SAN-001"]
+CONTACT_CONTRA = ["RF-DOM-001", "RF-MAIL-001", "RF-CORP-005"]
 SCALE_CONTRA = ["RF-CORP-002", "RF-CORP-004"]
 LINK_CONTRA = ["RF-ID-002"]
 
@@ -403,9 +403,10 @@ PHONE_NON_NUMBER_RES = [
     re.compile(r"\b\d{1,2}:\d{2}(?::\d{2})?\b"),
     re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b"),
     re.compile(r"\b\d+\.\d+\.\d+(?:\.\d+)?\b"),
+    re.compile(r"\b\d{1,2}-\d{2}-\d{4,5}-\d\b"),
     MASKED_PHONE_RE,
 ]
-ID_CONTEXT_RE = re.compile(r"订单|编号|单号|\bID\b|No\.", re.IGNORECASE)
+ID_CONTEXT_RE = re.compile(r"订单|编号|单号|\bID\b|No\.|RNC|EIN|VAT|CIF|NIF|税号|注册号|登记号|执照|营业执照", re.IGNORECASE)
 
 
 def contains_full_phone(value):
