@@ -769,7 +769,8 @@ function withinYears(dataAsOf, asOf, years) {
 function deriveFlags(evidence) {
   const derived = [];
   const capabilities = evidence.capabilities || {};
-  const full = capabilities.tier === undefined || capabilities.tier === 'full';
+  const tier = capabilities.tier;
+  const full = tier === undefined || tier === 'full';
   const asOf = evidence.as_of || '9999-12-31';
   const evidenceIndex = new Map((evidence.evidence || []).filter((item) => item && typeof item === 'object' && text(item.id)).map((item) => [text(item.id), item]));
   const add = (id, evidenceIds = []) => {
@@ -783,12 +784,14 @@ function deriveFlags(evidence) {
     if (ids.length === 0 || ids.some((id) => !evidenceIndex.has(id))) return false;
     return withinYears(item.data_as_of, asOf, years);
   };
-  for (const item of evidence.footprint || []) {
+  for (const item of (tier === 'offline' ? [] : (evidence.footprint || []))) {
     if (!item || typeof item !== 'object') continue;
+    let grade = item.source_grade;
+    if (tier === 'search-only' && grade === 'official') grade = 'third_party';
     if (item.probe === 'enforcement' && ['accused', 'regulator_action'].includes(item.role) && item.category === 'fraud' && eligible(item, true, 5)) add('RF-FOOT-001', item.evidence_ids);
     else if (item.probe === 'debarment' && eligible(item, true, 3)) add('RF-FOOT-002', item.evidence_ids);
     else if (item.probe === 'tender' && ['accused', 'regulator_action'].includes(item.role) && item.category === 'fraud' && eligible(item, true, 5)) add('RF-FOOT-003', item.evidence_ids);
-    else if (['news', 'forum'].includes(item.probe) && item.role === 'accused' && item.source_grade === 'third_party' && eligible(item, false, 5)) {
+    else if (['news', 'forum'].includes(item.probe) && item.role === 'accused' && grade === 'third_party' && eligible(item, false, 5)) {
       const domains = new Set();
       for (const id of item.evidence_ids || []) {
         const entry = evidenceIndex.get(text(id)) || {};
@@ -796,7 +799,7 @@ function deriveFlags(evidence) {
         if (domain) domains.add(domain);
       }
       if (domains.size >= 2) add('RF-FOOT-004', item.evidence_ids);
-    } else if (item.probe === 'scale' && ['official', 'third_party'].includes(item.source_grade) && eligible(item, false, 5) && Number(item.scale_ratio || 0) >= 10) {
+    } else if (item.probe === 'scale' && ['official', 'third_party'].includes(grade) && eligible(item, false, 5) && Number(item.scale_ratio || 0) >= 10) {
       add('RF-FOOT-005', item.evidence_ids);
     }
   }
@@ -899,6 +902,8 @@ function checkLines(evidence) {
 }
 
 function footprintLines(evidence) {
+  const tier = (evidence.capabilities || {}).tier;
+  if (tier === 'offline') return [];
   const items = (evidence.footprint || []).filter((item) => item && typeof item === 'object' && item.result === 'hit');
   if (!items.length) return [];
   const lowConfidence = text(evidence.confidence) === '低';
@@ -907,14 +912,16 @@ function footprintLines(evidence) {
     const probe = text(item.probe);
     const label = FOOTPRINT_LABELS[probe] || '公开记录';
     const summary = (text(item.summary) || '命中公开记录').replace(/\|/g, '/');
-    const grade = SOURCE_GRADE_LABELS[text(item.source_grade)];
+    let gradeKey = text(item.source_grade);
+    if (tier === 'search-only' && gradeKey === 'official') gradeKey = 'third_party';
+    const grade = SOURCE_GRADE_LABELS[gradeKey];
     const suffix = grade ? ` [${grade}]` : '';
     const keys = (item.matched_keys || []).filter((key) => text(key)).map((key) => MATCH_KEY_LABELS[text(key)] || text(key));
     const strong = (
       !lowConfidence
       && text(item.subject) === 'company'
       && ['accused', 'regulator_action', 'registered_entity'].includes(text(item.role))
-      && text(item.source_grade) === 'official'
+      && gradeKey === 'official'
       && keys.length >= 2
     );
     if (strong) {

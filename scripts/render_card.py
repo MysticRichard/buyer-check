@@ -886,7 +886,8 @@ def within_years(data_as_of, as_of, years):
 def derive_flags(evidence):
     derived = []
     capabilities = evidence.get("capabilities") or {}
-    full = capabilities.get("tier") in (None, "full")
+    tier = capabilities.get("tier")
+    full = tier in (None, "full")
     as_of = evidence.get("as_of") or "9999-12-31"
     evidence_index = {
         text(item.get("id")): item
@@ -911,18 +912,21 @@ def derive_flags(evidence):
             return False
         return within_years(item.get("data_as_of"), as_of, years)
 
-    for item in evidence.get("footprint") or []:
+    for item in ([] if tier == "offline" else (evidence.get("footprint") or [])):
         if not isinstance(item, dict):
             continue
         probe = item.get("probe")
         role = item.get("role")
+        grade = item.get("source_grade")
+        if tier == "search-only" and grade == "official":
+            grade = "third_party"
         if probe == "enforcement" and role in ("accused", "regulator_action") and item.get("category") == "fraud" and eligible(item, True, 5):
             add("RF-FOOT-001", item.get("evidence_ids"))
         elif probe == "debarment" and eligible(item, True, 3):
             add("RF-FOOT-002", item.get("evidence_ids"))
         elif probe == "tender" and role in ("accused", "regulator_action") and item.get("category") == "fraud" and eligible(item, True, 5):
             add("RF-FOOT-003", item.get("evidence_ids"))
-        elif probe in ("news", "forum") and role == "accused" and item.get("source_grade") == "third_party" and eligible(item, False, 5):
+        elif probe in ("news", "forum") and role == "accused" and grade == "third_party" and eligible(item, False, 5):
             domains = set()
             for eid in item.get("evidence_ids") or []:
                 entry = evidence_index.get(text(eid)) or {}
@@ -931,7 +935,7 @@ def derive_flags(evidence):
                     domains.add(domain)
             if len(domains) >= 2:
                 add("RF-FOOT-004", item.get("evidence_ids"))
-        elif probe == "scale" and item.get("source_grade") in ("official", "third_party") and eligible(item, False, 5):
+        elif probe == "scale" and grade in ("official", "third_party") and eligible(item, False, 5):
             try:
                 ratio = float(item.get("scale_ratio") or 0)
             except (TypeError, ValueError):
@@ -1313,6 +1317,9 @@ def check_lines(evidence):
 
 
 def footprint_lines(evidence):
+    tier = (evidence.get("capabilities") or {}).get("tier")
+    if tier == "offline":
+        return []
     items = [item for item in evidence.get("footprint") or [] if isinstance(item, dict) and item.get("result") == "hit"]
     if not items:
         return []
@@ -1323,14 +1330,17 @@ def footprint_lines(evidence):
         label = FOOTPRINT_LABELS.get(probe, "公开记录")
         summary = text(item.get("summary")) or "命中公开记录"
         summary = summary.replace("|", "/")
-        grade = SOURCE_GRADE_LABELS.get(text(item.get("source_grade")))
+        grade_key = text(item.get("source_grade"))
+        if tier == "search-only" and grade_key == "official":
+            grade_key = "third_party"
+        grade = SOURCE_GRADE_LABELS.get(grade_key)
         suffix = f" [{grade}]" if grade else ""
         keys = [MATCH_KEY_LABELS.get(text(key), text(key)) for key in item.get("matched_keys") or [] if text(key)]
         strong = (
             not low_confidence
             and text(item.get("subject")) == "company"
             and text(item.get("role")) in ("accused", "regulator_action", "registered_entity")
-            and text(item.get("source_grade")) == "official"
+            and grade_key == "official"
             and len(keys) >= 2
         )
         if strong:
