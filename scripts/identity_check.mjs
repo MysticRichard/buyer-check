@@ -773,6 +773,54 @@ function idcheckCommand(args) {
   return { status: 'ok', command: 'idcheck', country, type: idType, masked: maskId(value), format_ok: formatOk, checksum_ok: checksumOk, entity_type: entityType, name_suffix_consistent: nameSuffixConsistent, state_code: stateCode, notes, mode: 'offline', rule_verification: rule.verification || 'unverified' };
 }
 
+const MATCH_KEY_TYPES = ['legal_name', 'address', 'tax_id_masked', 'phone', 'domain', 'person_name', 'registration_no'];
+
+function normalizeMatchValue(key, value) {
+  const raw = value === null || value === undefined ? '' : String(value).trim().toLowerCase();
+  if (key === 'phone') return raw.replace(/\D/g, '');
+  if (key === 'domain') return raw.replace(/^www\./, '');
+  if (key === 'tax_id_masked' || key === 'registration_no') return raw.replace(/[^0-9a-z]/g, '');
+  return raw.replace(/[^0-9a-z\u4e00-\u9fff ]/g, '').replace(/\s+/g, ' ').trim();
+}
+
+function loadMatchKeys(payload) {
+  if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+    return MATCH_KEY_TYPES.filter((key) => key in payload).map((key) => [key, payload[key]]);
+  }
+  if (Array.isArray(payload)) {
+    return payload.filter((item) => item && typeof item === 'object' && MATCH_KEY_TYPES.includes(item.key)).map((item) => [item.key, item.value]);
+  }
+  return [];
+}
+
+function matchCommand(args) {
+  let buyer;
+  let candidate;
+  try {
+    buyer = loadMatchKeys(JSON.parse(readFileSync(args.buyerJson, 'utf8')));
+    candidate = loadMatchKeys(JSON.parse(readFileSync(args.candidateJson, 'utf8')));
+  } catch {
+    return { status: 'invalid-input', error: 'invalid match input' };
+  }
+  const buyerMap = new Map(buyer.filter(([, value]) => value !== null && value !== undefined).map(([key, value]) => [key, normalizeMatchValue(key, value)]));
+  const candidateMap = new Map(candidate.filter(([, value]) => value !== null && value !== undefined).map(([key, value]) => [key, normalizeMatchValue(key, value)]));
+  const keys = [...buyerMap.keys()].filter((key) => candidateMap.has(key) && buyerMap.get(key) && buyerMap.get(key) === candidateMap.get(key)).sort();
+  const matched = (keys.includes('legal_name') && keys.length >= 2) || (keys.includes('domain') && keys.includes('phone'));
+  let reason;
+  let strength;
+  if (!matched) {
+    reason = keys.length === 1 && keys[0] === 'legal_name' ? 'only-name' : 'fewer-than-two-independent-keys';
+    strength = 'weak';
+  } else if (keys.length >= 3 || (keys.includes('legal_name') && (keys.includes('registration_no') || keys.includes('tax_id_masked')))) {
+    reason = keys.includes('legal_name') ? 'name-plus-strong-key' : 'domain-plus-phone';
+    strength = 'strong';
+  } else {
+    reason = keys.includes('legal_name') ? 'name-plus-other' : 'domain-plus-phone';
+    strength = 'medium';
+  }
+  return { status: 'ok', matched, keys_matched: keys, strength, reason };
+}
+
 function usage() {
   return [
     'Usage: node identity_check.mjs site [--domain DOMAIN] [--html-file FILE] [--online]',
@@ -782,12 +830,13 @@ function usage() {
     '       node identity_check.mjs registry --company NAME [--country NO] [--claimed-country NO] [--online | --fixture-json FILE]',
     '       node identity_check.mjs country --code IN',
     '       node identity_check.mjs idcheck --country IN --type gstin --value 27AAACA0000A1ZY [--company-name NAME] [--claimed-state STATE]',
+    '       node identity_check.mjs match --buyer-json FILE --candidate-json FILE',
   ].join('\n');
 }
 
 function parseArgs(argv) {
   const command = argv[0];
-  const args = { command, domain: null, htmlFile: null, online: false, maxPages: 4, delay: 1, timeout: 10, text: '', paths: [], company: null, phone: null, country: null, claimedCountry: null, countryCode: null, googleKey: null, fixtureJson: null, fixtureSource: 'google_places', limit: 5, countryForId: null, idType: null, idValue: null, companyName: null, claimedState: null };
+  const args = { command, domain: null, htmlFile: null, online: false, maxPages: 4, delay: 1, timeout: 10, text: '', paths: [], company: null, phone: null, country: null, claimedCountry: null, countryCode: null, googleKey: null, fixtureJson: null, fixtureSource: 'google_places', limit: 5, countryForId: null, idType: null, idValue: null, companyName: null, claimedState: null, buyerJson: null, candidateJson: null };
   for (let i = 1; i < argv.length; i += 1) {
     const token = argv[i];
     if (token === '--domain') args.domain = argv[++i];
@@ -806,6 +855,8 @@ function parseArgs(argv) {
     else if (token === '--value') args.idValue = argv[++i];
     else if (token === '--company-name') args.companyName = argv[++i];
     else if (token === '--claimed-state') args.claimedState = argv[++i];
+    else if (token === '--buyer-json') args.buyerJson = argv[++i];
+    else if (token === '--candidate-json') args.candidateJson = argv[++i];
     else if (token === '--google-key') args.googleKey = argv[++i];
     else if (token === '--fixture-json') args.fixtureJson = argv[++i];
     else if (token === '--fixture-source') args.fixtureSource = argv[++i];
@@ -817,7 +868,7 @@ function parseArgs(argv) {
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
-  if (!['site', 'backlink', 'image', 'map', 'registry', 'country', 'idcheck'].includes(args.command)) {
+  if (!['site', 'backlink', 'image', 'map', 'registry', 'country', 'idcheck', 'match'].includes(args.command)) {
     console.log(JSON.stringify({ status: 'unavailable', error: 'unknown or missing subcommand' }));
     return 2;
   }
@@ -828,6 +879,7 @@ async function main() {
   else if (args.command === 'registry') result = await registryCommand(args);
   else if (args.command === 'country') result = countryCommand(args);
   else if (args.command === 'idcheck') result = idcheckCommand(args);
+  else if (args.command === 'match') result = matchCommand(args);
   else result = await imageCommand(args);
   console.log(JSON.stringify(result));
   return ['ok', 'found', 'not-found', 'ambiguous', 'offline', 'not-in-matrix', 'no-rule'].includes(result.status) ? 0 : 1;

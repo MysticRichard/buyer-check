@@ -928,6 +928,32 @@ async phone_pii(testCase) {
     return { ok: calls.every((item) => item.ok), actual: calls };
   },
 
+  match(testCase) {
+    const python = findPython();
+    const [pyCmd, ...pyRest] = (python || '').split(' ');
+    const jsScript = join(ROOT, 'scripts', 'identity_check.mjs');
+    const outcomes = (testCase.input.cases || []).map((entry) => {
+      const dir = mkdtempSync(join(tmpdir(), 'buyer-check-match-'));
+      const buyer = join(dir, 'buyer.json');
+      const candidate = join(dir, 'candidate.json');
+      writeFileSync(buyer, JSON.stringify(entry.buyer), 'utf8');
+      writeFileSync(candidate, JSON.stringify(entry.candidate), 'utf8');
+      const args = ['match', '--buyer-json', buyer, '--candidate-json', candidate];
+      const py = spawnSync(pyCmd, [...pyRest, join(ROOT, 'scripts', 'identity_check.py'), ...args], { cwd: ROOT, encoding: 'utf8', timeout: 30000 });
+      const js = existsSync(jsScript) ? spawnSync('node', [jsScript, ...args], { cwd: ROOT, encoding: 'utf8', timeout: 30000 }) : null;
+      const pyResult = py.stdout ? JSON.parse(py.stdout) : null;
+      const jsResult = js && js.stdout ? JSON.parse(js.stdout) : null;
+      const expect = entry.expect || {};
+      const ok = pyResult && pyResult.status === 'ok'
+        && pyResult.matched === expect.matched
+        && (!expect.strength || pyResult.strength === expect.strength)
+        && (!expect.keys || isDeepStrictEqual(pyResult.keys_matched, expect.keys))
+        && (!jsResult || (jsResult.matched === pyResult.matched && isDeepStrictEqual(jsResult.keys_matched, pyResult.keys_matched) && jsResult.strength === pyResult.strength));
+      return { name: entry.name, ok, py: pyResult, js: jsResult };
+    });
+    return { ok: outcomes.every((item) => item.ok), actual: outcomes };
+  },
+
   manual() {
     return { ok: true, skipped: true, actual: 'requires live network / model behaviour' };
   },

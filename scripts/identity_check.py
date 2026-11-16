@@ -805,6 +805,52 @@ def idcheck_command(args):
     }
 
 
+MATCH_KEY_TYPES = ("legal_name", "address", "tax_id_masked", "phone", "domain", "person_name", "registration_no")
+
+
+def normalize_match_value(key, value):
+    raw = "" if value is None else str(value).strip().lower()
+    if key == "phone":
+        return re.sub(r"\D", "", raw)
+    if key == "domain":
+        return raw.replace("www.", "", 1)
+    if key in ("tax_id_masked", "registration_no"):
+        return re.sub(r"[^0-9a-z]", "", raw)
+    return re.sub(r"\s+", " ", re.sub(r"[^0-9a-z\u4e00-\u9fff ]", "", raw)).strip()
+
+
+def load_match_keys(payload):
+    if isinstance(payload, dict):
+        return [(key, payload[key]) for key in MATCH_KEY_TYPES if key in payload]
+    if isinstance(payload, list):
+        return [(item.get("key"), item.get("value")) for item in payload if isinstance(item, dict) and item.get("key") in MATCH_KEY_TYPES]
+    return []
+
+
+def match_command(args):
+    try:
+        with open(args.buyer_json, "r", encoding="utf-8") as handle:
+            buyer = load_match_keys(json.load(handle))
+        with open(args.candidate_json, "r", encoding="utf-8") as handle:
+            candidate = load_match_keys(json.load(handle))
+    except (OSError, ValueError, TypeError):
+        return {"status": "invalid-input", "error": "invalid match input"}
+    buyer_map = {key: normalize_match_value(key, value) for key, value in buyer if value is not None}
+    candidate_map = {key: normalize_match_value(key, value) for key, value in candidate if value is not None}
+    keys = sorted(key for key in buyer_map if key in candidate_map and buyer_map[key] and buyer_map[key] == candidate_map[key])
+    matched = ("legal_name" in keys and len(keys) >= 2) or ("domain" in keys and "phone" in keys)
+    if not matched:
+        reason = "only-name" if keys == ["legal_name"] else "fewer-than-two-independent-keys"
+        strength = "weak"
+    elif len(keys) >= 3 or ("legal_name" in keys and any(key in keys for key in ("registration_no", "tax_id_masked"))):
+        reason = "name-plus-strong-key" if "legal_name" in keys else "domain-plus-phone"
+        strength = "strong"
+    else:
+        reason = "name-plus-other" if "legal_name" in keys else "domain-plus-phone"
+        strength = "medium"
+    return {"status": "ok", "matched": matched, "keys_matched": keys, "strength": strength, "reason": reason}
+
+
 def build_parser():
     parser = argparse.ArgumentParser(description="buyer-check identity helpers (site/backlink/image).")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -853,6 +899,10 @@ def build_parser():
     idcheck.add_argument("--value", required=True)
     idcheck.add_argument("--company-name", dest="company_name")
     idcheck.add_argument("--claimed-state", dest="claimed_state")
+
+    match = sub.add_parser("match", help="deterministic entity matching gate")
+    match.add_argument("--buyer-json", required=True)
+    match.add_argument("--candidate-json", required=True)
     return parser
 
 
@@ -870,6 +920,8 @@ def main(argv=None):
         result = country_command(args)
     elif args.command == "idcheck":
         result = idcheck_command(args)
+    elif args.command == "match":
+        result = match_command(args)
     else:
         result = image_command(args)
     print(json.dumps(result, ensure_ascii=False))

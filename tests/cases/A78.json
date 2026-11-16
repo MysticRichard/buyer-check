@@ -1,0 +1,15 @@
+{
+  "id": "A78",
+  "title": "Z9 实体匹配门：只有名称不算匹配；名称+税号、域名+电话才通过",
+  "type": "match",
+  "input": {
+    "cases": [
+      { "name": "same-name-different-address", "buyer": { "legal_name": "Acme Trading", "address": "Dubai" }, "candidate": { "legal_name": "Acme Trading", "address": "Sharjah" }, "expect": { "matched": false, "strength": "weak" } },
+      { "name": "same-address-different-name", "buyer": { "legal_name": "Acme Trading", "address": "Dubai" }, "candidate": { "legal_name": "Other Trading", "address": "Dubai" }, "expect": { "matched": false, "strength": "weak" } },
+      { "name": "name-plus-tax", "buyer": { "legal_name": "Acme Trading", "tax_id_masked": "27••••••ZY" }, "candidate": { "legal_name": "Acme Trading", "tax_id_masked": "27••••••ZY" }, "expect": { "matched": true, "strength": "strong", "keys": ["legal_name", "tax_id_masked"] } },
+      { "name": "domain-plus-phone", "buyer": { "domain": "acme.example", "phone": "+971 50 555 0100" }, "candidate": { "domain": "www.acme.example", "phone": "971505550100" }, "expect": { "matched": true, "strength": "medium", "keys": ["domain", "phone"] } },
+      { "name": "only-name", "buyer": { "legal_name": "Acme Trading" }, "candidate": { "legal_name": "Acme Trading" }, "expect": { "matched": false, "strength": "weak" } }
+    ]
+  },
+  "expect": { "all_pass": true }
+}
