@@ -1,0 +1,22 @@
+{
+  "id": "A67",
+  "title": "域名过新是风险信号但不是积极矛盾：不得把公司/联系方式完成度清零",
+  "type": "render_card",
+  "input": { "fixture": "card_new_domain.json" },
+  "expect": {
+    "status": "ok",
+    "credit": 59,
+    "credit_tier": "中",
+    "risk_score": 27,
+    "level": "低",
+    "card_excludes": ["有矛盾"],
+    "card_includes": [
+      "| 寄样和小额投入 | ✅ 可以 | |",
+      "| 定制和大额备货 | ⚠️ 有条件 |",
+      "| 公司真实度 | ✅ ■■■□□ 基本核实 |",
+      "| 联系方式 | ✅ ■■■□□ 基本核实 |"
+    ],
+    "line_count_max": 45,
+    "first_screen_max": 14
+  }
+}

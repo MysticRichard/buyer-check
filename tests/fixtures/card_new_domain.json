@@ -1,0 +1,45 @@
+{
+  "subject": { "company": "ACME TRADING LTD", "country": "DO" },
+  "stage": "inquiry",
+  "checks": [],
+  "flags": [{ "id": "RF-DOM-002" }],
+  "anchors": { "closure": "single" },
+  "coverage": { "checked": 7, "total": 8, "uncovered": ["customs:not-covered:no-matrix"] },
+  "confidence": "中",
+  "layers": {
+    "company": { "credibility": "medium" },
+    "person_company_link": { "strength": "medium" },
+    "person_authenticity": { "level": "unknown" },
+    "contact": { "phone_matches": true, "business_email": true, "domain_aged": false },
+    "compliance": { "sanctions": "clear", "negative": "clear" },
+    "scale": { "map": "unknown", "customs": "unknown" }
+  },
+  "score": { "risk_score": 27, "level": "低" },
+  "evidence": [
+    { "id": "E1", "url": "https://acme.example/", "retrieved_at": "2026-11-13T09:30:00Z", "source_type": "website" },
+    { "id": "E2", "url": "https://rdap.org/domain/acme.example", "retrieved_at": "2026-11-13T09:30:00Z", "source_type": "registry", "source_grade": "official", "data_as_of": "2026-11-13" },
+    { "id": "E3", "url": "https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports/SDN.CSV", "retrieved_at": "2026-11-13T09:30:00Z", "source_type": "sanctions_list", "data_as_of": "2026-11-09" }
+  ],
+  "display": {
+    "customer_label": "ACME TRADING LTD",
+    "inquiry_type": "一般询盘",
+    "dim_notes": {
+      "company": "官网与公开资料基本一致",
+      "link": "邮箱与官网一致",
+      "contact": "电话与邮箱都能对上，域名较新",
+      "behavior": "没有询盘原文",
+      "compliance": "制裁无匹配，未见投诉",
+      "scale": "地图和海关都没查到"
+    },
+    "attention": [
+      { "kind": "flag", "flag_id": "RF-DOM-002", "text": "域名 2026-10-01 注册，仅 42 天", "evidence_ids": ["E2"] }
+    ],
+    "verified": [
+      { "text": "域名 2026-10-01 注册（GoDaddy）", "evidence_ids": ["E2"] },
+      { "text": "制裁名单没有匹配", "evidence_ids": ["E3"] }
+    ],
+    "missing": [{ "text": "注册记录没有免费公开入口" }],
+    "open_questions": [],
+    "scripts": []
+  }
+}

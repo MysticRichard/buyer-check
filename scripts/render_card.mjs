@@ -47,8 +47,8 @@ const REASON_TEXT = {
   'no-company-level-data': '该国无公开数据',
 };
 
-const COMPANY_CONTRA = ['RF-DOM-001', 'RF-DOM-002', 'RF-CORP-001', 'RF-CORP-002', 'RF-CORP-003', 'RF-CORP-004', 'RF-CORP-006', 'RF-NEG-001', 'RF-SAN-001'];
-const CONTACT_CONTRA = ['RF-DOM-001', 'RF-DOM-002', 'RF-MAIL-001', 'RF-CORP-005'];
+const COMPANY_CONTRA = ['RF-DOM-001', 'RF-CORP-001', 'RF-CORP-002', 'RF-CORP-003', 'RF-CORP-004', 'RF-CORP-006', 'RF-NEG-001', 'RF-SAN-001'];
+const CONTACT_CONTRA = ['RF-DOM-001', 'RF-MAIL-001', 'RF-CORP-005'];
 const SCALE_CONTRA = ['RF-CORP-002', 'RF-CORP-004'];
 const LINK_CONTRA = ['RF-ID-002'];
 
@@ -349,9 +349,10 @@ const PHONE_NON_NUMBER_PATTERNS = [
   '\\b\\d{1,2}:\\d{2}(?::\\d{2})?\\b',
   '\\b(?:\\d{1,3}\\.){3}\\d{1,3}\\b',
   '\\b\\d+\\.\\d+\\.\\d+(?:\\.\\d+)?\\b',
+  '\\b\\d{1,2}-\\d{2}-\\d{4,5}-\\d\\b',
   '(?:\\+|00)?\\d[\\d\\s()\\-*]*\\*[\\d\\s()\\-*]*',
 ];
-const ID_CONTEXT_RE = /订单|编号|单号|\bID\b|No\./i;
+const ID_CONTEXT_RE = /订单|编号|单号|\bID\b|No\.|RNC|EIN|VAT|CIF|NIF|税号|注册号|登记号|执照|营业执照/i;
 
 export function containsFullPhone(value) {
   let cleaned = text(value);

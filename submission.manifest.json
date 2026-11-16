@@ -1,6 +1,6 @@
 {
   "skill": "buyer-check",
-  "version": "0.9.1",
+  "version": "0.9.2",
   "outputDir": "dist/submission",
   "limits": {
     "maxFiles": 28,
