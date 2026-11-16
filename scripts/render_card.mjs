@@ -798,6 +798,20 @@ function deriveFlags(evidence) {
   return derived;
 }
 
+const TRADE_TERMS_DISCLAIMER = '常见做法参考，不构成法律或财务建议，具体条款以贵司风控和合同为准。';
+
+export function tradeTerms(level, tier, inquiryType) {
+  let lines;
+  if (level === '高') lines = ['不建议先发货后收款；仅考虑全款预付、信誉良好银行确认的信用证或第三方担保交易；先完成订单前复核。'];
+  else if (level === '需人工核实') lines = ['先核验文件再谈大额报价；样品费由买家承担。'];
+  else if (tier === '高') lines = ['可按常规条款；收款账户仍用已知电话或邮箱双通道确认一次。'];
+  else lines = ['首单小额；样品费由买家承担、买家自己的快递账号寄送；定金比例高于常规；分批发货；发货前复核收款账户。'];
+  if (inquiryType === 'account_change') lines.push('账户变更：用已知号码电话回访并书面确认，确认前不付款。');
+  else if (inquiryType === 'large_first_order') lines.push('大额首单：分批交货，首批小额验证。');
+  else if (inquiryType === 'tender') lines.push('招标：投标保证金或先付费用先在官方公告确认。');
+  return lines.slice(0, 2);
+}
+
 export function renderCard(evidence, rules) {
   const display = evidence.display || {};
   const errors = validateDisplay(evidence, rules);
@@ -1017,6 +1031,12 @@ export function renderCard(evidence, rules) {
   if (dataDates.length > 0) lines.push(`数据日期：${dataDates.map(([label, date]) => `${label} ${date}`).join(' · ')}`);
   const flipHint = text(display.flip_hint);
   if (newMode && flipHint) lines.push(`什么会改变结论：${flipHint}`);
+  if (newMode) {
+    const inquiryType = (evidence.intake || {}).inquiry_type || 'general';
+    lines.push('**条款建议**');
+    for (const term of tradeTerms(level, credit.tier, inquiryType)) lines.push(`- ${term}`);
+    lines.push(TRADE_TERMS_DISCLAIMER);
+  }
   lines.push('**需要注意**');
   if (attention.length === 0) {
     lines.push('- 未发现需要注意的信号');

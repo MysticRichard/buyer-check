@@ -25,11 +25,13 @@ import { analyse as whoisAnalyse } from '../scripts/whois_lookup.mjs';
 let renderCard = null;
 let ladderCombinations = null;
 let containsFullPhone = null;
+let tradeTerms = null;
 try {
   const module = await import('../scripts/render_card.mjs');
   renderCard = module.renderCard;
   ladderCombinations = module.ladderCombinations;
   containsFullPhone = module.containsFullPhone;
+  tradeTerms = module.tradeTerms;
 } catch {
   // The lean submission bundle ships only render_card.py.
 }
@@ -1013,6 +1015,26 @@ async phone_pii(testCase) {
       return { name: entry.name, ok, result };
     });
     return { ok: outcomes.every((item) => item.ok), actual: outcomes };
+  },
+
+  trade_terms(testCase) {
+    if (!tradeTerms) return { skipped: true, actual: 'Node render_card.mjs not shipped' };
+    const levels = ['低', '中', '高', '需人工核实'];
+    const tiers = ['高', '中', '低'];
+    const types = ['tender', 'sample', 'large_first_order', 'account_change', 'pre_order', 'general'];
+    const failures = [];
+    for (const level of levels) {
+      for (const tier of tiers) {
+        for (const inquiryType of types) {
+          const lines = tradeTerms(level, tier, inquiryType);
+          const joined = lines.join(' ');
+          if (!lines.length || lines.length > 2) failures.push(`${level}/${tier}/${inquiryType}:count`);
+
+          if (level === '高' && (joined.includes('可以预付') || joined.includes('直接付款'))) failures.push(`${level}/${tier}/${inquiryType}:contradiction`);
+        }
+      }
+    }
+    return { ok: failures.length === 0, actual: { combos: levels.length * tiers.length * types.length, failures } };
   },
 
   manual() {

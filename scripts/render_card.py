@@ -940,6 +940,27 @@ def derive_flags(evidence):
     return derived
 
 
+TRADE_TERMS_DISCLAIMER = "常见做法参考，不构成法律或财务建议，具体条款以贵司风控和合同为准。"
+
+
+def trade_terms(level, tier, inquiry_type):
+    if level == "高":
+        lines = ["不建议先发货后收款；仅考虑全款预付、信誉良好银行确认的信用证或第三方担保交易；先完成订单前复核。"]
+    elif level == "需人工核实":
+        lines = ["先核验文件再谈大额报价；样品费由买家承担。"]
+    elif tier == "高":
+        lines = ["可按常规条款；收款账户仍用已知电话或邮箱双通道确认一次。"]
+    else:
+        lines = ["首单小额；样品费由买家承担、买家自己的快递账号寄送；定金比例高于常规；分批发货；发货前复核收款账户。"]
+    if inquiry_type == "account_change":
+        lines.append("账户变更：用已知号码电话回访并书面确认，确认前不付款。")
+    elif inquiry_type == "large_first_order":
+        lines.append("大额首单：分批交货，首批小额验证。")
+    elif inquiry_type == "tender":
+        lines.append("招标：投标保证金或先付费用先在官方公告确认。")
+    return lines[:2]
+
+
 def render_card(evidence, rules):
     display = evidence.get("display") or {}
     errors = validate_display(evidence, rules)
@@ -1167,6 +1188,13 @@ def render_card(evidence, rules):
     flip_hint = text(display.get("flip_hint"))
     if new_mode and flip_hint:
         lines.append(f"什么会改变结论：{flip_hint}")
+    if new_mode:
+        inquiry_type = (evidence.get("intake") or {}).get("inquiry_type") or "general"
+        terms = trade_terms(level, credit["tier"], inquiry_type)
+        lines.append("**条款建议**")
+        for term in terms:
+            lines.append(f"- {term}")
+        lines.append(TRADE_TERMS_DISCLAIMER)
     lines.append("**需要注意**")
     if not attention:
         lines.append("- 未发现需要注意的信号")
