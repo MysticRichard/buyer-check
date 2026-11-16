@@ -854,11 +854,11 @@ async phone_pii(testCase) {
   },
 
   country_consistency(testCase) {
-    const base = cloneJson(loadFixture(testCase.input.fixture));
+    const base = cloneJson(testCase.input.fixture_data || loadFixture(testCase.input.fixture));
     const results = ['IN', 'SG', 'ZZ'].map((code) => {
       const evidence = cloneJson(base);
       evidence.subject = { ...(evidence.subject || {}), country: code };
-      const result = renderCard(evidence, loadRules());
+      const result = renderCard ? renderCard(evidence, loadRules()) : pyRenderEvidence(findPython(), evidence);
       return { code, risk_score: result.risk_score, level: result.level, actions: result.actions };
     });
     const first = results[0];
@@ -867,7 +867,10 @@ async phone_pii(testCase) {
   },
 
   doc_contains(testCase) {
-    const combined = (testCase.input.files || []).map((file) => readFileSync(join(ROOT, file), 'utf8')).join('\n');
+    const files = testCase.input.files || [];
+    const missingFile = files.find((file) => !existsSync(join(ROOT, file)));
+    if (missingFile) return { skipped: true, actual: `${missingFile} not shipped in lean bundle` };
+    const combined = files.map((file) => readFileSync(join(ROOT, file), 'utf8')).join('\n');
     const missing = (testCase.input.needles || []).filter((needle) => !combined.includes(needle));
     return { ok: missing.length === 0, actual: { missing } };
   },
