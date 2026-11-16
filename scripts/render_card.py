@@ -864,6 +864,9 @@ def render_card(evidence, rules):
         return {"status": "invalid-input", "errors": incomplete_errors}
     if evidence.get("evidence") is not None and not isinstance(evidence.get("evidence"), list):
         return {"status": "invalid-input", "errors": [{"code": "invalid-input", "field": "evidence"}]}
+    capabilities = evidence.get("capabilities")
+    if capabilities is not None and (not isinstance(capabilities, dict) or capabilities.get("tier") not in ("full", "search-only", "offline")):
+        return {"status": "invalid-input", "errors": [{"code": "invalid-input", "field": "capabilities"}]}
     conflicts, conflict_errors = validate_conflicts(evidence)
     if conflict_errors:
         return {"status": "invalid-input", "errors": conflict_errors}
@@ -1035,6 +1038,8 @@ def render_card(evidence, rules):
     else:
         lines.append(f"## {color} {level_label} · 风险 {score}/100 {bar} ｜ 核实度 {credit['score']}/100（{credit['tier']}）{incomplete_suffix}")
     lines.append(f"置信度：{confidence}（锚点 {anchors}/3）｜覆盖：{0 if effective_covered is None else effective_covered}/{total}｜未覆盖：{uncovered_text}")
+    if capabilities and capabilities.get("tier") != "full":
+        lines.append("本次运行能力：" + ("仅搜索" if capabilities.get("tier") == "search-only" else "离线"))
     if incomplete:
         details = "；".join(
             f"{CHECK_LABELS.get(item['check'], item['check'])}未完成（{REASON_LABELS.get(item['reason'], item['reason'])}）→ {item['next_step']}"

@@ -750,6 +750,10 @@ export function renderCard(evidence, rules) {
   if (evidence.evidence !== undefined && !Array.isArray(evidence.evidence)) {
     return { status: 'invalid-input', errors: [{ code: 'invalid-input', field: 'evidence' }] };
   }
+  const capabilities = evidence.capabilities;
+  if (capabilities !== undefined && (!capabilities || typeof capabilities !== 'object' || !['full', 'search-only', 'offline'].includes(capabilities.tier))) {
+    return { status: 'invalid-input', errors: [{ code: 'invalid-input', field: 'capabilities' }] };
+  }
   const conflicts = validateConflicts(evidence);
   if (conflicts.errors.length > 0) return { status: 'invalid-input', errors: conflicts.errors };
 
@@ -922,6 +926,9 @@ export function renderCard(evidence, rules) {
     lines.push(`## ${color} ${levelLabel} · 风险 ${score}/100 ${bar} ｜ 核实度 ${credit.score}/100（${credit.tier}）${incompleteSuffix}`);
   }
   lines.push(`置信度：${confidence}（锚点 ${anchors}/3）｜覆盖：${effectiveCovered === null ? 0 : effectiveCovered}/${total}｜未覆盖：${uncoveredText}`);
+  if (capabilities && capabilities.tier !== 'full') {
+    lines.push(`本次运行能力：${capabilities.tier === 'search-only' ? '仅搜索' : '离线'}`);
+  }
   if (incomplete.items.length > 0) {
     const details = incomplete.items
       .map((item) => `${CHECK_LABELS[item.check] || item.check}未完成（${REASON_LABELS[item.reason] || item.reason}）→ ${item.next_step}`)

@@ -1,0 +1,12 @@
+{
+  "id": "A76",
+  "title": "Z28 能力行：search-only 显示“本次运行能力：仅搜索”，full 不显示",
+  "type": "render_card",
+  "input": { "fixture": "card_cap_search.json" },
+  "expect": {
+    "status": "ok",
+    "card_includes": ["本次运行能力：仅搜索"],
+    "line_count_max": 50,
+    "first_screen_max": 14
+  }
+}
