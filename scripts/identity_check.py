@@ -851,6 +851,25 @@ def match_command(args):
     return {"status": "ok", "matched": matched, "keys_matched": keys, "strength": strength, "reason": reason}
 
 
+def keywords_command(args):
+    text_value = (args.text or "").lower()
+    languages = [item.strip() for item in (args.languages or "en").split(",") if item.strip()]
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "country_capabilities.json")
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            caps = json.load(handle)
+    except (OSError, ValueError):
+        return {"status": "unavailable", "error": "capabilities-unreadable"}
+    groups = caps.get("multilingual_keywords") or {}
+    matches = []
+    for language in languages:
+        for probe, words in (groups.get(language) or {}).items():
+            for word in words:
+                if word.lower() in text_value:
+                    matches.append({"language": language, "probe": probe, "keyword": word})
+    return {"status": "ok", "matches": matches, "languages": languages, "meta": groups.get("meta")}
+
+
 def build_parser():
     parser = argparse.ArgumentParser(description="buyer-check identity helpers (site/backlink/image).")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -903,6 +922,10 @@ def build_parser():
     match = sub.add_parser("match", help="deterministic entity matching gate")
     match.add_argument("--buyer-json", required=True)
     match.add_argument("--candidate-json", required=True)
+
+    keywords = sub.add_parser("keywords", help="match multilingual footprint keywords")
+    keywords.add_argument("--text", required=True)
+    keywords.add_argument("--languages", default="en")
     return parser
 
 
@@ -922,6 +945,8 @@ def main(argv=None):
         result = idcheck_command(args)
     elif args.command == "match":
         result = match_command(args)
+    elif args.command == "keywords":
+        result = keywords_command(args)
     else:
         result = image_command(args)
     print(json.dumps(result, ensure_ascii=False))

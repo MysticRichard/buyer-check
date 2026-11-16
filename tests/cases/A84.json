@@ -1,0 +1,15 @@
+{
+  "id": "A84",
+  "title": "Z12 多语言关键词：英/阿/越/印尼本地词命中对应探针；无关文本不误报",
+  "type": "keywords",
+  "input": {
+    "cases": [
+      { "name": "ar-registry", "text": "نبحث عن سجل تجاري للشركة", "languages": "ar", "expect_probes": ["registry"] },
+      { "name": "vi-registry", "text": "đăng ký doanh nghiệp tại sở kế hoạch", "languages": "vi", "expect_probes": ["registry"] },
+      { "name": "id-procurement", "text": "pengadaan barang melalui lelang publik", "languages": "id", "expect_probes": ["procurement"] },
+      { "name": "mixed", "text": "company registry and مناقصة", "languages": "en,ar", "expect_probes": ["registry", "procurement"] },
+      { "name": "negative", "text": "hello world", "languages": "en,ar,vi,id", "expect_empty": true }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

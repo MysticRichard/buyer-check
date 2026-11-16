@@ -989,6 +989,13 @@ export function renderCard(evidence, rules) {
   if (capabilities && capabilities.tier !== 'full') {
     lines.push(`本次运行能力：${capabilities.tier === 'search-only' ? '仅搜索' : '离线'}`);
   }
+  if (evidence.search_log && typeof evidence.search_log === 'object') {
+    const searches = Number(evidence.search_log.searches || 0);
+    const pages = Number(evidence.search_log.pages || 0);
+    const budget = evidence.search_log.budget || {};
+    lines.push(`检索：${searches} 次，打开 ${pages} 个页面`);
+    if (budget && (searches > Number(budget.searches || 0) || pages > Number(budget.pages || 0))) lines.push('⚠ 检索预算已用尽');
+  }
   if (incomplete.items.length > 0) {
     const details = incomplete.items
       .map((item) => `${CHECK_LABELS[item.check] || item.check}未完成（${REASON_LABELS[item.reason] || item.reason}）→ ${item.next_step}`)

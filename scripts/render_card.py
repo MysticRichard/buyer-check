@@ -953,6 +953,9 @@ def render_card(evidence, rules):
     capabilities = evidence.get("capabilities")
     if capabilities is not None and (not isinstance(capabilities, dict) or capabilities.get("tier") not in ("full", "search-only", "offline")):
         return {"status": "invalid-input", "errors": [{"code": "invalid-input", "field": "capabilities"}]}
+    search_log = evidence.get("search_log")
+    if search_log is not None and not isinstance(search_log, dict):
+        return {"status": "invalid-input", "errors": [{"code": "invalid-input", "field": "search_log"}]}
     conflicts, conflict_errors = validate_conflicts(evidence)
     if conflict_errors:
         return {"status": "invalid-input", "errors": conflict_errors}
@@ -1131,6 +1134,13 @@ def render_card(evidence, rules):
     lines.append(f"置信度：{confidence}（锚点 {anchors}/3）｜覆盖：{0 if effective_covered is None else effective_covered}/{total}｜未覆盖：{uncovered_text}")
     if capabilities and capabilities.get("tier") != "full":
         lines.append("本次运行能力：" + ("仅搜索" if capabilities.get("tier") == "search-only" else "离线"))
+    if isinstance(search_log, dict):
+        searches = int(search_log.get("searches") or 0)
+        pages = int(search_log.get("pages") or 0)
+        budget = search_log.get("budget") or {}
+        lines.append(f"检索：{searches} 次，打开 {pages} 个页面")
+        if budget and (searches > int(budget.get("searches") or 0) or pages > int(budget.get("pages") or 0)):
+            lines.append("⚠ 检索预算已用尽")
     if incomplete:
         details = "；".join(
             f"{CHECK_LABELS.get(item['check'], item['check'])}未完成（{REASON_LABELS.get(item['reason'], item['reason'])}）→ {item['next_step']}"

@@ -821,6 +821,27 @@ function matchCommand(args) {
   return { status: 'ok', matched, keys_matched: keys, strength, reason };
 }
 
+function keywordsCommand(args) {
+  const textValue = String(args.text || '').toLowerCase();
+  const languages = String(args.languages || 'en').split(',').map((item) => item.trim()).filter(Boolean);
+  let caps;
+  try {
+    caps = JSON.parse(readFileSync(new URL('./country_capabilities.json', import.meta.url), 'utf8'));
+  } catch {
+    return { status: 'unavailable', error: 'capabilities-unreadable' };
+  }
+  const groups = caps.multilingual_keywords || {};
+  const matches = [];
+  for (const language of languages) {
+    for (const [probe, words] of Object.entries(groups[language] || {})) {
+      for (const word of words) {
+        if (textValue.includes(String(word).toLowerCase())) matches.push({ language, probe, keyword: word });
+      }
+    }
+  }
+  return { status: 'ok', matches, languages, meta: groups.meta };
+}
+
 function usage() {
   return [
     'Usage: node identity_check.mjs site [--domain DOMAIN] [--html-file FILE] [--online]',
@@ -831,12 +852,13 @@ function usage() {
     '       node identity_check.mjs country --code IN',
     '       node identity_check.mjs idcheck --country IN --type gstin --value 27AAACA0000A1ZY [--company-name NAME] [--claimed-state STATE]',
     '       node identity_check.mjs match --buyer-json FILE --candidate-json FILE',
+    '       node identity_check.mjs keywords --text TEXT [--languages en,ar,vi,id]',
   ].join('\n');
 }
 
 function parseArgs(argv) {
   const command = argv[0];
-  const args = { command, domain: null, htmlFile: null, online: false, maxPages: 4, delay: 1, timeout: 10, text: '', paths: [], company: null, phone: null, country: null, claimedCountry: null, countryCode: null, googleKey: null, fixtureJson: null, fixtureSource: 'google_places', limit: 5, countryForId: null, idType: null, idValue: null, companyName: null, claimedState: null, buyerJson: null, candidateJson: null };
+  const args = { command, domain: null, htmlFile: null, online: false, maxPages: 4, delay: 1, timeout: 10, text: '', paths: [], company: null, phone: null, country: null, claimedCountry: null, countryCode: null, googleKey: null, fixtureJson: null, fixtureSource: 'google_places', limit: 5, countryForId: null, idType: null, idValue: null, companyName: null, claimedState: null, buyerJson: null, candidateJson: null, languages: null };
   for (let i = 1; i < argv.length; i += 1) {
     const token = argv[i];
     if (token === '--domain') args.domain = argv[++i];
@@ -857,6 +879,7 @@ function parseArgs(argv) {
     else if (token === '--claimed-state') args.claimedState = argv[++i];
     else if (token === '--buyer-json') args.buyerJson = argv[++i];
     else if (token === '--candidate-json') args.candidateJson = argv[++i];
+    else if (token === '--languages') args.languages = argv[++i];
     else if (token === '--google-key') args.googleKey = argv[++i];
     else if (token === '--fixture-json') args.fixtureJson = argv[++i];
     else if (token === '--fixture-source') args.fixtureSource = argv[++i];
@@ -868,7 +891,7 @@ function parseArgs(argv) {
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
-  if (!['site', 'backlink', 'image', 'map', 'registry', 'country', 'idcheck', 'match'].includes(args.command)) {
+  if (!['site', 'backlink', 'image', 'map', 'registry', 'country', 'idcheck', 'match', 'keywords'].includes(args.command)) {
     console.log(JSON.stringify({ status: 'unavailable', error: 'unknown or missing subcommand' }));
     return 2;
   }
@@ -880,6 +903,7 @@ async function main() {
   else if (args.command === 'country') result = countryCommand(args);
   else if (args.command === 'idcheck') result = idcheckCommand(args);
   else if (args.command === 'match') result = matchCommand(args);
+  else if (args.command === 'keywords') result = keywordsCommand(args);
   else result = await imageCommand(args);
   console.log(JSON.stringify(result));
   return ['ok', 'found', 'not-found', 'ambiguous', 'offline', 'not-in-matrix', 'no-rule'].includes(result.status) ? 0 : 1;

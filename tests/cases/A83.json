@@ -1,0 +1,13 @@
+{
+  "id": "A83",
+  "title": "Z11 检索预算：显示检索次数/页面数；超预算显式提示，不计分",
+  "type": "render_card",
+  "input": { "fixture": "card_searchlog.json" },
+  "expect": {
+    "status": "ok",
+    "risk_score": 27,
+    "card_includes": ["检索：12 次，打开 8 个页面", "⚠ 检索预算已用尽"],
+    "line_count_max": 50,
+    "first_screen_max": 14
+  }
+}

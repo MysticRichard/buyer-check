@@ -970,6 +970,26 @@ async phone_pii(testCase) {
     return { ok: checks.every(Boolean), actual: { total: (rules.flags || []).length, checks: checks.length } };
   },
 
+  keywords(testCase) {
+    const python = findPython();
+    const [pyCmd, ...pyRest] = (python || '').split(' ');
+    const jsScript = join(ROOT, 'scripts', 'identity_check.mjs');
+    const outcomes = (testCase.input.cases || []).map((entry) => {
+      const args = ['keywords', '--text', entry.text, '--languages', entry.languages];
+      const py = spawnSync(pyCmd, [...pyRest, join(ROOT, 'scripts', 'identity_check.py'), ...args], { cwd: ROOT, encoding: 'utf8', timeout: 30000 });
+      const js = existsSync(jsScript) ? spawnSync('node', [jsScript, ...args], { cwd: ROOT, encoding: 'utf8', timeout: 30000 }) : null;
+      const pyResult = py.stdout ? JSON.parse(py.stdout) : null;
+      const jsResult = js && js.stdout ? JSON.parse(js.stdout) : null;
+      const probes = (pyResult?.matches || []).map((item) => item.probe);
+      const ok = pyResult?.status === 'ok'
+        && (entry.expect_probes || []).every((probe) => probes.includes(probe))
+        && (entry.expect_empty ? probes.length === 0 : true)
+        && (!jsResult || isDeepStrictEqual(jsResult.matches, pyResult.matches));
+      return { name: entry.name, ok, py: pyResult, js: jsResult };
+    });
+    return { ok: outcomes.every((item) => item.ok), actual: outcomes };
+  },
+
   manual() {
     return { ok: true, skipped: true, actual: 'requires live network / model behaviour' };
   },

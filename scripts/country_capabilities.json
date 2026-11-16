@@ -457,5 +457,97 @@
     "gleif-lei",
     "worldbank-debarment",
     "sanctions-lists"
-  ]
+  ],
+  "multilingual_keywords": {
+    "meta": {
+      "reviewed_languages": [
+        "en"
+      ],
+      "machine_translated_languages": [
+        "ar",
+        "vi",
+        "id"
+      ],
+      "note": "机器翻译，未经母语抽检"
+    },
+    "en": {
+      "registry": [
+        "company registry",
+        "business register",
+        "commercial register"
+      ],
+      "procurement": [
+        "procurement portal",
+        "tender portal",
+        "public procurement"
+      ],
+      "insolvency": [
+        "insolvency register",
+        "bankruptcy register"
+      ],
+      "customs": [
+        "bill of lading",
+        "customs record"
+      ]
+    },
+    "ar": {
+      "registry": [
+        "سجل تجاري",
+        "السجل التجاري",
+        "شركة"
+      ],
+      "procurement": [
+        "بوابة المشتريات",
+        "مناقصة",
+        "العطاء"
+      ],
+      "insolvency": [
+        "الإفلاس",
+        "التصفية"
+      ],
+      "customs": [
+        "بيان جمركي",
+        "بوليصة شحن"
+      ]
+    },
+    "vi": {
+      "registry": [
+        "đăng ký doanh nghiệp",
+        "sở kế hoạch",
+        "công ty"
+      ],
+      "procurement": [
+        "mua sắm công",
+        "đấu thầu"
+      ],
+      "insolvency": [
+        "phá sản",
+        "giải thể"
+      ],
+      "customs": [
+        "tờ khai hải quan",
+        "vận đơn"
+      ]
+    },
+    "id": {
+      "registry": [
+        "daftar perusahaan",
+        "registrasi perusahaan",
+        "perusahaan"
+      ],
+      "procurement": [
+        "pengadaan barang",
+        "lelang publik",
+        "tender"
+      ],
+      "insolvency": [
+        "pailit",
+        "kepailitan"
+      ],
+      "customs": [
+        "pemberitahuan pabean",
+        "bill of lading"
+      ]
+    }
+  }
 }
