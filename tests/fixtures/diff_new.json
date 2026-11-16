@@ -1,0 +1,66 @@
+{
+  "subject": { "company": "Meridian Trade Imports Pvt Ltd", "country": "IN", "domain": "meridian-imports.example" },
+  "stage": "pre-order",
+  "match_keys": [
+    { "key": "legal_name", "value": "Meridian Trade Imports Pvt Ltd", "source_id": "E1" },
+    { "key": "address", "value": "Bengaluru, Karnataka", "source_id": "E1" }
+  ],
+  "checks": [
+    { "id": "domain", "dimension": "domain", "result": "normal" },
+    { "id": "phone", "dimension": "phone", "result": "normal" },
+    { "id": "email", "dimension": "email", "result": "normal" },
+    { "id": "sanctions", "dimension": "sanctions", "result": "normal" }
+  ],
+  "flags": [
+    { "id": "RF-PAY-002", "weight": 3, "evidence_ids": ["E-01"] }
+  ],
+  "footprint": [
+    { "probe": "registry", "result": "hit", "subject": "company", "role": "registered_entity", "source_grade": "official", "matched_keys": ["legal_name", "address"], "evidence_ids": ["E-01"] },
+    { "probe": "news", "result": "hit", "subject": "unknown", "role": "unknown", "source_grade": "third_party", "matched_keys": ["legal_name"], "evidence_ids": ["E-02"] }
+  ],
+  "evidence": [
+    { "id": "E-01", "url": "https://registry.example/meridian", "retrieved_at": "2026-11-16T09:00:00Z", "source_type": "registry" },
+    { "id": "E-02", "url": "https://news.example/meridian", "retrieved_at": "2026-11-16T09:00:00Z", "source_type": "search" }
+  ],
+  "checks_incomplete": [
+    { "check": "registry", "reason": "no-public-record", "next_step": "在官方注册库按公司名手动查一次" }
+  ],
+  "anchors": { "closure": "bidirectional" },
+  "coverage": { "checked": 6, "total": 8, "uncovered": ["map:not-covered:needs-browser", "customs:not-covered:no-matrix"] },
+  "confidence": "中",
+  "layers": {
+    "company": { "credibility": "medium" },
+    "person_company_link": { "strength": "weak" },
+    "person_authenticity": { "level": "unknown" },
+    "contact": { "phone_matches": true, "business_email": true, "domain_aged": false },
+    "compliance": { "sanctions": "clear", "negative": "clear" },
+    "scale": { "map": "matched", "customs": "consistent" }
+  },
+  "score": { "total": 8, "risk_score": 32, "level": "中" },
+  "previous": {
+    "date": "2026-11-10",
+    "score": 20,
+    "verification": 57,
+    "red_flags": [],
+    "footprint_keys": ["registry:miss"]
+  },
+  "display": {
+    "customer_label": "Meridian Trade Imports Pvt Ltd（印度 / 班加罗尔）",
+    "inquiry_type": "一般询盘",
+    "dim_notes": {
+      "company": "官网和注册资料都自称进口商",
+      "link": "联系人邮箱与官网一致",
+      "contact": "电话和邮箱能对上，域名较新",
+      "behavior": "要求把定金付给第三方账户",
+      "compliance": "制裁清单无匹配",
+      "scale": "地图商家页吻合"
+    },
+    "attention": [
+      { "text": "收款方与公司名不一致", "flag_id": "RF-PAY-002", "kind": "flag", "evidence_ids": ["E-01"] }
+    ],
+    "verified": [],
+    "missing": [],
+    "open_questions": [],
+    "scripts": []
+  }
+}

@@ -1154,6 +1154,123 @@ export function ladderCombinations() {
   return combos;
 }
 
+function matchKeySet(evidence) {
+  const entries = evidence.match_keys;
+  if (!Array.isArray(entries)) return null;
+  const result = new Set();
+  for (const item of entries) {
+    if (item && typeof item === 'object' && item.key && item.value) result.add(`${item.key}=${item.value}`);
+  }
+  return result;
+}
+
+function footprintKeySet(evidence) {
+  if (Array.isArray(evidence.footprint_keys)) return new Set(evidence.footprint_keys.filter((item) => typeof item === 'string'));
+  const result = new Set();
+  for (const item of evidence.footprint || []) {
+    if (item && typeof item === 'object' && item.probe && item.result) result.add(`${item.probe}:${item.result}`);
+  }
+  return result;
+}
+
+function incompleteKeySet(evidence) {
+  const result = new Set();
+  for (const item of evidence.checks_incomplete || []) {
+    if (item && typeof item === 'object' && item.check) result.add(`${item.check}:${item.reason || 'unknown'}`);
+  }
+  return result;
+}
+
+function riskOf(evidence) {
+  const score = evidence.score || {};
+  const value = score.risk_score !== undefined ? score.risk_score : score.total;
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.trunc(number) : 0;
+}
+
+function signed(value) {
+  return value > 0 ? `+${value}` : String(value);
+}
+
+function subtract(left, right) {
+  return [...left].filter((item) => !right.has(item)).sort();
+}
+
+function diffPacks(oldPack, newPack) {
+  const oldKeys = matchKeySet(oldPack);
+  const newKeys = matchKeySet(newPack);
+  if (oldKeys && newKeys && oldKeys.size && newKeys.size) {
+    const same = oldKeys.size === newKeys.size && [...oldKeys].every((key) => newKeys.has(key));
+    if (!same) return { status: 'different-subject', reason: 'match-keys-mismatch' };
+  }
+  const oldRisk = riskOf(oldPack);
+  const newRisk = riskOf(newPack);
+  const oldCredit = typeof oldPack.verification === 'number' ? oldPack.verification : computeCredit(oldPack).score;
+  const newCredit = computeCredit(newPack).score;
+  const oldFlags = new Set(flagIdsOf(oldPack));
+  const newFlags = new Set(flagIdsOf(newPack));
+  const addedFlags = subtract(newFlags, oldFlags);
+  const removedFlags = subtract(oldFlags, newFlags);
+  const oldFoot = footprintKeySet(oldPack);
+  const newFoot = footprintKeySet(newPack);
+  const addedFoot = subtract(newFoot, oldFoot);
+  const removedFoot = subtract(oldFoot, newFoot);
+  const oldIncomplete = incompleteKeySet(oldPack);
+  const newIncomplete = incompleteKeySet(newPack);
+  const addedIncomplete = subtract(newIncomplete, oldIncomplete);
+  const removedIncomplete = subtract(oldIncomplete, newIncomplete);
+
+  const date = oldPack.date || '上次';
+  let changes = [`风险 ${oldRisk} → ${newRisk}（${signed(newRisk - oldRisk)}）· 核实度 ${oldCredit} → ${newCredit}（${signed(newCredit - oldCredit)}）`];
+  if (addedFlags.length || removedFlags.length) {
+    const parts = [];
+    if (addedFlags.length) parts.push(`新增红旗：${addedFlags.join('、')}`);
+    if (removedFlags.length) parts.push(`消失红旗：${removedFlags.join('、')}`);
+    changes.push(parts.join('；'));
+  }
+  if (addedIncomplete.length || removedIncomplete.length) {
+    const parts = [];
+    if (addedIncomplete.length) parts.push(`新增：${addedIncomplete.join('、')}`);
+    if (removedIncomplete.length) parts.push(`消失：${removedIncomplete.join('、')}`);
+    changes.push(`未完成项 ${parts.join('；')}`);
+  }
+  if (addedFoot.length || removedFoot.length) {
+    const parts = [];
+    if (addedFoot.length) parts.push(`新增足迹：${addedFoot.join('、')}`);
+    if (removedFoot.length) parts.push(`消失足迹：${removedFoot.join('、')}`);
+    changes.push(parts.join('；'));
+  }
+  if (!changes.length) changes = ['无变化'];
+  changes = changes.slice(0, 5);
+  return {
+    status: 'ok',
+    previous_date: date,
+    changes,
+    text: [`**相比 ${date} 的变化**`, ...changes].join('\n'),
+    risk: { from: oldRisk, to: newRisk, delta: newRisk - oldRisk },
+    verification: { from: oldCredit, to: newCredit, delta: newCredit - oldCredit },
+    added_flags: addedFlags,
+    removed_flags: removedFlags,
+    footprint_added: addedFoot,
+    footprint_removed: removedFoot,
+    incomplete_added: addedIncomplete,
+    incomplete_removed: removedIncomplete,
+  };
+}
+
+function diffWithPrevious(evidence) {
+  const previous = evidence.previous;
+  if (!previous || typeof previous !== 'object') return { status: 'ok', changes: [], text: '', note: 'no-previous' };
+  const oldPack = {
+    date: previous.date,
+    score: { risk_score: previous.score || 0 },
+    flags: previous.red_flags || [],
+    footprint_keys: previous.footprint_keys || [],
+  };
+  if (typeof previous.verification === 'number') oldPack.verification = previous.verification;
+  return diffPacks(oldPack, evidence);
+}
+
 function readInput(source) {
   let raw;
   if (source === '-') raw = readFileSync(0, 'utf8');
@@ -1162,13 +1279,16 @@ function readInput(source) {
 }
 
 function parseArgs(argv) {
-  const args = { source: null, json: false, ladder: false, rules: RULES_FILE };
+  const args = { source: null, json: false, ladder: false, diff: [], rules: RULES_FILE };
   for (let i = 0; i < argv.length; i += 1) {
     const token = argv[i];
     if (token === '--json') args.json = true;
     else if (token === '--ladder') args.ladder = true;
     else if (token === '--rules') args.rules = argv[++i];
-    else if (!token.startsWith('--') && args.source === null) args.source = token;
+    else if (token === '--diff') {
+      args.diff = [];
+      while (i + 1 < argv.length && !argv[i + 1].startsWith('--')) args.diff.push(argv[++i]);
+    } else if (!token.startsWith('--') && args.source === null) args.source = token;
   }
   return args;
 }
@@ -1185,6 +1305,26 @@ function main() {
   if (args.ladder) {
     console.log(JSON.stringify({ status: 'ok', combos: ladderCombinations(0) }));
     return 0;
+  }
+  if (args.diff.length) {
+    if (args.diff.length !== 1 && args.diff.length !== 2) {
+      console.log(JSON.stringify({ status: 'invalid-input', error: '--diff accepts one or two evidence packs' }));
+      return 1;
+    }
+    const packs = [];
+    try {
+      for (const path of args.diff) packs.push(readInput(path));
+    } catch (error) {
+      console.log(JSON.stringify({ status: 'invalid-input', error: String(error) }));
+      return 1;
+    }
+    if (packs.some((pack) => !pack || typeof pack !== 'object' || Array.isArray(pack))) {
+      console.log(JSON.stringify({ status: 'invalid-input', error: 'evidence pack must be an object' }));
+      return 1;
+    }
+    const result = packs.length === 1 ? diffWithPrevious(packs[0]) : diffPacks(packs[0], packs[1]);
+    console.log(args.json || result.status !== 'ok' ? JSON.stringify(result) : result.text);
+    return result.status === 'ok' ? 0 : 1;
   }
   if (!args.source) {
     console.log(JSON.stringify({ status: 'invalid-input', error: 'missing evidence pack path' }));

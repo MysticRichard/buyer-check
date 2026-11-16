@@ -1061,6 +1061,36 @@ async phone_pii(testCase) {
     return { ok: outcomes.every((item) => item.ok), actual: outcomes };
   },
 
+  diff(testCase) {
+    const python = findPython();
+    const [pyCmd, ...pyRest] = (python || '').split(' ');
+    const outcomes = (testCase.input.cases || []).map((entry) => {
+      const args = ['--diff'];
+      if (entry.old) args.push(join(FIXTURES_DIR, entry.old));
+      args.push(join(FIXTURES_DIR, entry.new), '--json');
+      const pyRun = spawnSync(pyCmd, [...pyRest, join(ROOT, 'scripts', 'render_card.py'), ...args], { cwd: ROOT, encoding: 'utf8', timeout: 30000 });
+      const jsRun = spawnSync('node', [join(ROOT, 'scripts', 'render_card.mjs'), ...args], { cwd: ROOT, encoding: 'utf8', timeout: 30000 });
+      let py = null;
+      let js = null;
+      try { py = JSON.parse(pyRun.stdout); } catch { py = null; }
+      try { js = JSON.parse(jsRun.stdout); } catch { js = null; }
+      const expect = entry.expect || {};
+      const checks = [isDeepStrictEqual(py, js)];
+      if (expect.status !== undefined) checks.push(py?.status === expect.status);
+      if (expect.risk) checks.push(isDeepStrictEqual(py?.risk, expect.risk));
+      if (expect.verification) checks.push(isDeepStrictEqual(py?.verification, expect.verification));
+      for (const key of ['added_flags', 'removed_flags', 'footprint_added', 'footprint_removed', 'incomplete_added', 'incomplete_removed', 'changes']) {
+        if (expect[key] !== undefined) checks.push(isDeepStrictEqual(py?.[key], expect[key]));
+      }
+      if (expect.changes_max !== undefined) {
+        checks.push((py?.changes || []).length <= expect.changes_max);
+        checks.push(String(py?.text || '').split('\n').length <= 6);
+      }
+      return { name: entry.name, ok: checks.every(Boolean), py, js, exit: pyRun.status };
+    });
+    return { ok: outcomes.every((item) => item.ok), actual: outcomes };
+  },
+
   manual() {
     return { ok: true, skipped: true, actual: 'requires live network / model behaviour' };
   },

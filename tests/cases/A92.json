@@ -1,0 +1,48 @@
+{
+  "id": "A92",
+  "title": "Z25 复查对比：带 previous 显示分数/核实度/红旗/足迹变化；无 previous 不报错；match_keys 不符返回 different-subject",
+  "type": "diff",
+  "input": {
+    "cases": [
+      {
+        "name": "with-previous",
+        "new": "diff_new.json",
+        "expect": {
+          "status": "ok",
+          "risk": { "from": 20, "to": 32, "delta": 12 },
+          "verification": { "from": 57, "to": 62, "delta": 5 },
+          "added_flags": ["RF-PAY-002"],
+          "removed_flags": [],
+          "footprint_added": ["news:hit", "registry:hit"],
+          "changes_max": 5
+        }
+      },
+      {
+        "name": "two-packs",
+        "old": "diff_old.json",
+        "new": "diff_new.json",
+        "expect": {
+          "status": "ok",
+          "risk": { "from": 20, "to": 32, "delta": 12 },
+          "verification": { "from": 57, "to": 62, "delta": 5 },
+          "added_flags": ["RF-PAY-002"],
+          "footprint_added": ["news:hit", "registry:hit"],
+          "incomplete_added": ["registry:no-public-record"],
+          "changes_max": 5
+        }
+      },
+      {
+        "name": "no-previous",
+        "new": "card_harbor.json",
+        "expect": { "status": "ok", "changes": [] }
+      },
+      {
+        "name": "different-subject",
+        "old": "diff_old.json",
+        "new": "diff_other.json",
+        "expect": { "status": "different-subject" }
+      }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

@@ -974,6 +974,130 @@ def trade_terms(level, tier, inquiry_type):
     return lines[:2]
 
 
+def _match_key_set(evidence):
+    entries = evidence.get("match_keys")
+    if not isinstance(entries, list):
+        return None
+    result = set()
+    for item in entries:
+        if isinstance(item, dict) and item.get("key") and item.get("value"):
+            result.add(f"{item.get('key')}={item.get('value')}")
+    return result
+
+
+def _footprint_key_set(evidence):
+    entries = evidence.get("footprint_keys")
+    if isinstance(entries, list):
+        return {str(item) for item in entries if isinstance(item, str)}
+    result = set()
+    for item in evidence.get("footprint") or []:
+        if isinstance(item, dict) and item.get("probe") and item.get("result"):
+            result.add(f"{item.get('probe')}:{item.get('result')}")
+    return result
+
+
+def _incomplete_key_set(evidence):
+    result = set()
+    for item in evidence.get("checks_incomplete") or []:
+        if isinstance(item, dict) and item.get("check"):
+            result.add(f"{item.get('check')}:{item.get('reason') or 'unknown'}")
+    return result
+
+
+def _risk_of(evidence):
+    score = evidence.get("score") or {}
+    value = score.get("risk_score", score.get("total", 0))
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _signed(value):
+    return f"+{value}" if value > 0 else str(value)
+
+
+def diff_packs(old, new):
+    old_keys = _match_key_set(old)
+    new_keys = _match_key_set(new)
+    if old_keys and new_keys and old_keys != new_keys:
+        return {"status": "different-subject", "reason": "match-keys-mismatch"}
+
+    old_risk = _risk_of(old)
+    new_risk = _risk_of(new)
+    old_credit = old.get("verification")
+    if not isinstance(old_credit, int):
+        old_credit = compute_credit(old)["score"]
+    new_credit = compute_credit(new)["score"]
+    old_flags = set(flag_ids_of(old))
+    new_flags = set(flag_ids_of(new))
+    added_flags = sorted(new_flags - old_flags)
+    removed_flags = sorted(old_flags - new_flags)
+    old_foot = _footprint_key_set(old)
+    new_foot = _footprint_key_set(new)
+    added_foot = sorted(new_foot - old_foot)
+    removed_foot = sorted(old_foot - new_foot)
+    old_incomplete = _incomplete_key_set(old)
+    new_incomplete = _incomplete_key_set(new)
+    added_incomplete = sorted(new_incomplete - old_incomplete)
+    removed_incomplete = sorted(old_incomplete - new_incomplete)
+
+    date = old.get("date") or "上次"
+    changes = [f"风险 {old_risk} → {new_risk}（{_signed(new_risk - old_risk)}）· 核实度 {old_credit} → {new_credit}（{_signed(new_credit - old_credit)}）"]
+    if added_flags or removed_flags:
+        parts = []
+        if added_flags:
+            parts.append("新增红旗：" + "、".join(added_flags))
+        if removed_flags:
+            parts.append("消失红旗：" + "、".join(removed_flags))
+        changes.append("；".join(parts))
+    if added_incomplete or removed_incomplete:
+        parts = []
+        if added_incomplete:
+            parts.append("新增：" + "、".join(added_incomplete))
+        if removed_incomplete:
+            parts.append("消失：" + "、".join(removed_incomplete))
+        changes.append("未完成项 " + "；".join(parts))
+    if added_foot or removed_foot:
+        parts = []
+        if added_foot:
+            parts.append("新增足迹：" + "、".join(added_foot))
+        if removed_foot:
+            parts.append("消失足迹：" + "、".join(removed_foot))
+        changes.append("；".join(parts))
+    if not changes:
+        changes = ["无变化"]
+    changes = changes[:5]
+    return {
+        "status": "ok",
+        "previous_date": date,
+        "changes": changes,
+        "text": "\n".join([f"**相比 {date} 的变化**"] + changes),
+        "risk": {"from": old_risk, "to": new_risk, "delta": new_risk - old_risk},
+        "verification": {"from": old_credit, "to": new_credit, "delta": new_credit - old_credit},
+        "added_flags": added_flags,
+        "removed_flags": removed_flags,
+        "footprint_added": added_foot,
+        "footprint_removed": removed_foot,
+        "incomplete_added": added_incomplete,
+        "incomplete_removed": removed_incomplete,
+    }
+
+
+def diff_with_previous(evidence):
+    previous = evidence.get("previous")
+    if not isinstance(previous, dict):
+        return {"status": "ok", "changes": [], "text": "", "note": "no-previous"}
+    old = {
+        "date": previous.get("date"),
+        "score": {"risk_score": previous.get("score", 0)},
+        "flags": previous.get("red_flags") or [],
+        "footprint_keys": previous.get("footprint_keys") or [],
+        "verification": previous.get("verification") if isinstance(previous.get("verification"), int) else None,
+    }
+    return diff_packs(old, evidence)
+
+
 def render_card(evidence, rules):
     display = evidence.get("display") or {}
     errors = validate_display(evidence, rules)
@@ -1320,6 +1444,7 @@ def build_parser():
     parser.add_argument("source", nargs="?", help="evidence pack JSON path, or - for stdin")
     parser.add_argument("--json", action="store_true", help="print computed fields and card as JSON")
     parser.add_argument("--ladder", action="store_true", help="print the full 768-combination action ladder")
+    parser.add_argument("--diff", nargs="+", metavar="PACK", help="compare old/new evidence packs, or one pack with previous")
     parser.add_argument("--rules", default=RULES_FILE, help="path to red_flags.json")
     return parser
 
@@ -1335,6 +1460,30 @@ def main(argv=None) -> int:
     if args.ladder:
         print(json.dumps({"status": "ok", "combos": ladder_combinations()}, ensure_ascii=False))
         return 0
+    if args.diff:
+        if len(args.diff) not in (1, 2):
+            print(json.dumps({"status": "invalid-input", "error": "--diff accepts one or two evidence packs"}, ensure_ascii=False))
+            return 1
+        try:
+            packs = []
+            for path in args.diff:
+                if path == "-":
+                    packs.append(json.load(sys.stdin))
+                else:
+                    with open(path, "r", encoding="utf-8") as handle:
+                        packs.append(json.load(handle))
+        except (OSError, json.JSONDecodeError) as exc:
+            print(json.dumps({"status": "invalid-input", "error": str(exc)}, ensure_ascii=False))
+            return 1
+        if any(not isinstance(pack, dict) for pack in packs):
+            print(json.dumps({"status": "invalid-input", "error": "evidence pack must be an object"}, ensure_ascii=False))
+            return 1
+        result = diff_with_previous(packs[0]) if len(packs) == 1 else diff_packs(packs[0], packs[1])
+        if args.json or result["status"] != "ok":
+            print(json.dumps(result, ensure_ascii=False))
+        else:
+            print(result["text"])
+        return 0 if result["status"] == "ok" else 1
     if not args.source:
         print(json.dumps({"status": "invalid-input", "error": "missing evidence pack path"}, ensure_ascii=False))
         return 1
