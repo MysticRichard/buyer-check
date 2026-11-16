@@ -1,0 +1,38 @@
+{
+  "subject": {
+    "company": "Harbor Rim Engineering",
+    "phone": "+65 6* *** 0100",
+    "email": "sales@harborrim.example",
+    "domain": "harborrim.example",
+    "country": "SG"
+  },
+  "stage": "inquiry",
+  "intake": {
+    "company": "Harbor Rim Engineering",
+    "inquiry_type": "general",
+    "inquiry_text": "Please confirm the delivery schedule and payment terms for the industrial pumps."
+  },
+  "checks": [],
+  "flags": [],
+  "anchors": { "closure": "none" },
+  "coverage": { "checked": 0, "total": 8, "uncovered": [] },
+  "confidence": "中",
+  "layers": {
+    "company": { "credibility": "medium" },
+    "person_company_link": { "strength": "weak" },
+    "person_authenticity": { "level": "unknown" },
+    "contact": { "phone_matches": true, "business_email": true, "domain_aged": false },
+    "compliance": { "sanctions": "unchecked", "negative": "unchecked" },
+    "scale": { "map": "unknown", "customs": "unknown" }
+  },
+  "display": {
+    "customer_label": "Harbor Rim Engineering（新加坡）",
+    "inquiry_type": "一般询盘",
+    "dim_notes": {},
+    "attention": [],
+    "verified": [],
+    "missing": [],
+    "open_questions": [],
+    "scripts": []
+  }
+}

@@ -1098,6 +1098,132 @@ def diff_with_previous(evidence):
     return diff_packs(old, evidence)
 
 
+BATCH_SYMBOLS = {"低": "🟢", "中": "🟡", "高": "🔴", "需人工核实": "⚪"}
+BATCH_RANK = {"优先跟进": 0, "先核验": 1, "暂缓": 2}
+
+
+def _batch_name(evidence, index):
+    subject = evidence.get("subject") or {}
+    intake = evidence.get("intake") or {}
+    name = subject.get("company") or intake.get("company")
+    if name:
+        return text(name)[:40]
+    email = text(subject.get("email") or intake.get("email"))
+    if "@" in email:
+        return email.split("@")[-1].lower()
+    domain = subject.get("domain") or intake.get("domain")
+    if domain:
+        return text(domain).lower()
+    return f"第 {index} 封"
+
+
+def _batch_email_domain(evidence):
+    subject = evidence.get("subject") or {}
+    intake = evidence.get("intake") or {}
+    email = text(subject.get("email") or intake.get("email")).lower()
+    if "@" in email:
+        return email.split("@")[-1]
+    return text(subject.get("domain") or intake.get("domain")).lower()
+
+
+def _batch_phone(evidence):
+    subject = evidence.get("subject") or {}
+    intake = evidence.get("intake") or {}
+    raw = text(subject.get("phone") or intake.get("phone"))
+    digits = re.sub(r"\D", "", raw)
+    return digits if len(digits) >= 6 else ""
+
+
+def _normalized_inquiry(evidence):
+    raw = text((evidence.get("intake") or {}).get("inquiry_text"))
+    return re.sub(r"\s+", " ", raw).strip().lower()
+
+
+def _shared_fragment(left, right):
+    if not left or not right:
+        return False
+    if left == right:
+        return True
+    if len(left) < 12 or len(right) < 12:
+        return False
+    grams = {left[i:i + 12] for i in range(len(left) - 11)}
+    return any(right[i:i + 12] in grams for i in range(len(right) - 11))
+
+
+def _batch_top_risk(evidence, rules):
+    attention = [item for item in ((evidence.get("display") or {}).get("attention") or []) if isinstance(item, dict) and item.get("text")]
+    if attention:
+        return text(attention[0].get("text"))
+    ids = flag_ids_of(evidence)
+    if ids:
+        for flag in rules.get("flags") or []:
+            if isinstance(flag, dict) and flag.get("id") == ids[0]:
+                return text(flag.get("name") or ids[0])
+        return ids[0]
+    return "—"
+
+
+def batch_triage(packs, rules):
+    if not isinstance(packs, list) or not (2 <= len(packs) <= 10):
+        return {"status": "invalid-input", "error": "batch requires 2-10 evidence packs"}
+    rows = []
+    for position, evidence in enumerate(packs):
+        if not isinstance(evidence, dict):
+            return {"status": "invalid-input", "error": f"pack {position + 1} must be an object"}
+        result = render_card(evidence, rules)
+        if result.get("status") != "ok":
+            return {"status": "invalid-input", "error": f"pack {position + 1}: {result.get('status')}"}
+        level = result.get("level") or "需人工核实"
+        credit = (result.get("credit") or {}).get("score", 0)
+        if level == "高":
+            next_step = "暂缓"
+        elif level == "低" and credit >= 60:
+            next_step = "优先跟进"
+        else:
+            next_step = "先核验"
+        rows.append({
+            "index": position + 1,
+            "name": _batch_name(evidence, position + 1).replace("|", "/"),
+            "level": level,
+            "symbol": BATCH_SYMBOLS.get(level, "⚪"),
+            "credit": credit,
+            "risk": _batch_top_risk(evidence, rules).replace("|", "/"),
+            "next": next_step,
+            "risk_score": result.get("risk_score", 0),
+        })
+
+    pairs = []
+    for i in range(len(packs)):
+        for j in range(i + 1, len(packs)):
+            reasons = []
+            domain_i = _batch_email_domain(packs[i])
+            if domain_i and domain_i == _batch_email_domain(packs[j]):
+                reasons.append("邮箱域")
+            phone_i = _batch_phone(packs[i])
+            if phone_i and phone_i == _batch_phone(packs[j]):
+                reasons.append("电话")
+            if _shared_fragment(_normalized_inquiry(packs[i]), _normalized_inquiry(packs[j])):
+                reasons.append("话术片段")
+            if reasons:
+                joined = "和相同".join(reasons) if len(reasons) == 2 else "、".join(reasons)
+                pairs.append(f"第 {i + 1} 封与第 {j + 1} 封使用相同{joined}，可能来自同一来源")
+    hints = [("⚠ " + "；".join(pairs))] if pairs else []
+
+    rows.sort(key=lambda row: (BATCH_RANK.get(row["next"], 1), row["risk_score"], -row["credit"], row["index"]))
+    lines = [
+        "| # | 公司 / 邮箱域 | 等级 | 核实度 | 最大风险 | 建议 |",
+        "| --- | --- | --- | --- | --- | --- |",
+    ]
+    for row in rows:
+        lines.append(f"| {row['index']} | {row['name']} | {row['symbol']} {row['level']} | {row['credit']} | {row['risk']} | {row['next']} |")
+    if hints:
+        lines.append("")
+        lines.extend(hints)
+    lines.append("")
+    lines.append("回复序号可对该封做完整查询。")
+    return {"status": "ok", "row_count": len(rows), "rows": rows, "hints": hints, "text": "\n".join(lines)}
+
+
 def render_card(evidence, rules):
     display = evidence.get("display") or {}
     errors = validate_display(evidence, rules)
@@ -1445,6 +1571,7 @@ def build_parser():
     parser.add_argument("--json", action="store_true", help="print computed fields and card as JSON")
     parser.add_argument("--ladder", action="store_true", help="print the full 768-combination action ladder")
     parser.add_argument("--diff", nargs="+", metavar="PACK", help="compare old/new evidence packs, or one pack with previous")
+    parser.add_argument("--batch", nargs="+", metavar="PACK", help="triage 2-10 quick-check evidence packs, or one JSON array file")
     parser.add_argument("--rules", default=RULES_FILE, help="path to red_flags.json")
     return parser
 
@@ -1479,6 +1606,34 @@ def main(argv=None) -> int:
             print(json.dumps({"status": "invalid-input", "error": "evidence pack must be an object"}, ensure_ascii=False))
             return 1
         result = diff_with_previous(packs[0]) if len(packs) == 1 else diff_packs(packs[0], packs[1])
+        if args.json or result["status"] != "ok":
+            print(json.dumps(result, ensure_ascii=False))
+        else:
+            print(result["text"])
+        return 0 if result["status"] == "ok" else 1
+    if args.batch:
+        try:
+            loaded = []
+            for path in args.batch:
+                if path == "-":
+                    loaded.append(json.load(sys.stdin))
+                else:
+                    with open(path, "r", encoding="utf-8") as handle:
+                        loaded.append(json.load(handle))
+        except (OSError, json.JSONDecodeError) as exc:
+            print(json.dumps({"status": "invalid-input", "error": str(exc)}, ensure_ascii=False))
+            return 1
+        if len(loaded) == 1:
+            packs = loaded[0]
+            if not isinstance(packs, list):
+                print(json.dumps({"status": "invalid-input", "error": "batch file must contain an array of evidence packs"}, ensure_ascii=False))
+                return 1
+        else:
+            packs = loaded
+            if any(not isinstance(pack, dict) for pack in packs):
+                print(json.dumps({"status": "invalid-input", "error": "evidence pack must be an object"}, ensure_ascii=False))
+                return 1
+        result = batch_triage(packs, rules)
         if args.json or result["status"] != "ok":
             print(json.dumps(result, ensure_ascii=False))
         else:

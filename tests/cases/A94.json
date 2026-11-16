@@ -1,0 +1,30 @@
+{
+  "id": "A94",
+  "title": "Z24 批量分诊：2/10 条正常、11 条报 invalid-input、表格≤12 行、排序稳定、重复模式提示",
+  "type": "batch",
+  "input": {
+    "cases": [
+      {
+        "name": "two-packs",
+        "packs": ["card_harbor.json", "card_searchlog.json"],
+        "expect": { "status": "ok", "row_count": 2, "max_table_lines": 12, "footer": true }
+      },
+      {
+        "name": "ten-packs",
+        "packs": ["card_harbor.json", "card_searchlog.json", "card_nordic.json", "card_benign.json", "card_conflict.json", "card_data.json", "card_evidence.json", "card_flip.json", "card_new_domain.json", "card_grades.json"],
+        "expect": { "status": "ok", "row_count": 10, "max_table_lines": 12, "footer": true }
+      },
+      {
+        "name": "eleven-packs",
+        "packs": ["card_harbor.json", "card_harbor.json", "card_harbor.json", "card_harbor.json", "card_harbor.json", "card_harbor.json", "card_harbor.json", "card_harbor.json", "card_harbor.json", "card_harbor.json", "card_harbor.json"],
+        "expect": { "status": "invalid-input" }
+      },
+      {
+        "name": "duplicate-hints",
+        "packs": ["batch_hint_a.json", "batch_hint_b.json"],
+        "expect": { "status": "ok", "row_count": 2, "hints_include": ["相同电话", "相同话术片段", "可能来自同一来源"] }
+      }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

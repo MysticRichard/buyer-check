@@ -1271,6 +1271,128 @@ function diffWithPrevious(evidence) {
   return diffPacks(oldPack, evidence);
 }
 
+const BATCH_SYMBOLS = { 低: '🟢', 中: '🟡', 高: '🔴', 需人工核实: '⚪' };
+const BATCH_RANK = { 优先跟进: 0, 先核验: 1, 暂缓: 2 };
+
+function batchName(evidence, index) {
+  const subject = evidence.subject || {};
+  const intake = evidence.intake || {};
+  const name = subject.company || intake.company;
+  if (name) return Array.from(text(name)).slice(0, 40).join('');
+  const email = text(subject.email || intake.email).toLowerCase();
+  if (email.includes('@')) return email.split('@').pop();
+  const domain = subject.domain || intake.domain;
+  if (domain) return text(domain).toLowerCase();
+  return `第 ${index} 封`;
+}
+
+function batchEmailDomain(evidence) {
+  const subject = evidence.subject || {};
+  const intake = evidence.intake || {};
+  const email = text(subject.email || intake.email).toLowerCase();
+  if (email.includes('@')) return email.split('@').pop();
+  return text(subject.domain || intake.domain).toLowerCase();
+}
+
+function batchPhone(evidence) {
+  const subject = evidence.subject || {};
+  const intake = evidence.intake || {};
+  const digits = text(subject.phone || intake.phone).replace(/\D/g, '');
+  return digits.length >= 6 ? digits : '';
+}
+
+function normalizedInquiry(evidence) {
+  return text((evidence.intake || {}).inquiry_text).replace(/\s+/g, ' ').trim().toLowerCase();
+}
+
+function sharedFragment(left, right) {
+  if (!left || !right) return false;
+  if (left === right) return true;
+  if (left.length < 12 || right.length < 12) return false;
+  const grams = new Set();
+  for (let i = 0; i <= left.length - 12; i += 1) grams.add(left.slice(i, i + 12));
+  for (let i = 0; i <= right.length - 12; i += 1) if (grams.has(right.slice(i, i + 12))) return true;
+  return false;
+}
+
+function batchTopRisk(evidence, rules) {
+  const attention = ((evidence.display || {}).attention || []).filter((item) => item && typeof item === 'object' && item.text);
+  if (attention.length) return text(attention[0].text);
+  const ids = flagIdsOf(evidence);
+  if (ids.length) {
+    const match = (rules.flags || []).find((flag) => flag && flag.id === ids[0]);
+    return text((match && (match.name || ids[0])) || ids[0]);
+  }
+  return '—';
+}
+
+export function batchTriage(packs, rules) {
+  if (!Array.isArray(packs) || packs.length < 2 || packs.length > 10) {
+    return { status: 'invalid-input', error: 'batch requires 2-10 evidence packs' };
+  }
+  const rows = [];
+  for (let position = 0; position < packs.length; position += 1) {
+    const evidence = packs[position];
+    if (!evidence || typeof evidence !== 'object' || Array.isArray(evidence)) {
+      return { status: 'invalid-input', error: `pack ${position + 1} must be an object` };
+    }
+    const result = renderCard(evidence, rules);
+    if (result.status !== 'ok') return { status: 'invalid-input', error: `pack ${position + 1}: ${result.status}` };
+    const level = result.level || '需人工核实';
+    const credit = (result.credit || {}).score || 0;
+    let next = '先核验';
+    if (level === '高') next = '暂缓';
+    else if (level === '低' && credit >= 60) next = '优先跟进';
+    rows.push({
+      index: position + 1,
+      name: batchName(evidence, position + 1).replace(/\|/g, '/'),
+      level,
+      symbol: BATCH_SYMBOLS[level] || '⚪',
+      credit,
+      risk: batchTopRisk(evidence, rules).replace(/\|/g, '/'),
+      next,
+      risk_score: result.risk_score || 0,
+    });
+  }
+
+  const pairs = [];
+  for (let i = 0; i < packs.length; i += 1) {
+    for (let j = i + 1; j < packs.length; j += 1) {
+      const reasons = [];
+      const domainI = batchEmailDomain(packs[i]);
+      if (domainI && domainI === batchEmailDomain(packs[j])) reasons.push('邮箱域');
+      const phoneI = batchPhone(packs[i]);
+      if (phoneI && phoneI === batchPhone(packs[j])) reasons.push('电话');
+      if (sharedFragment(normalizedInquiry(packs[i]), normalizedInquiry(packs[j]))) reasons.push('话术片段');
+      if (reasons.length) {
+        const joined = reasons.length === 2 ? reasons.join('和相同') : reasons.join('、');
+        pairs.push(`第 ${i + 1} 封与第 ${j + 1} 封使用相同${joined}，可能来自同一来源`);
+      }
+    }
+  }
+  const hints = pairs.length ? [`⚠ ${pairs.join('；')}`] : [];
+
+  rows.sort((a, b) => {
+    const rank = (BATCH_RANK[a.next] || 1) - (BATCH_RANK[b.next] || 1);
+    if (rank) return rank;
+    if (a.risk_score !== b.risk_score) return a.risk_score - b.risk_score;
+    if (a.credit !== b.credit) return b.credit - a.credit;
+    return a.index - b.index;
+  });
+  const lines = [
+    '| # | 公司 / 邮箱域 | 等级 | 核实度 | 最大风险 | 建议 |',
+    '| --- | --- | --- | --- | --- | --- |',
+  ];
+  for (const row of rows) lines.push(`| ${row.index} | ${row.name} | ${row.symbol} ${row.level} | ${row.credit} | ${row.risk} | ${row.next} |`);
+  if (hints.length) {
+    lines.push('');
+    lines.push(...hints);
+  }
+  lines.push('');
+  lines.push('回复序号可对该封做完整查询。');
+  return { status: 'ok', row_count: rows.length, rows, hints, text: lines.join('\n') };
+}
+
 function readInput(source) {
   let raw;
   if (source === '-') raw = readFileSync(0, 'utf8');
@@ -1279,7 +1401,7 @@ function readInput(source) {
 }
 
 function parseArgs(argv) {
-  const args = { source: null, json: false, ladder: false, diff: [], rules: RULES_FILE };
+  const args = { source: null, json: false, ladder: false, diff: [], batch: [], rules: RULES_FILE };
   for (let i = 0; i < argv.length; i += 1) {
     const token = argv[i];
     if (token === '--json') args.json = true;
@@ -1288,6 +1410,9 @@ function parseArgs(argv) {
     else if (token === '--diff') {
       args.diff = [];
       while (i + 1 < argv.length && !argv[i + 1].startsWith('--')) args.diff.push(argv[++i]);
+    } else if (token === '--batch') {
+      args.batch = [];
+      while (i + 1 < argv.length && !argv[i + 1].startsWith('--')) args.batch.push(argv[++i]);
     } else if (!token.startsWith('--') && args.source === null) args.source = token;
   }
   return args;
@@ -1323,6 +1448,32 @@ function main() {
       return 1;
     }
     const result = packs.length === 1 ? diffWithPrevious(packs[0]) : diffPacks(packs[0], packs[1]);
+    console.log(args.json || result.status !== 'ok' ? JSON.stringify(result) : result.text);
+    return result.status === 'ok' ? 0 : 1;
+  }
+  if (args.batch.length) {
+    const loaded = [];
+    try {
+      for (const path of args.batch) loaded.push(readInput(path));
+    } catch (error) {
+      console.log(JSON.stringify({ status: 'invalid-input', error: String(error) }));
+      return 1;
+    }
+    let packs;
+    if (loaded.length === 1) {
+      packs = loaded[0];
+      if (!Array.isArray(packs)) {
+        console.log(JSON.stringify({ status: 'invalid-input', error: 'batch file must contain an array of evidence packs' }));
+        return 1;
+      }
+    } else {
+      packs = loaded;
+      if (packs.some((pack) => !pack || typeof pack !== 'object' || Array.isArray(pack))) {
+        console.log(JSON.stringify({ status: 'invalid-input', error: 'evidence pack must be an object' }));
+        return 1;
+      }
+    }
+    const result = batchTriage(packs, rules);
     console.log(args.json || result.status !== 'ok' ? JSON.stringify(result) : result.text);
     return result.status === 'ok' ? 0 : 1;
   }

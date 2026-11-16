@@ -1091,6 +1091,37 @@ async phone_pii(testCase) {
     return { ok: outcomes.every((item) => item.ok), actual: outcomes };
   },
 
+  batch(testCase) {
+    const python = findPython();
+    const [pyCmd, ...pyRest] = (python || '').split(' ');
+    const rank = { 优先跟进: 0, 先核验: 1, 暂缓: 2 };
+    const outcomes = (testCase.input.cases || []).map((entry) => {
+      const dir = mkdtempSync(join(tmpdir(), 'buyer-check-batch-'));
+      const file = join(dir, 'packs.json');
+      writeFileSync(file, JSON.stringify((entry.packs || []).map((name) => loadFixture(name))), 'utf8');
+      const args = ['--batch', file, '--json'];
+      const pyRun = spawnSync(pyCmd, [...pyRest, join(ROOT, 'scripts', 'render_card.py'), ...args], { cwd: ROOT, encoding: 'utf8', timeout: 30000 });
+      const jsRun = spawnSync('node', [join(ROOT, 'scripts', 'render_card.mjs'), ...args], { cwd: ROOT, encoding: 'utf8', timeout: 30000 });
+      let py = null;
+      let js = null;
+      try { py = JSON.parse(pyRun.stdout); } catch { py = null; }
+      try { js = JSON.parse(jsRun.stdout); } catch { js = null; }
+      const expect = entry.expect || {};
+      const checks = [isDeepStrictEqual(py, js)];
+      if (expect.status !== undefined) checks.push(py?.status === expect.status);
+      if (py?.status === 'ok' && expect.status === 'ok') {
+        if (expect.row_count !== undefined) checks.push(py.row_count === expect.row_count && (py.rows || []).length === expect.row_count);
+        if (expect.max_table_lines !== undefined) checks.push((py.rows || []).length + 2 <= expect.max_table_lines);
+        const ranks = (py.rows || []).map((row) => rank[row.next]);
+        checks.push(ranks.every((value, index) => index === 0 || ranks[index - 1] <= value));
+        if (expect.footer) checks.push(String(py.text || '').includes('回复序号可对该封做完整查询'));
+        for (const needle of expect.hints_include || []) checks.push((py.hints || []).some((hint) => hint.includes(needle)));
+      }
+      return { name: entry.name, ok: checks.every(Boolean), py, js };
+    });
+    return { ok: outcomes.every((item) => item.ok), actual: outcomes };
+  },
+
   manual() {
     return { ok: true, skipped: true, actual: 'requires live network / model behaviour' };
   },
