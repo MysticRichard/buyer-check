@@ -990,6 +990,31 @@ async phone_pii(testCase) {
     return { ok: outcomes.every((item) => item.ok), actual: outcomes };
   },
 
+  docmeta(testCase) {
+    const python = findPython();
+    const [pyCmd, ...pyRest] = (python || '').split(' ');
+    const outcomes = (testCase.input.cases || []).map((entry) => {
+      const dir = mkdtempSync(join(tmpdir(), 'buyer-check-docmeta-'));
+      const file = join(dir, `${entry.name}.pdf`);
+      writeFileSync(file, entry.pdf, 'latin1');
+      const args = ['docmeta', '--file', file];
+      if (entry.claimed_date) args.push('--claimed-date', entry.claimed_date);
+      const run = spawnSync(pyCmd, [...pyRest, join(ROOT, 'scripts', 'identity_check.py'), ...args], { cwd: ROOT, encoding: 'utf8', timeout: 30000 });
+      const result = run.stdout ? JSON.parse(run.stdout) : null;
+      const check = (result?.doc_checks || [])[0] || {};
+      const expect = entry.expect || {};
+      const ok = result?.status === 'ok'
+        && (expect.creator_class === undefined || check.creator_class === expect.creator_class)
+        && (expect.dates_consistent === undefined || check.dates_consistent === expect.dates_consistent)
+        && (expect.notes_include || []).every((note) => (check.notes || []).some((item) => item.includes(note)))
+        && !JSON.stringify(result).toLowerCase().includes('author')
+        && !JSON.stringify(result).includes('伪造')
+        && !JSON.stringify(result).includes('假证书');
+      return { name: entry.name, ok, result };
+    });
+    return { ok: outcomes.every((item) => item.ok), actual: outcomes };
+  },
+
   manual() {
     return { ok: true, skipped: true, actual: 'requires live network / model behaviour' };
   },

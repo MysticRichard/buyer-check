@@ -21,6 +21,7 @@ import hashlib
 import html as html_lib
 import json
 import os
+import datetime as dt
 import re
 import socket
 import sys
@@ -870,6 +871,79 @@ def keywords_command(args):
     return {"status": "ok", "matches": matches, "languages": languages, "meta": groups.get("meta")}
 
 
+def pdf_date(value):
+    match = re.match(r"D:(\d{4})(\d{2})(\d{2})", value or "")
+    if not match:
+        return None
+    return f"{match.group(1)}-{match.group(2)}-{match.group(3)}"
+
+
+def pdf_info_text(value):
+    return (value or "").replace("\\(", "(").replace("\\)", ")").strip()
+
+
+def docmeta_command(args):
+    path = args.file
+    try:
+        with open(path, "rb") as handle:
+            data = handle.read()
+    except OSError:
+        return {"status": "unreadable", "doc_checks": []}
+    if not data.startswith(b"%PDF"):
+        return {"status": "unreadable", "doc_checks": []}
+    text = data.decode("latin-1", errors="ignore")
+
+    def field(name):
+        match = re.search(r"/" + name + r"\s*(?:\(([^)]*)\)|<([0-9A-Fa-f]+)>)", text)
+        if not match:
+            return None
+        return pdf_info_text(match.group(1) if match.group(1) is not None else match.group(2))
+
+    creator = field("Creator")
+    producer = field("Producer")
+    creation = pdf_date(field("CreationDate"))
+    modified = pdf_date(field("ModDate"))
+    count = re.search(r"/Count\s+(\d+)", text)
+    software = " ".join(item for item in (creator, producer) if item).lower()
+    if any(token in software for token in ("photoshop", "canva", "illustrator", "indesign")):
+        creator_class = "design"
+    elif any(token in software for token in ("word", "excel", "powerpoint", "office")):
+        creator_class = "office"
+    elif any(token in software for token in ("scan", "scansnap", "epson")):
+        creator_class = "scan"
+    elif creator or producer:
+        creator_class = "other"
+    else:
+        creator_class = "unknown"
+    dates_consistent = None
+    notes = []
+    if creation and args.claimed_date:
+        try:
+            age = (dt.date.fromisoformat(creation) - dt.date.fromisoformat(args.claimed_date)).days
+            dates_consistent = not (age > 30 and creator_class == "design")
+        except ValueError:
+            dates_consistent = None
+    if dates_consistent is False:
+        notes.append("存在可解释的差异（创建日期与自称签发日期相差超过 30 天，且创建软件为图像编辑/设计类）")
+    elif dates_consistent is True:
+        notes.append("未见矛盾")
+    else:
+        notes.append("元数据不完整或已重写；仅提示，不计分")
+    return {
+        "status": "ok",
+        "doc_checks": [{
+            "type": "pdf",
+            "file_name": os.path.basename(path),
+            "creator_class": creator_class,
+            "creation_date": creation,
+            "modification_date": modified,
+            "pages": int(count.group(1)) if count else None,
+            "dates_consistent": dates_consistent,
+            "notes": notes,
+        }],
+    }
+
+
 def build_parser():
     parser = argparse.ArgumentParser(description="buyer-check identity helpers (site/backlink/image).")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -926,6 +1000,10 @@ def build_parser():
     keywords = sub.add_parser("keywords", help="match multilingual footprint keywords")
     keywords.add_argument("--text", required=True)
     keywords.add_argument("--languages", default="en")
+
+    docmeta = sub.add_parser("docmeta", help="read PDF metadata without OCR or third-party libraries")
+    docmeta.add_argument("--file", required=True)
+    docmeta.add_argument("--claimed-date")
     return parser
 
 
@@ -947,6 +1025,8 @@ def main(argv=None):
         result = match_command(args)
     elif args.command == "keywords":
         result = keywords_command(args)
+    elif args.command == "docmeta":
+        result = docmeta_command(args)
     else:
         result = image_command(args)
     print(json.dumps(result, ensure_ascii=False))
