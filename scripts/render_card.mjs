@@ -825,6 +825,109 @@ export function tradeTerms(level, tier, inquiryType) {
   return lines.slice(0, 2);
 }
 
+const VERDICT_CONTRA = ['可以付款', '可以预付', '直接付款', '倾向继续', '建议继续', '放心下单', '立即付款'];
+const DOC_CLASS_LABELS = { office: '办公软件', design: '图像编辑/设计软件', scan: '扫描件', other: '其他软件', unknown: '未知软件' };
+const FOOTPRINT_LABELS = {
+  registry: '注册处条目',
+  tender: '招投标公告',
+  debarment: '禁入名单',
+  enforcement: '监管处罚',
+  news: '新闻',
+  forum: '论坛',
+  trade_data: '海关/贸易数据',
+  scale: '规模',
+};
+const MATCH_KEY_LABELS = {
+  legal_name: '名称',
+  address: '地址',
+  tax_id_masked: '税号',
+  phone: '电话',
+  domain: '域名',
+  person_name: '人名',
+  registration_no: '注册号',
+};
+const SOURCE_GRADE_LABELS = { official: '官方', third_party: '第三方', self_declared: '自述' };
+
+function verdictLine(display, evidence, level, actions) {
+  let verdict = text(display.verdict);
+  if (!verdict) return { text: '', warning: null };
+  let warning = null;
+  const available = new Set((evidence.evidence || []).filter((item) => item && typeof item === 'object' && item.id).map((item) => text(item.id)));
+  const evidenceIds = display.evidence_ids;
+  let invalid = charLength(verdict) > 60;
+  if (!Array.isArray(evidenceIds) || !evidenceIds.length || evidenceIds.some((item) => !available.has(text(item)))) invalid = true;
+  if (actions.some((action) => action.status_text === '不建议') && VERDICT_CONTRA.some((word) => verdict.includes(word))) invalid = true;
+  if (invalid) {
+    warning = 'invalid-display';
+    if (level === '高') verdict = '当前风险高，先暂停付款和寄样，补充材料后再评估';
+    else if (level === '中') verdict = '当前风险中等，可先小单并双确认收款账户';
+    else if (level === '需人工核实') verdict = '当前信息不足，先补一项关键信息再谈风险';
+    else verdict = '当前风险低，可按常规推进并双确认收款账户';
+  }
+  let line = `判断：${verdict}`;
+  const hint = text(display.flip_hint);
+  if (hint) line += `；${hint}`;
+  return { text: line, warning };
+}
+
+function checkLines(evidence) {
+  const lines = [];
+  for (const item of evidence.id_checks || []) {
+    if (!item || typeof item !== 'object' || !item.masked) continue;
+    const formatText = item.format_ok === true ? '通过' : item.format_ok === false ? '不通过' : '未知';
+    const checksumText = item.checksum_ok === true ? '通过' : item.checksum_ok === false ? '不通过' : '未知';
+    const parts = [`号码：${text(item.type).toUpperCase()} ${text(item.masked)} 格式${formatText}，校验位${checksumText}`];
+    if (item.entity_type) parts.push(`主体类型 ${text(item.entity_type)}`);
+    if (item.name_suffix_consistent === false) parts.push('名称后缀不一致（仅提示）');
+    for (const note of item.notes || []) parts.push(text(note));
+    lines.push(`${parts.join('；')} [离线]`);
+    if (lines.length >= 3) break;
+  }
+  for (const item of evidence.doc_checks || []) {
+    if (lines.length >= 3) break;
+    if (!item || typeof item !== 'object') continue;
+    const label = text(item.file_label || item.file_name || '文件');
+    const creator = text(item.creator_class || item.producer_class);
+    const classLabel = DOC_CLASS_LABELS[creator] || '未知软件';
+    let note;
+    if (item.dates_consistent === true) note = '元数据未见矛盾';
+    else if (item.dates_consistent === false) note = '存在可解释的差异';
+    else note = '元数据不完整或已重写；仅提示，不计分';
+    lines.push(`文件：${label} 创建软件为${classLabel}，${note} [离线]`);
+  }
+  return lines;
+}
+
+function footprintLines(evidence) {
+  const items = (evidence.footprint || []).filter((item) => item && typeof item === 'object' && item.result === 'hit');
+  if (!items.length) return [];
+  const lowConfidence = text(evidence.confidence) === '低';
+  const lines = ['**公司公开足迹**'];
+  items.slice(0, 3).forEach((item, position) => {
+    const probe = text(item.probe);
+    const label = FOOTPRINT_LABELS[probe] || '公开记录';
+    const summary = (text(item.summary) || '命中公开记录').replace(/\|/g, '/');
+    const grade = SOURCE_GRADE_LABELS[text(item.source_grade)];
+    const suffix = grade ? ` [${grade}]` : '';
+    const keys = (item.matched_keys || []).filter((key) => text(key)).map((key) => MATCH_KEY_LABELS[text(key)] || text(key));
+    const strong = (
+      !lowConfidence
+      && text(item.subject) === 'company'
+      && ['accused', 'regulator_action', 'registered_entity'].includes(text(item.role))
+      && text(item.source_grade) === 'official'
+      && keys.length >= 2
+    );
+    if (strong) {
+      lines.push(`${position + 1}. ${label}：${summary}${suffix} 对上：${keys.join(' + ')}`);
+    } else {
+      let clue = '';
+      if (keys.length) clue = keys.length >= 2 ? `（对上：${keys.join(' + ')}）` : '（对上：仅名称）';
+      lines.push(`${position + 1}. 线索：${label}：${summary}${suffix}，未计分${clue}`);
+    }
+  });
+  return lines;
+}
+
 export function renderCard(evidence, rules) {
   const display = evidence.display || {};
   const errors = validateDisplay(evidence, rules);
@@ -897,6 +1000,7 @@ export function renderCard(evidence, rules) {
   const uncoveredText = uncovered.length > 0 ? uncovered.map(uncoveredSentence).join('、') : '无';
   const firstUncovered = uncovered.length > 0 ? (CHECKPOINT_NAMES[parseUncovered(uncovered[0]).checkpoint] || '公司注册记录') : '公司注册记录';
   const conclusion = computeConclusion(level, actions, firstUncovered);
+  const verdict = verdictLine(display, evidence, level, actions);
 
   const dimNotes = display.dim_notes || {};
   const newMode = ['evidence', 'checks_incomplete', 'conflicts'].some((key) => key in evidence);
@@ -1029,6 +1133,7 @@ export function renderCard(evidence, rules) {
       .join('；');
     lines.push(`⚠ 本次未完成：${details}`);
   }
+  if (verdict.text) lines.push(verdict.text);
   lines.push(`**结论：${conclusion}** 客户：${customerLabel(evidence, display)} · ${inquiryLabel(evidence, display)}`);
   lines.push('');
   lines.push('| 动作 | 建议 | 条件 |');
@@ -1042,14 +1147,15 @@ export function renderCard(evidence, rules) {
   lines.push('');
   const dataDates = collectDataDates(evidence);
   if (dataDates.length > 0) lines.push(`数据日期：${dataDates.map(([label, date]) => `${label} ${date}`).join(' · ')}`);
-  const flipHint = text(display.flip_hint);
-  if (newMode && flipHint) lines.push(`什么会改变结论：${flipHint}`);
-  if (newMode) {
-    const inquiryType = (evidence.intake || {}).inquiry_type || 'general';
-    lines.push('**条款建议**');
-    for (const term of tradeTerms(level, credit.tier, inquiryType)) lines.push(`- ${term}`);
-    lines.push(TRADE_TERMS_DISCLAIMER);
+  const checkItems = checkLines(evidence);
+  if (checkItems.length > 0) {
+    lines.push('**证件与文件自检**');
+    lines.push(...checkItems);
   }
+  const footItems = footprintLines(evidence);
+  if (footItems.length > 0) lines.push(...footItems);
+  const flipHint = text(display.flip_hint);
+  if (newMode && flipHint && !verdict.text) lines.push(`什么会改变结论：${flipHint}`);
   lines.push('**需要注意**');
   if (attention.length === 0) {
     lines.push('- 未发现需要注意的信号');
@@ -1080,6 +1186,12 @@ export function renderCard(evidence, rules) {
   for (const item of missing.slice(0, 2)) lines.push(`- ⚪ ${text(item.text)}`);
   if (applied.missingOverflow > 0) lines.push(`- ⚪ 另有 ${applied.missingOverflow} 项未列出`);
   lines.push('');
+  if (newMode) {
+    const inquiryType = (evidence.intake || {}).inquiry_type || 'general';
+    lines.push('**条款建议**');
+    for (const term of tradeTerms(level, credit.tier, inquiryType)) lines.push(`- ${term}`);
+    lines.push(TRADE_TERMS_DISCLAIMER);
+  }
   if (actionRows.length > 0) {
     lines.push('**一次动作**');
     for (const action of actionRows) {
@@ -1119,6 +1231,7 @@ export function renderCard(evidence, rules) {
     conclusion,
     evidence_missing: applied.evidenceMissing,
     source_grade_warnings: applied.gradeWarnings,
+    verdict_warning: verdict.warning,
     line_count: lines.length,
     first_screen_lines: firstScreenLines,
     card: lines.join('\n'),

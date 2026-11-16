@@ -532,6 +532,7 @@ const runners = {
     if (expect.line_count_max !== undefined) checks.push(result.line_count <= expect.line_count_max);
     if (expect.first_screen_max !== undefined) checks.push(result.first_screen_lines <= expect.first_screen_max);
     if (expect.evidence_missing !== undefined) checks.push(result.evidence_missing === expect.evidence_missing);
+    if (expect.verdict_warning !== undefined) checks.push((result.verdict_warning ?? null) === expect.verdict_warning);
     if (expect.declaration_count !== undefined) {
       const hits = (String(result.card || '').match(/仅基于公开信息的风险信号筛查，不构成对客户的定性。/g) || []).length;
       checks.push(hits === expect.declaration_count);

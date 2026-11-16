@@ -160,8 +160,9 @@ let checked = 0;
   console.log(`✓ domain_similarity: ${domainChecked}/${domainCases.length} cases identical`);
 
   // ---------- render_card ----------
-  const cardFixtures = ['card_harbor.json', 'card_nordic.json', 'card_manual.json', 'legacy_card.json', 'score_mismatch.json', 'card_incomplete.json', 'card_incomplete_base.json', 'card_evidence.json', 'card_user_input.json', 'card_grades.json', 'card_independence.json', 'card_data.json', 'card_conflict.json', 'card_grey_next.json', 'card_benign.json', 'card_flip.json', 'card_bypass.json', 'card_grade_override.json', 'card_many_conflicts.json', 'card_multi_suffix.json', 'card_attention_bypass.json', 'card_explicit_blocked.json', 'card_attention_fake.json', 'card_new_domain.json', 'card_localized.json', 'card_footprint_positive.json', 'card_footprint_negative.json', 'card_footprint_spoof.json'];
+  const cardFixtures = ['card_harbor.json', 'card_nordic.json', 'card_manual.json', 'legacy_card.json', 'score_mismatch.json', 'card_incomplete.json', 'card_incomplete_base.json', 'card_evidence.json', 'card_user_input.json', 'card_grades.json', 'card_independence.json', 'card_data.json', 'card_conflict.json', 'card_grey_next.json', 'card_benign.json', 'card_flip.json', 'card_bypass.json', 'card_grade_override.json', 'card_many_conflicts.json', 'card_multi_suffix.json', 'card_attention_bypass.json', 'card_explicit_blocked.json', 'card_attention_fake.json', 'card_new_domain.json', 'card_localized.json', 'card_v010_full.json', 'card_v010_invalid_verdict.json', 'card_footprint_positive.json', 'card_footprint_negative.json', 'card_footprint_spoof.json'];
   let cardChecked = 0;
+  const cardFailuresBefore = failures;
   for (const fixture of cardFixtures) {
     const [py, js] = runScript(python, 'render_card', [join(ROOT, 'tests', 'fixtures', fixture), '--json']);
     compare(`render_card ${fixture}`, py, js);
@@ -169,7 +170,8 @@ let checked = 0;
   }
   const [pyLadder, jsLadder] = runScript(python, 'render_card', ['--ladder']);
   compare('render_card --ladder', pyLadder, jsLadder);
-  console.log(`✓ render_card: ${cardChecked}/${cardFixtures.length} card cases + 768 ladder combinations identical`);
+  const cardOk = failures === cardFailuresBefore;
+  console.log(`${cardOk ? '✓' : '✗'} render_card: ${cardChecked}/${cardFixtures.length} card cases + 768 ladder combinations ${cardOk ? 'identical' : 'differ'}`);
 
   // ---------- ip_check ----------
   const ipCases = [

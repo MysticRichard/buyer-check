@@ -1224,6 +1224,125 @@ def batch_triage(packs, rules):
     return {"status": "ok", "row_count": len(rows), "rows": rows, "hints": hints, "text": "\n".join(lines)}
 
 
+VERDICT_CONTRA = ["可以付款", "可以预付", "直接付款", "倾向继续", "建议继续", "放心下单", "立即付款"]
+DOC_CLASS_LABELS = {"office": "办公软件", "design": "图像编辑/设计软件", "scan": "扫描件", "other": "其他软件", "unknown": "未知软件"}
+FOOTPRINT_LABELS = {
+    "registry": "注册处条目",
+    "tender": "招投标公告",
+    "debarment": "禁入名单",
+    "enforcement": "监管处罚",
+    "news": "新闻",
+    "forum": "论坛",
+    "trade_data": "海关/贸易数据",
+    "scale": "规模",
+}
+MATCH_KEY_LABELS = {
+    "legal_name": "名称",
+    "address": "地址",
+    "tax_id_masked": "税号",
+    "phone": "电话",
+    "domain": "域名",
+    "person_name": "人名",
+    "registration_no": "注册号",
+}
+SOURCE_GRADE_LABELS = {"official": "官方", "third_party": "第三方", "self_declared": "自述"}
+
+
+def verdict_line(display, evidence, level, actions):
+    verdict = text(display.get("verdict"))
+    if not verdict:
+        return "", None
+    warning = None
+    available = {text(item.get("id")) for item in evidence.get("evidence") or [] if isinstance(item, dict) and item.get("id")}
+    evidence_ids = display.get("evidence_ids")
+    invalid = char_length(verdict) > 60
+    if not isinstance(evidence_ids, list) or not evidence_ids or any(text(item) not in available for item in evidence_ids):
+        invalid = True
+    if any(action.get("status_text") == "不建议" for action in actions) and any(word in verdict for word in VERDICT_CONTRA):
+        invalid = True
+    if invalid:
+        warning = "invalid-display"
+        if level == "高":
+            verdict = "当前风险高，先暂停付款和寄样，补充材料后再评估"
+        elif level == "中":
+            verdict = "当前风险中等，可先小单并双确认收款账户"
+        elif level == "需人工核实":
+            verdict = "当前信息不足，先补一项关键信息再谈风险"
+        else:
+            verdict = "当前风险低，可按常规推进并双确认收款账户"
+    line = f"判断：{verdict}"
+    hint = text(display.get("flip_hint"))
+    if hint:
+        line += f"；{hint}"
+    return line, warning
+
+
+def check_lines(evidence):
+    lines = []
+    for item in evidence.get("id_checks") or []:
+        if not isinstance(item, dict) or not item.get("masked"):
+            continue
+        format_text = {True: "通过", False: "不通过"}.get(item.get("format_ok"), "未知")
+        checksum_text = {True: "通过", False: "不通过"}.get(item.get("checksum_ok"), "未知")
+        parts = [f"号码：{text(item.get('type')).upper()} {text(item.get('masked'))} 格式{format_text}，校验位{checksum_text}"]
+        if item.get("entity_type"):
+            parts.append(f"主体类型 {text(item.get('entity_type'))}")
+        if item.get("name_suffix_consistent") is False:
+            parts.append("名称后缀不一致（仅提示）")
+        for note in item.get("notes") or []:
+            parts.append(text(note))
+        lines.append("；".join(parts) + " [离线]")
+        if len(lines) >= 3:
+            break
+    for item in evidence.get("doc_checks") or []:
+        if len(lines) >= 3:
+            break
+        if not isinstance(item, dict):
+            continue
+        label = text(item.get("file_label") or item.get("file_name") or "文件")
+        creator = text(item.get("creator_class") or item.get("producer_class"))
+        class_label = DOC_CLASS_LABELS.get(creator, "未知软件")
+        if item.get("dates_consistent") is True:
+            note = "元数据未见矛盾"
+        elif item.get("dates_consistent") is False:
+            note = "存在可解释的差异"
+        else:
+            note = "元数据不完整或已重写；仅提示，不计分"
+        lines.append(f"文件：{label} 创建软件为{class_label}，{note} [离线]")
+    return lines
+
+
+def footprint_lines(evidence):
+    items = [item for item in evidence.get("footprint") or [] if isinstance(item, dict) and item.get("result") == "hit"]
+    if not items:
+        return []
+    low_confidence = text(evidence.get("confidence")) == "低"
+    lines = ["**公司公开足迹**"]
+    for position, item in enumerate(items[:3], 1):
+        probe = text(item.get("probe"))
+        label = FOOTPRINT_LABELS.get(probe, "公开记录")
+        summary = text(item.get("summary")) or "命中公开记录"
+        summary = summary.replace("|", "/")
+        grade = SOURCE_GRADE_LABELS.get(text(item.get("source_grade")))
+        suffix = f" [{grade}]" if grade else ""
+        keys = [MATCH_KEY_LABELS.get(text(key), text(key)) for key in item.get("matched_keys") or [] if text(key)]
+        strong = (
+            not low_confidence
+            and text(item.get("subject")) == "company"
+            and text(item.get("role")) in ("accused", "regulator_action", "registered_entity")
+            and text(item.get("source_grade")) == "official"
+            and len(keys) >= 2
+        )
+        if strong:
+            lines.append(f"{position}. {label}：{summary}{suffix} 对上：{' + '.join(keys)}")
+        else:
+            clue = ""
+            if keys:
+                clue = f"（对上：{' + '.join(keys)}）" if len(keys) >= 2 else "（对上：仅名称）"
+            lines.append(f"{position}. 线索：{label}：{summary}{suffix}，未计分{clue}")
+    return lines
+
+
 def render_card(evidence, rules):
     display = evidence.get("display") or {}
     errors = validate_display(evidence, rules)
@@ -1298,6 +1417,7 @@ def render_card(evidence, rules):
     uncovered_text = "、".join(uncovered_sentence(entry) for entry in uncovered) if uncovered else "无"
     first_uncovered = CHECKPOINT_NAMES.get(parse_uncovered(uncovered[0])["checkpoint"], "公司注册记录") if uncovered else "公司注册记录"
     conclusion = compute_conclusion(level, actions, first_uncovered)
+    verdict_text, verdict_warning = verdict_line(display, evidence, level, actions)
 
     dim_notes = display.get("dim_notes") or {}
     new_mode = any(key in evidence for key in ("evidence", "checks_incomplete", "conflicts"))
@@ -1431,6 +1551,8 @@ def render_card(evidence, rules):
             for item in incomplete
         )
         lines.append(f"⚠ 本次未完成：{details}")
+    if verdict_text:
+        lines.append(verdict_text)
     lines.append(f"**结论：{conclusion}** 客户：{customer_label(evidence, display)} · {inquiry_label(evidence, display)}")
     lines.append("")
     lines.append("| 动作 | 建议 | 条件 |")
@@ -1448,16 +1570,16 @@ def render_card(evidence, rules):
     data_dates = collect_data_dates(evidence)
     if data_dates:
         lines.append("数据日期：" + " · ".join(f"{label} {date}" for label, date in data_dates))
+    check_items = check_lines(evidence)
+    if check_items:
+        lines.append("**证件与文件自检**")
+        lines.extend(check_items)
+    foot_items = footprint_lines(evidence)
+    if foot_items:
+        lines.extend(foot_items)
     flip_hint = text(display.get("flip_hint"))
-    if new_mode and flip_hint:
+    if new_mode and flip_hint and not verdict_text:
         lines.append(f"什么会改变结论：{flip_hint}")
-    if new_mode:
-        inquiry_type = (evidence.get("intake") or {}).get("inquiry_type") or "general"
-        terms = trade_terms(level, credit["tier"], inquiry_type)
-        lines.append("**条款建议**")
-        for term in terms:
-            lines.append(f"- {term}")
-        lines.append(TRADE_TERMS_DISCLAIMER)
     lines.append("**需要注意**")
     if not attention:
         lines.append("- 未发现需要注意的信号")
@@ -1491,6 +1613,13 @@ def render_card(evidence, rules):
     if missing_overflow:
         lines.append(f"- ⚪ 另有 {missing_overflow} 项未列出")
     lines.append("")
+    if new_mode:
+        inquiry_type = (evidence.get("intake") or {}).get("inquiry_type") or "general"
+        terms = trade_terms(level, credit["tier"], inquiry_type)
+        lines.append("**条款建议**")
+        for term in terms:
+            lines.append(f"- {term}")
+        lines.append(TRADE_TERMS_DISCLAIMER)
     if action_rows:
         lines.append("**一次动作**")
         for action in action_rows:
@@ -1529,6 +1658,7 @@ def render_card(evidence, rules):
         "conclusion": conclusion,
         "evidence_missing": evidence_missing,
         "source_grade_warnings": source_grade_warnings,
+        "verdict_warning": verdict_warning,
         "line_count": len(lines),
         "first_screen_lines": first_screen_lines,
         "card": "\n".join(lines),

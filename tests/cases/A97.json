@@ -1,0 +1,16 @@
+{
+  "id": "A97",
+  "title": "判断行反绕过：与动作阶梯矛盾时回退模板句，记 invalid-display，不渲染矛盾话术",
+  "type": "render_card",
+  "input": { "fixture": "card_v010_invalid_verdict.json" },
+  "expect": {
+    "status": "ok",
+    "level": "低",
+    "risk_score": 0,
+    "verdict_warning": "invalid-display",
+    "card_includes": ["判断：当前风险低，可按常规推进并双确认收款账户"],
+    "card_excludes": ["可以直接付款"],
+    "line_count_max": 50,
+    "first_screen_max": 14
+  }
+}
