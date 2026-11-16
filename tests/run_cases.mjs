@@ -805,6 +805,73 @@ async phone_pii(testCase) {
     return { ok: checks.every(Boolean), actual: { expected, node: nodeResults, python: pythonResults } };
   },
 
+  country_capabilities(testCase) {
+    const caps = JSON.parse(readFileSync(join(ROOT, 'scripts', 'country_capabilities.json'), 'utf8'));
+    const allowedVerification = new Set(['official-page', 'secondary-source', 'unverified', 'discovered']);
+    const allowedChecksums = new Set(['none', 'gstin-mod36', 'pan-structure']);
+    const validate = (data) => {
+      const errors = [];
+      if (data.schema_version !== '0.6.0') errors.push('schema_version');
+      if (!data.countries || typeof data.countries !== 'object') errors.push('countries');
+      if (!Array.isArray(data.global_sources) || !['gleif-lei', 'worldbank-debarment', 'sanctions-lists'].every((item) => data.global_sources.includes(item))) errors.push('global_sources');
+      for (const [code, country] of Object.entries(data.countries || {})) {
+        if (!allowedVerification.has(country.verification)) errors.push(`${code}.verification`);
+        const registry = country.registry || {};
+        if (registry.automation_allowed === true && (registry.verification || country.verification) !== 'official-page') errors.push(`${code}.automation`);
+        for (const format of country.id_formats || []) {
+          try { new RegExp(format.pattern); } catch { errors.push(`${code}.id_formats.pattern`); }
+          if (!allowedChecksums.has(format.checksum || 'none')) errors.push(`${code}.id_formats.checksum`);
+        }
+      }
+      return errors;
+    };
+    const errors = validate(caps);
+    const bad = cloneJson(caps);
+    bad.countries.__bad = { verification: 'made-up' };
+    const badCaught = validate(bad).length > 0;
+    const python = findPython();
+    const [pyCmd, ...pyRest] = (python || '').split(' ');
+    const cli = (code) => {
+      const py = spawnSync(pyCmd, [...pyRest, join(ROOT, 'scripts', 'identity_check.py'), 'country', '--code', code], { cwd: ROOT, encoding: 'utf8', timeout: 30000 });
+      const out = { python: py.stdout ? JSON.parse(py.stdout) : null };
+      const jsScript = join(ROOT, 'scripts', 'identity_check.mjs');
+      if (existsSync(jsScript)) {
+        const js = spawnSync('node', [jsScript, 'country', '--code', code], { cwd: ROOT, encoding: 'utf8', timeout: 30000 });
+        out.node = js.stdout ? JSON.parse(js.stdout) : null;
+        if (out.python && out.node) out.parity = isDeepStrictEqual(out.python, out.node);
+      }
+      return out;
+    };
+    const inResult = cli('IN');
+    const unknownResult = cli('ZZ');
+    const ok = errors.length === 0
+      && badCaught
+      && inResult.python?.status === 'ok'
+      && unknownResult.python?.status === 'not-in-matrix'
+      && inResult.parity !== false
+      && unknownResult.parity !== false;
+    return { ok, actual: { errors, badCaught, in: inResult, unknown: unknownResult } };
+  },
+
+  country_consistency(testCase) {
+    const base = cloneJson(loadFixture(testCase.input.fixture));
+    const results = ['IN', 'SG', 'ZZ'].map((code) => {
+      const evidence = cloneJson(base);
+      evidence.subject = { ...(evidence.subject || {}), country: code };
+      const result = renderCard(evidence, loadRules());
+      return { code, risk_score: result.risk_score, level: result.level, actions: result.actions };
+    });
+    const first = results[0];
+    const ok = results.every((item) => item.risk_score === first.risk_score && item.level === first.level && isDeepStrictEqual(item.actions, first.actions));
+    return { ok, actual: results };
+  },
+
+  doc_contains(testCase) {
+    const combined = (testCase.input.files || []).map((file) => readFileSync(join(ROOT, file), 'utf8')).join('\n');
+    const missing = (testCase.input.needles || []).filter((needle) => !combined.includes(needle));
+    return { ok: missing.length === 0, actual: { missing } };
+  },
+
   manual() {
     return { ok: true, skipped: true, actual: 'requires live network / model behaviour' };
   },

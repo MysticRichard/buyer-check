@@ -643,6 +643,54 @@ async function registryCommand(args) {
   return { status: 'found', ...base, ...entry, country_mismatch: mismatch };
 }
 
+const DISCOVERY_TEMPLATES = [
+  '“<country> company registry official site” + “<country> 公司登记 官方网站”',
+  '“<country> business register ministry of justice / commerce / economy”',
+  '“<country> tax authority taxpayer verification”',
+  '“<country> government procurement portal”',
+  '“<country> insolvency register official”',
+];
+
+function countryCommand(args) {
+  const code = String(args.countryCode || '').trim().toUpperCase();
+  if (!code) return { status: 'invalid-input', error: 'missing country code' };
+  let data;
+  try {
+    data = JSON.parse(readFileSync(new URL('./country_capabilities.json', import.meta.url), 'utf8'));
+  } catch {
+    return { status: 'unavailable', error: 'capabilities-unreadable' };
+  }
+  const country = (data.countries || {})[code.toLowerCase()];
+  if (!country) {
+    return {
+      status: 'not-in-matrix',
+      country: code,
+      discovery: { used: 'discovery', verification: 'discovered', templates: DISCOVERY_TEMPLATES, note: '本次运行临时发现，不写回仓库；官方页面核对前只给链接和检索清单' },
+      global_sources: data.global_sources || [],
+    };
+  }
+  const registry = country.registry || {};
+  return {
+    status: 'ok',
+    country: code,
+    name: country.name || null,
+    verification: country.verification || 'unverified',
+    registry: {
+      name: registry.name || null,
+      url: registry.url || null,
+      verification: registry.verification || country.verification || 'unverified',
+      automation_allowed: registry.automation_allowed === true,
+    },
+    tax_verification: country.tax_verification || null,
+    procurement: country.procurement || null,
+    insolvency: country.insolvency || null,
+    id_formats: country.id_formats || [],
+    sources: country.sources || [],
+    global_sources: data.global_sources || [],
+    discovery: false,
+  };
+}
+
 function usage() {
   return [
     'Usage: node identity_check.mjs site [--domain DOMAIN] [--html-file FILE] [--online]',
@@ -650,12 +698,13 @@ function usage() {
     '       node identity_check.mjs image PATH1 PATH2 [PATH3 ...]',
     '       node identity_check.mjs map --company NAME [--phone PHONE] [--online | --fixture-json FILE]',
     '       node identity_check.mjs registry --company NAME [--country NO] [--claimed-country NO] [--online | --fixture-json FILE]',
+    '       node identity_check.mjs country --code IN',
   ].join('\n');
 }
 
 function parseArgs(argv) {
   const command = argv[0];
-  const args = { command, domain: null, htmlFile: null, online: false, maxPages: 4, delay: 1, timeout: 10, text: '', paths: [], company: null, phone: null, country: null, claimedCountry: null, googleKey: null, fixtureJson: null, fixtureSource: 'google_places', limit: 5 };
+  const args = { command, domain: null, htmlFile: null, online: false, maxPages: 4, delay: 1, timeout: 10, text: '', paths: [], company: null, phone: null, country: null, claimedCountry: null, countryCode: null, googleKey: null, fixtureJson: null, fixtureSource: 'google_places', limit: 5 };
   for (let i = 1; i < argv.length; i += 1) {
     const token = argv[i];
     if (token === '--domain') args.domain = argv[++i];
@@ -669,6 +718,7 @@ function parseArgs(argv) {
     else if (token === '--phone') args.phone = argv[++i];
     else if (token === '--country') args.country = argv[++i];
     else if (token === '--claimed-country') args.claimedCountry = argv[++i];
+    else if (token === '--code') args.countryCode = argv[++i];
     else if (token === '--google-key') args.googleKey = argv[++i];
     else if (token === '--fixture-json') args.fixtureJson = argv[++i];
     else if (token === '--fixture-source') args.fixtureSource = argv[++i];
@@ -680,7 +730,7 @@ function parseArgs(argv) {
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
-  if (!['site', 'backlink', 'image', 'map', 'registry'].includes(args.command)) {
+  if (!['site', 'backlink', 'image', 'map', 'registry', 'country'].includes(args.command)) {
     console.log(JSON.stringify({ status: 'unavailable', error: 'unknown or missing subcommand' }));
     return 2;
   }
@@ -689,9 +739,10 @@ async function main() {
   else if (args.command === 'backlink') result = backlinkCommand(args);
   else if (args.command === 'map') result = await mapCommand(args);
   else if (args.command === 'registry') result = await registryCommand(args);
+  else if (args.command === 'country') result = countryCommand(args);
   else result = await imageCommand(args);
   console.log(JSON.stringify(result));
-  return ['ok', 'found', 'not-found', 'ambiguous', 'offline'].includes(result.status) ? 0 : 1;
+  return ['ok', 'found', 'not-found', 'ambiguous', 'offline', 'not-in-matrix'].includes(result.status) ? 0 : 1;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

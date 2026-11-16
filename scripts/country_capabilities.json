@@ -1,6 +1,6 @@
 {
   "comment": "Country capability matrix for buyer-check (D10/D11/D12). Unknown fields are null and never guessed; verification status must be filled for every entry (F5). registry entries are link+checklist only — never auto-scraped.",
-  "schema_version": "0.5.0",
+  "schema_version": "0.6.0",
   "countries": {
     "sg": {
       "registry": {
@@ -57,7 +57,26 @@
       "customs_free_company_level": null,
       "map": "google",
       "last_verified": "2026-10-23",
-      "verification": "secondary-source"
+      "verification": "secondary-source",
+      "name": "Vietnam",
+      "tax_verification": {
+        "name": null,
+        "url": null,
+        "verification": "unverified",
+        "automation_allowed": false
+      },
+      "procurement": {
+        "name": null,
+        "url": null,
+        "verification": "unverified"
+      },
+      "insolvency": {
+        "name": null,
+        "url": null,
+        "verification": "unverified"
+      },
+      "id_formats": [],
+      "sources": []
     },
     "ae": {
       "registry": {
@@ -73,7 +92,7 @@
       "customs_free_company_level": null,
       "map": "google",
       "last_verified": "2026-10-23",
-      "verification": "mixed (Tahaqaq: official page; rest: secondary-source)"
+      "verification": "secondary-source"
     },
     "sa": {
       "registry": {
@@ -209,7 +228,26 @@
       "customs_free_company_level": null,
       "map": "google",
       "last_verified": "2026-10-23",
-      "verification": "unverified"
+      "verification": "unverified",
+      "name": "Philippines",
+      "tax_verification": {
+        "name": null,
+        "url": null,
+        "verification": "unverified",
+        "automation_allowed": false
+      },
+      "procurement": {
+        "name": null,
+        "url": null,
+        "verification": "unverified"
+      },
+      "insolvency": {
+        "name": null,
+        "url": null,
+        "verification": "unverified"
+      },
+      "id_formats": [],
+      "sources": []
     },
     "kh": {
       "registry": {
@@ -223,12 +261,158 @@
       "map": "google",
       "last_verified": "2026-10-23",
       "verification": "unverified"
+    },
+    "in": {
+      "name": "India",
+      "registry": {
+        "name": null,
+        "url": null,
+        "free_basic_search": null,
+        "automation_allowed": false,
+        "verification": "unverified",
+        "notes": "官方入口待核实"
+      },
+      "tax_verification": {
+        "name": null,
+        "url": null,
+        "verification": "unverified",
+        "automation_allowed": false
+      },
+      "procurement": {
+        "name": null,
+        "url": null,
+        "verification": "unverified"
+      },
+      "insolvency": {
+        "name": null,
+        "url": null,
+        "verification": "unverified"
+      },
+      "id_formats": [],
+      "sources": [],
+      "verification": "unverified",
+      "last_verified": null,
+      "customs_free_company_level": null,
+      "map": "google"
+    },
+    "za": {
+      "name": "South Africa",
+      "registry": {
+        "name": null,
+        "url": null,
+        "free_basic_search": null,
+        "automation_allowed": false,
+        "verification": "unverified",
+        "notes": "官方入口待核实"
+      },
+      "tax_verification": {
+        "name": null,
+        "url": null,
+        "verification": "unverified",
+        "automation_allowed": false
+      },
+      "procurement": {
+        "name": null,
+        "url": null,
+        "verification": "unverified"
+      },
+      "insolvency": {
+        "name": null,
+        "url": null,
+        "verification": "unverified"
+      },
+      "id_formats": [],
+      "sources": [],
+      "verification": "unverified",
+      "last_verified": null,
+      "customs_free_company_level": null,
+      "map": "google"
+    },
+    "lb": {
+      "name": "Lebanon",
+      "registry": {
+        "name": null,
+        "url": null,
+        "free_basic_search": null,
+        "automation_allowed": false,
+        "verification": "unverified",
+        "notes": "官方入口待核实"
+      },
+      "tax_verification": {
+        "name": null,
+        "url": null,
+        "verification": "unverified",
+        "automation_allowed": false
+      },
+      "procurement": {
+        "name": null,
+        "url": null,
+        "verification": "unverified"
+      },
+      "insolvency": {
+        "name": null,
+        "url": null,
+        "verification": "unverified"
+      },
+      "id_formats": [],
+      "sources": [],
+      "verification": "unverified",
+      "last_verified": null,
+      "customs_free_company_level": null,
+      "map": "google"
+    },
+    "ly": {
+      "name": "Libya",
+      "registry": {
+        "name": null,
+        "url": null,
+        "free_basic_search": null,
+        "automation_allowed": false,
+        "verification": "unverified",
+        "notes": "官方入口待核实"
+      },
+      "tax_verification": {
+        "name": null,
+        "url": null,
+        "verification": "unverified",
+        "automation_allowed": false
+      },
+      "procurement": {
+        "name": null,
+        "url": null,
+        "verification": "unverified"
+      },
+      "insolvency": {
+        "name": null,
+        "url": null,
+        "verification": "unverified"
+      },
+      "id_formats": [],
+      "sources": [],
+      "verification": "unverified",
+      "last_verified": null,
+      "customs_free_company_level": null,
+      "map": "google"
     }
   },
   "not_yet_surveyed": [],
   "rules": {
     "no_coverage": "dimensions with null or absent country data are skipped, marked not-covered, and never scored (D10)",
     "unverified": "entries marked secondary-source or unverified provide link + checklist only, never conclusions",
-    "registry": "registries are never auto-scraped; link + manual checklist only (exceptions: official API with user-supplied key, e.g. Saudi Wathq)"
-  }
+    "registry": "registries are never auto-scraped; link + manual checklist only (exceptions: official API with user-supplied key, e.g. Saudi Wathq)",
+    "verification_enum": [
+      "official-page",
+      "secondary-source",
+      "unverified",
+      "discovered"
+    ],
+    "unverified_behavior": "link-and-checklist-only",
+    "no_coverage_behavior": "skip-not-scored",
+    "automation_allowed_meaning": "single-record AI lookup only; no bulk scraping, no captcha or login bypass"
+  },
+  "global_sources": [
+    "gleif-lei",
+    "worldbank-debarment",
+    "sanctions-lists"
+  ]
 }

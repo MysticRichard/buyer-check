@@ -1,0 +1,7 @@
+{
+  "id": "A68",
+  "title": "Z1 国家能力表 0.6.0：结构/枚举/正则/算法白名单校验，坏条目必须报错",
+  "type": "country_capabilities",
+  "input": {},
+  "expect": { "all_pass": true }
+}

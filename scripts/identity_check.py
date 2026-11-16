@@ -629,6 +629,61 @@ def registry_command(args):
     return {"status": "found", **base, **entry, "country_mismatch": mismatch}
 
 
+DISCOVERY_TEMPLATES = [
+    "“<country> company registry official site” + “<country> 公司登记 官方网站”",
+    "“<country> business register ministry of justice / commerce / economy”",
+    "“<country> tax authority taxpayer verification”",
+    "“<country> government procurement portal”",
+    "“<country> insolvency register official”",
+]
+
+
+def country_command(args):
+    code = (args.code or "").strip().upper()
+    if not code:
+        return {"status": "invalid-input", "error": "missing country code"}
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "country_capabilities.json")
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            data = json.load(handle)
+    except (OSError, ValueError):
+        return {"status": "unavailable", "error": "capabilities-unreadable"}
+    country = (data.get("countries") or {}).get(code.lower())
+    if not country:
+        return {
+            "status": "not-in-matrix",
+            "country": code,
+            "discovery": {
+                "used": "discovery",
+                "verification": "discovered",
+                "templates": DISCOVERY_TEMPLATES,
+                "note": "本次运行临时发现，不写回仓库；官方页面核对前只给链接和检索清单",
+            },
+            "global_sources": data.get("global_sources") or [],
+        }
+    registry = country.get("registry") or {}
+    registry_view = {
+        "name": registry.get("name"),
+        "url": registry.get("url"),
+        "verification": registry.get("verification") or country.get("verification") or "unverified",
+        "automation_allowed": registry.get("automation_allowed") is True,
+    }
+    return {
+        "status": "ok",
+        "country": code,
+        "name": country.get("name"),
+        "verification": country.get("verification") or "unverified",
+        "registry": registry_view,
+        "tax_verification": country.get("tax_verification"),
+        "procurement": country.get("procurement"),
+        "insolvency": country.get("insolvency"),
+        "id_formats": country.get("id_formats") or [],
+        "sources": country.get("sources") or [],
+        "global_sources": data.get("global_sources") or [],
+        "discovery": False,
+    }
+
+
 def build_parser():
     parser = argparse.ArgumentParser(description="buyer-check identity helpers (site/backlink/image).")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -667,6 +722,9 @@ def build_parser():
     registry.add_argument("--online", action="store_true")
     registry.add_argument("--fixture-json")
     registry.add_argument("--timeout", type=int, default=10)
+
+    country = sub.add_parser("country", help="return a country capability profile or discovery templates")
+    country.add_argument("--code")
     return parser
 
 
@@ -680,10 +738,12 @@ def main(argv=None):
         result = map_command(args)
     elif args.command == "registry":
         result = registry_command(args)
+    elif args.command == "country":
+        result = country_command(args)
     else:
         result = image_command(args)
     print(json.dumps(result, ensure_ascii=False))
-    return 0 if result.get("status") in ("ok", "found", "not-found", "ambiguous", "offline") else 1
+    return 0 if result.get("status") in ("ok", "found", "not-found", "ambiguous", "offline", "not-in-matrix") else 1
 
 
 if __name__ == "__main__":
