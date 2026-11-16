@@ -341,6 +341,7 @@ function isTechnical(value) {
 
 const FORBIDDEN = ['骗子', '诈骗犯', '确定是假的', '一定有问题'];
 const SCRIPT_FORBIDDEN = ['核实', '背调', '怀疑', '诈骗'];
+const LOCALIZED_LANGS = new Set(['ar', 'fr', 'es', 'pt', 'ru', 'tr', 'id', 'th', 'vi', 'hi', 'zh']);
 const EMAIL_RE = /[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}/;
 const PHONE_NON_NUMBER_PATTERNS = [
   '\\b\\d{4}[-/.]\\d{1,2}[-/.]\\d{1,2}\\b',
@@ -453,6 +454,18 @@ export function validateDisplay(evidence, rules) {
     else {
       for (const phrase of SCRIPT_FORBIDDEN) {
         if (item.en.includes(phrase) || item.zh.includes(phrase)) add('forbidden_word', 'scripts');
+      }
+    }
+    const localized = item.localized;
+    if (localized !== undefined && localized !== null) {
+      if (typeof localized !== 'object' || Array.isArray(localized)) add('invalid_type', 'scripts.localized');
+      else {
+        for (const [lang, value] of Object.entries(localized)) {
+          if (!LOCALIZED_LANGS.has(lang) || typeof value !== 'string') { add('invalid_type', 'scripts.localized'); continue; }
+          for (const phrase of SCRIPT_FORBIDDEN) {
+            if (value.includes(phrase)) add('forbidden_word', 'scripts.localized');
+          }
+        }
       }
     }
   }

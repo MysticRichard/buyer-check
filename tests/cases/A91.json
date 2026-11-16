@@ -1,0 +1,32 @@
+{
+  "id": "A91",
+  "title": "Z27 localized 字段校验：未知语言或非字符串返回 invalid_type，含禁用词返回 forbidden_word",
+  "type": "render_card_validation",
+  "input": {
+    "fixture": "card_harbor.json",
+    "cases": [
+      {
+        "name": "localized-bad-language",
+        "mutate": [
+          { "path": "scripts.0.localized", "value": { "xx": "hello" } }
+        ],
+        "expect_code": "invalid_type"
+      },
+      {
+        "name": "localized-not-string",
+        "mutate": [
+          { "path": "scripts.0.localized", "value": { "ar": 42 } }
+        ],
+        "expect_code": "invalid_type"
+      },
+      {
+        "name": "localized-forbidden-word",
+        "mutate": [
+          { "path": "scripts.0.localized", "value": { "ar": "هذا诈骗" } }
+        ],
+        "expect_code": "forbidden_word"
+      }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

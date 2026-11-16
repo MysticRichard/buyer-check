@@ -394,6 +394,7 @@ def is_technical(value):
 
 FORBIDDEN = ["骗子", "诈骗犯", "确定是假的", "一定有问题"]
 SCRIPT_FORBIDDEN = ["核实", "背调", "怀疑", "诈骗"]
+LOCALIZED_LANGS = {"ar", "fr", "es", "pt", "ru", "tr", "id", "th", "vi", "hi", "zh"}
 EMAIL_RE = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}")
 PHONE_CANDIDATE_RE = re.compile(r"(?:\+|00)\d[\d\s().\-]{4,20}\d|\d[\d\s().\-]{4,20}\d")
 MASKED_PHONE_RE = re.compile(r"(?:\+|00)?\d[\d\s()\-*]*\*[\d\s()\-*]*")
@@ -530,6 +531,18 @@ def validate_display(evidence, rules):
             for phrase in SCRIPT_FORBIDDEN:
                 if phrase in item.get("en", "") or phrase in item.get("zh", ""):
                     add("forbidden_word", "scripts")
+        localized = item.get("localized")
+        if localized is not None:
+            if not isinstance(localized, dict):
+                add("invalid_type", "scripts.localized")
+            else:
+                for lang, value in localized.items():
+                    if lang not in LOCALIZED_LANGS or not isinstance(value, str):
+                        add("invalid_type", "scripts.localized")
+                        continue
+                    for phrase in SCRIPT_FORBIDDEN:
+                        if phrase in value:
+                            add("forbidden_word", "scripts.localized")
 
     questions = display.get("open_questions")
     if questions is not None:

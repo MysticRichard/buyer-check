@@ -1,0 +1,10 @@
+{
+  "id": "A89",
+  "title": "Z27 本地化话术模板：带机器翻译标注、只进报告、无威胁指控措辞",
+  "type": "doc_contains",
+  "input": {
+    "files": ["report_template.md", "card_template.md"],
+    "needles": ["机器翻译，发出前请核对", "localized", "阿拉伯语", "结论卡仍只显示英文", "不自行翻译", "威胁", "指控", "字节一致"]
+  },
+  "expect": { "all_pass": true }
+}

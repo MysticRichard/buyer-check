@@ -90,6 +90,8 @@
 
 **`display`（模型填文字，脚本渲染）**：`customer_label`、`inquiry_type`、`dim_notes{company, link, contact, behavior, compliance, scale}`、`attention[]`、`verified[]`、`missing[]`、`open_questions[]`、`scripts[]`。
 
+**`display.scripts[]`（v0.10 本地化话术）**：每项 `{en, zh, localized?}`；`localized` 可选，只接受 `ar`/`fr`/`es`/`pt`/`ru`/`tr`/`id`/`th`/`vi`/`hi`/`zh` 为键、字符串为值。结论卡只渲染 `en` + `zh` 两行，不渲染 `localized`，旧包无此字段时输出与 v0.9.x 字节一致；`localized` 只进完整报告 6.1，且每条必须带「机器翻译，发出前请核对」。`localized` 内出现禁用词（核实/背调/怀疑/诈骗）时返回 `invalid-display`。
+
 **校验规则**：`customer_label`/`inquiry_type` ≤40 字；`dim_notes.*` 已查项必填、每项 ≤28 个汉字；`attention`/`verified`/`missing` ≤3/3/2，每条 `text` ≤30 个汉字；`attention[].kind` 取 `flag`/`clue`，`flag` 必须给 `flag_id` 且能在 `flags` 找到；`missing[].action` 四个字段齐全，`url` 为 http/https 或 `null`；`scripts` ≤3；`open_questions` 每条 ≤12 个汉字、≤3 条；所有文字不含技术词、禁用词、完整手机号和完整邮箱。
 
 ## 三、结论卡版式（v0.9 硬性规则）

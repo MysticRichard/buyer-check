@@ -1,0 +1,19 @@
+{
+  "id": "A90",
+  "title": "Z27 本地化话术：卡片仍只显示英文+中文，阿拉伯语/越南语版本不渲染",
+  "type": "render_card",
+  "input": {
+    "fixture": "card_localized.json",
+    "compare_fixture": "card_harbor.json"
+  },
+  "expect": {
+    "status": "ok",
+    "card_includes": [
+      "Could you confirm whether Siemens is mandatory or an equivalent brand is acceptable?",
+      "请确认西门子是否强制，或是否接受同等品牌。"
+    ],
+    "card_excludes": ["هل يمكنك تأكيد", "Anh/chị có thể xác nhận"],
+    "line_count_max": 50,
+    "first_screen_max": 14
+  }
+}
