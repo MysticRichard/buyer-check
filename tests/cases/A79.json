@@ -1,0 +1,10 @@
+{
+  "id": "A79",
+  "title": "Z13 新增红旗恰为 8 条，编号不重复，权重/why/benign/flip_hint 与文档一致",
+  "type": "flag_pack",
+  "input": {
+    "ids": ["RF-FOOT-001", "RF-FOOT-002", "RF-FOOT-003", "RF-FOOT-004", "RF-FOOT-005", "RF-ID-004", "RF-ID-005", "RF-DOC-001"],
+    "weights": [3, 3, 3, 2, 2, 2, 2, 1]
+  },
+  "expect": { "all_pass": true }
+}

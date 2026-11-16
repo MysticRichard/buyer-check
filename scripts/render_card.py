@@ -16,6 +16,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import json
 import os
 import re
@@ -854,6 +855,91 @@ def validate_conflicts(evidence):
     return items, errors
 
 
+def parse_iso_date(value):
+    try:
+        return dt.date.fromisoformat(text(value))
+    except ValueError:
+        return None
+
+
+def within_years(data_as_of, as_of, years):
+    recorded = parse_iso_date(data_as_of)
+    if recorded is None:
+        return True
+    end = parse_iso_date(as_of) or dt.date(9999, 12, 31)
+    return (end - recorded).days <= years * 365
+
+
+def derive_flags(evidence):
+    derived = []
+    capabilities = evidence.get("capabilities") or {}
+    full = capabilities.get("tier") in (None, "full")
+    as_of = evidence.get("as_of") or "9999-12-31"
+    evidence_index = {
+        text(item.get("id")): item
+        for item in (evidence.get("evidence") or [])
+        if isinstance(item, dict) and text(item.get("id"))
+    }
+
+    def add(flag_id, evidence_ids=None):
+        if any(item["id"] == flag_id for item in derived):
+            return
+        derived.append({"id": flag_id, "evidence_ids": evidence_ids or []})
+
+    def eligible(item, official_required, years):
+        if not isinstance(item, dict) or item.get("subject") != "company":
+            return False
+        if len(item.get("matched_keys") or []) < 2:
+            return False
+        if official_required and (item.get("source_grade") != "official" or not full):
+            return False
+        ids = [text(eid) for eid in (item.get("evidence_ids") or []) if text(eid)]
+        if not ids or any(eid not in evidence_index for eid in ids):
+            return False
+        return within_years(item.get("data_as_of"), as_of, years)
+
+    for item in evidence.get("footprint") or []:
+        if not isinstance(item, dict):
+            continue
+        probe = item.get("probe")
+        role = item.get("role")
+        if probe == "enforcement" and role in ("accused", "regulator_action") and item.get("category") == "fraud" and eligible(item, True, 5):
+            add("RF-FOOT-001", item.get("evidence_ids"))
+        elif probe == "debarment" and eligible(item, True, 3):
+            add("RF-FOOT-002", item.get("evidence_ids"))
+        elif probe == "tender" and role in ("accused", "regulator_action") and item.get("category") == "fraud" and eligible(item, True, 5):
+            add("RF-FOOT-003", item.get("evidence_ids"))
+        elif probe in ("news", "forum") and role == "accused" and item.get("source_grade") == "third_party" and eligible(item, False, 5):
+            domains = set()
+            for eid in item.get("evidence_ids") or []:
+                entry = evidence_index.get(text(eid)) or {}
+                domain = registrable_domain(url_host(entry.get("url")))
+                if domain:
+                    domains.add(domain)
+            if len(domains) >= 2:
+                add("RF-FOOT-004", item.get("evidence_ids"))
+        elif probe == "scale" and item.get("source_grade") in ("official", "third_party") and eligible(item, False, 5):
+            try:
+                ratio = float(item.get("scale_ratio") or 0)
+            except (TypeError, ValueError):
+                ratio = 0
+            if ratio >= 10:
+                add("RF-FOOT-005", item.get("evidence_ids"))
+
+    for check in evidence.get("id_checks") or []:
+        if not isinstance(check, dict):
+            continue
+        if check.get("format_ok") is False or check.get("checksum_ok") is False:
+            add("RF-ID-004")
+        if check.get("name_suffix_consistent") is False:
+            add("RF-ID-005")
+
+    for check in evidence.get("doc_checks") or []:
+        if isinstance(check, dict) and check.get("dates_consistent") is False and check.get("producer_class") == "design":
+            add("RF-DOC-001")
+    return derived
+
+
 def render_card(evidence, rules):
     display = evidence.get("display") or {}
     errors = validate_display(evidence, rules)
@@ -872,6 +958,9 @@ def render_card(evidence, rules):
         return {"status": "invalid-input", "errors": conflict_errors}
 
     ids = flag_ids_of(evidence)
+    derived_flags = derive_flags(evidence)
+    ids = list(dict.fromkeys(ids + [item["id"] for item in derived_flags]))
+    derived_map = {item["id"]: item for item in derived_flags}
     flag_index = {flag.get("id"): flag for flag in (rules.get("flags") or [])}
     flag_weight = lambda flag_id: (flag_index.get(flag_id) or {}).get("weight", 0)
 
@@ -959,6 +1048,8 @@ def render_card(evidence, rules):
         for flag in flag_attention:
             item = {"kind": "flag", "flag_id": flag["id"], "text": ""}
             evidence_ids = flag_entries.get(flag["id"], {}).get("evidence_ids")
+            if not evidence_ids:
+                evidence_ids = derived_map.get(flag["id"], {}).get("evidence_ids")
             if isinstance(evidence_ids, list) and evidence_ids:
                 item["evidence_ids"] = evidence_ids
             attention.append(item)

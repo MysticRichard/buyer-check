@@ -1,0 +1,13 @@
+{
+  "id": "A80",
+  "title": "Z14 反例：受害者、同名其他公司、单一第三方、无匹配键/窗外、安全类处罚均不计分",
+  "type": "render_card",
+  "input": { "fixture": "card_footprint_negative.json" },
+  "expect": {
+    "status": "ok",
+    "risk_score": 0,
+    "level": "低",
+    "card_excludes": ["官方认定的欺诈类记录", "采购或多边机构禁入", "招标材料造假", "多个独立来源的欺诈指控", "自称规模与官方记录量级严重不符"],
+    "line_count_max": 50
+  }
+}

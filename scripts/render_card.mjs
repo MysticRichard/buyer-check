@@ -741,6 +741,63 @@ function validateConflicts(evidence) {
   return { items, errors };
 }
 
+function parseIsoDate(value) {
+  const parsed = new Date(`${text(value)}T00:00:00Z`);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function withinYears(dataAsOf, asOf, years) {
+  const recorded = parseIsoDate(dataAsOf);
+  if (!recorded) return true;
+  const end = parseIsoDate(asOf) || new Date('9999-12-31T00:00:00Z');
+  return (end.getTime() - recorded.getTime()) / 86400000 <= years * 365;
+}
+
+function deriveFlags(evidence) {
+  const derived = [];
+  const capabilities = evidence.capabilities || {};
+  const full = capabilities.tier === undefined || capabilities.tier === 'full';
+  const asOf = evidence.as_of || '9999-12-31';
+  const evidenceIndex = new Map((evidence.evidence || []).filter((item) => item && typeof item === 'object' && text(item.id)).map((item) => [text(item.id), item]));
+  const add = (id, evidenceIds = []) => {
+    if (!derived.some((item) => item.id === id)) derived.push({ id, evidence_ids: evidenceIds });
+  };
+  const eligible = (item, officialRequired, years) => {
+    if (!item || typeof item !== 'object' || item.subject !== 'company') return false;
+    if ((item.matched_keys || []).length < 2) return false;
+    if (officialRequired && (item.source_grade !== 'official' || !full)) return false;
+    const ids = (item.evidence_ids || []).map((id) => text(id)).filter(Boolean);
+    if (ids.length === 0 || ids.some((id) => !evidenceIndex.has(id))) return false;
+    return withinYears(item.data_as_of, asOf, years);
+  };
+  for (const item of evidence.footprint || []) {
+    if (!item || typeof item !== 'object') continue;
+    if (item.probe === 'enforcement' && ['accused', 'regulator_action'].includes(item.role) && item.category === 'fraud' && eligible(item, true, 5)) add('RF-FOOT-001', item.evidence_ids);
+    else if (item.probe === 'debarment' && eligible(item, true, 3)) add('RF-FOOT-002', item.evidence_ids);
+    else if (item.probe === 'tender' && ['accused', 'regulator_action'].includes(item.role) && item.category === 'fraud' && eligible(item, true, 5)) add('RF-FOOT-003', item.evidence_ids);
+    else if (['news', 'forum'].includes(item.probe) && item.role === 'accused' && item.source_grade === 'third_party' && eligible(item, false, 5)) {
+      const domains = new Set();
+      for (const id of item.evidence_ids || []) {
+        const entry = evidenceIndex.get(text(id)) || {};
+        const domain = registrableDomain(urlHost(entry.url));
+        if (domain) domains.add(domain);
+      }
+      if (domains.size >= 2) add('RF-FOOT-004', item.evidence_ids);
+    } else if (item.probe === 'scale' && ['official', 'third_party'].includes(item.source_grade) && eligible(item, false, 5) && Number(item.scale_ratio || 0) >= 10) {
+      add('RF-FOOT-005', item.evidence_ids);
+    }
+  }
+  for (const check of evidence.id_checks || []) {
+    if (!check || typeof check !== 'object') continue;
+    if (check.format_ok === false || check.checksum_ok === false) add('RF-ID-004');
+    if (check.name_suffix_consistent === false) add('RF-ID-005');
+  }
+  for (const check of evidence.doc_checks || []) {
+    if (check && typeof check === 'object' && check.dates_consistent === false && check.producer_class === 'design') add('RF-DOC-001');
+  }
+  return derived;
+}
+
 export function renderCard(evidence, rules) {
   const display = evidence.display || {};
   const errors = validateDisplay(evidence, rules);
@@ -757,7 +814,10 @@ export function renderCard(evidence, rules) {
   const conflicts = validateConflicts(evidence);
   if (conflicts.errors.length > 0) return { status: 'invalid-input', errors: conflicts.errors };
 
-  const ids = flagIdsOf(evidence);
+  const baseIds = flagIdsOf(evidence);
+  const derivedFlags = deriveFlags(evidence);
+  const ids = [...new Set([...baseIds, ...derivedFlags.map((item) => item.id)])];
+  const derivedMap = new Map(derivedFlags.map((item) => [item.id, item]));
   const flagIndex = new Map((rules.flags || []).map((flag) => [flag.id, flag]));
   const flagWeight = (id) => (flagIndex.get(id) || {}).weight || 0;
 
@@ -835,7 +895,7 @@ export function renderCard(evidence, rules) {
     attention = [];
     for (const flag of flagAttention) {
       const item = { kind: 'flag', flag_id: flag.id, text: '' };
-      const ids = (flagEntries.get(flag.id) || {}).evidence_ids;
+      const ids = (flagEntries.get(flag.id) || {}).evidence_ids || (derivedMap.get(flag.id) || {}).evidence_ids;
       if (Array.isArray(ids) && ids.length > 0) item.evidence_ids = ids;
       attention.push(item);
     }

@@ -954,6 +954,22 @@ async phone_pii(testCase) {
     return { ok: outcomes.every((item) => item.ok), actual: outcomes };
   },
 
+  flag_pack(testCase) {
+    const rules = JSON.parse(readFileSync(join(ROOT, 'scripts', 'red_flags.json'), 'utf8'));
+    const byId = new Map((rules.flags || []).map((flag) => [flag.id, flag]));
+    const ids = testCase.input.ids || [];
+    const weights = testCase.input.weights || [];
+    const checks = [];
+    checks.push(ids.length === 8);
+    checks.push(new Set((rules.flags || []).map((flag) => flag.id)).size === (rules.flags || []).length);
+    ids.forEach((id, index) => {
+      const flag = byId.get(id);
+      checks.push(Boolean(flag) && flag.weight === weights[index]);
+      checks.push(Boolean(flag) && Boolean(flag.why) && Boolean(flag.benign) && Boolean(flag.flip_hint));
+    });
+    return { ok: checks.every(Boolean), actual: { total: (rules.flags || []).length, checks: checks.length } };
+  },
+
   manual() {
     return { ok: true, skipped: true, actual: 'requires live network / model behaviour' };
   },
