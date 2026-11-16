@@ -1037,6 +1037,30 @@ async phone_pii(testCase) {
     return { ok: failures.length === 0, actual: { combos: levels.length * tiers.length * types.length, failures } };
   },
 
+  payment_profile(testCase) {
+    const python = findPython();
+    const [pyCmd, ...pyRest] = (python || '').split(' ');
+    const outcomes = (testCase.input.cases || []).map((entry) => {
+      const dir = mkdtempSync(join(tmpdir(), 'buyer-check-payment-'));
+      const file = join(dir, 'profile.json');
+      writeFileSync(file, JSON.stringify(entry.profile), 'utf8');
+      const args = ['--profile-json', file];
+      if (entry.iban) args.push('--iban', entry.iban);
+      if (entry.country) args.push('--country', entry.country);
+      const run = spawnSync(pyCmd, [...pyRest, join(ROOT, 'scripts', 'account_check.py'), ...args], { cwd: ROOT, encoding: 'utf8', timeout: 30000 });
+      const result = run.stdout ? JSON.parse(run.stdout) : null;
+      const candidates = result?.flag_candidates || [];
+      const hints = result?.payment_hints || [];
+      const expect = entry.expect || {};
+      const ok = result?.status === 'ok'
+        && (expect.candidates || []).every((id) => candidates.includes(id))
+        && (expect.hints || []).every((hint) => hints.includes(hint))
+        && (expect.third_party === undefined || result.third_party_payee === expect.third_party);
+      return { name: entry.name, ok, result };
+    });
+    return { ok: outcomes.every((item) => item.ok), actual: outcomes };
+  },
+
   manual() {
     return { ok: true, skipped: true, actual: 'requires live network / model behaviour' };
   },
