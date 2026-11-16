@@ -1,0 +1,12 @@
+{
+  "id": "A73",
+  "title": "Z6 未核实国家（ZA/VN）输入任意号码：format_ok/checksum_ok 为 null，不触发红牌",
+  "type": "idcheck",
+  "input": {
+    "cases": [
+      { "name": "ZA", "country": "ZA", "type": "gstin", "value": "1234567890", "expect": { "status": "no-rule", "format_ok": null, "checksum_ok": null } },
+      { "name": "VN", "country": "VN", "type": "taxcode", "value": "0101234567", "expect": { "status": "no-rule", "format_ok": null, "checksum_ok": null } }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

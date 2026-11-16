@@ -684,6 +684,127 @@ def country_command(args):
     }
 
 
+ID_CHARS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+GST_STATE_CODES = {
+    "01": "Jammu and Kashmir", "02": "Himachal Pradesh", "03": "Punjab", "04": "Chandigarh",
+    "05": "Uttarakhand", "06": "Haryana", "07": "Delhi", "08": "Rajasthan", "09": "Uttar Pradesh",
+    "10": "Bihar", "11": "Sikkim", "12": "Arunachal Pradesh", "13": "Nagaland", "14": "Manipur",
+    "15": "Mizoram", "16": "Tripura", "17": "Meghalaya", "18": "Assam", "19": "West Bengal",
+    "20": "Jharkhand", "21": "Odisha", "22": "Chhattisgarh", "23": "Madhya Pradesh", "24": "Gujarat",
+    "26": "Dadra and Nagar Haveli and Daman and Diu", "27": "Maharashtra", "29": "Karnataka",
+    "30": "Goa", "31": "Lakshadweep", "32": "Kerala", "33": "Tamil Nadu", "34": "Puducherry",
+    "35": "Andaman and Nicobar Islands", "36": "Telangana", "37": "Andhra Pradesh", "38": "Ladakh",
+}
+PAN_ENTITY_TYPES = {
+    "P": "individual", "C": "company", "H": "HUF", "F": "firm/LLP", "A": "AOP",
+    "T": "trust", "B": "BOI", "L": "local-authority", "J": "artificial-juridical-person", "G": "government",
+}
+
+
+def mask_id(value):
+    value = "" if value is None else str(value)
+    if len(value) <= 4:
+        return "•" * len(value)
+    return value[:2] + "•" * (len(value) - 4) + value[-2:]
+
+
+def gstin_checksum(value):
+    if len(value) < 15:
+        return None
+    total = 0
+    for index in range(14):
+        digit = ID_CHARS.index(value[index]) if value[index] in ID_CHARS else None
+        if digit is None:
+            return None
+        product = digit * (1 if index % 2 == 0 else 2)
+        total += product // 36 + product % 36
+    return ID_CHARS[(36 - total % 36) % 36]
+
+
+def pan_entity_type(value):
+    if len(value) < 4:
+        return "unknown"
+    return PAN_ENTITY_TYPES.get(value[3], "unknown")
+
+
+def idcheck_command(args):
+    country = (args.country or "").upper()
+    id_type = (args.id_type or "").lower()
+    value = (args.value or "").strip().upper()
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "country_capabilities.json")
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            caps = json.load(handle)
+    except (OSError, ValueError):
+        return {"status": "unavailable", "error": "capabilities-unreadable"}
+    entry = (caps.get("countries") or {}).get(country.lower()) or {}
+    rule = next((item for item in entry.get("id_formats") or [] if (item.get("type") or item.get("id_type")) == id_type), None)
+    if not rule or not value:
+        return {
+            "status": "no-rule",
+            "command": "idcheck",
+            "country": country,
+            "type": id_type,
+            "masked": mask_id(value),
+            "format_ok": None,
+            "checksum_ok": None,
+            "entity_type": None,
+            "name_suffix_consistent": None,
+            "notes": ["暂无已核对的格式规则"],
+            "mode": "offline",
+            "rule_verification": None,
+        }
+    pattern = rule.get("pattern") or rule.get("regex")
+    format_ok = bool(re.fullmatch(pattern, value)) if pattern else None
+    checksum_ok = None
+    entity_type = None
+    notes = []
+    state_code = None
+    if format_ok is False:
+        checksum_ok = False
+        notes.append("format-invalid")
+    elif id_type == "gstin":
+        if len(value) != 15 or value[13] != "Z":
+            checksum_ok = False
+            notes.append("position-14-not-z")
+        else:
+            checksum_ok = gstin_checksum(value) == value[-1]
+        entity_type = pan_entity_type(value[2:12])
+        state_code = value[:2]
+        state_name = GST_STATE_CODES.get(state_code)
+        if not state_name:
+            notes.append("state-code-unknown")
+        elif args.claimed_state and normalize_company(args.claimed_state) != normalize_company(state_name):
+            notes.append("state-mismatch")
+    elif id_type == "pan":
+        entity_type = pan_entity_type(value)
+    company = (args.company_name or "").strip()
+    name_suffix_consistent = None
+    if company and entity_type:
+        corporate = any(token in normalize_company(company) for token in ("PVT", "PRIVATE", "LTD", "LIMITED", "CORP", "COMPANY"))
+        if entity_type == "company" and not corporate:
+            name_suffix_consistent = False
+        elif entity_type == "individual" and corporate:
+            name_suffix_consistent = False
+        else:
+            name_suffix_consistent = True
+    return {
+        "status": "ok",
+        "command": "idcheck",
+        "country": country,
+        "type": id_type,
+        "masked": mask_id(value),
+        "format_ok": format_ok,
+        "checksum_ok": checksum_ok,
+        "entity_type": entity_type,
+        "name_suffix_consistent": name_suffix_consistent,
+        "state_code": state_code,
+        "notes": notes,
+        "mode": "offline",
+        "rule_verification": rule.get("verification") or "unverified",
+    }
+
+
 def build_parser():
     parser = argparse.ArgumentParser(description="buyer-check identity helpers (site/backlink/image).")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -725,6 +846,13 @@ def build_parser():
 
     country = sub.add_parser("country", help="return a country capability profile or discovery templates")
     country.add_argument("--code")
+
+    idcheck = sub.add_parser("idcheck", help="offline tax/registration ID format and checksum check")
+    idcheck.add_argument("--country", required=True)
+    idcheck.add_argument("--type", dest="id_type", required=True)
+    idcheck.add_argument("--value", required=True)
+    idcheck.add_argument("--company-name", dest="company_name")
+    idcheck.add_argument("--claimed-state", dest="claimed_state")
     return parser
 
 
@@ -740,10 +868,12 @@ def main(argv=None):
         result = registry_command(args)
     elif args.command == "country":
         result = country_command(args)
+    elif args.command == "idcheck":
+        result = idcheck_command(args)
     else:
         result = image_command(args)
     print(json.dumps(result, ensure_ascii=False))
-    return 0 if result.get("status") in ("ok", "found", "not-found", "ambiguous", "offline", "not-in-matrix") else 1
+    return 0 if result.get("status") in ("ok", "found", "not-found", "ambiguous", "offline", "not-in-matrix", "no-rule") else 1
 
 
 if __name__ == "__main__":

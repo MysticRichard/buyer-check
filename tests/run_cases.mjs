@@ -872,6 +872,59 @@ async phone_pii(testCase) {
     return { ok: missing.length === 0, actual: { missing } };
   },
 
+  idcheck(testCase) {
+    const python = findPython();
+    const [pyCmd, ...pyRest] = (python || '').split(' ');
+    const calls = [];
+    const runOne = (country, type, value, company, claimedState) => {
+      const args = ['idcheck', '--country', country, '--type', type, '--value', value];
+      if (company) args.push('--company-name', company);
+      if (claimedState) args.push('--claimed-state', claimedState);
+      const py = spawnSync(pyCmd, [...pyRest, join(ROOT, 'scripts', 'identity_check.py'), ...args], { cwd: ROOT, encoding: 'utf8', timeout: 30000 });
+      const jsScript = join(ROOT, 'scripts', 'identity_check.mjs');
+      const js = existsSync(jsScript) ? spawnSync('node', [jsScript, ...args], { cwd: ROOT, encoding: 'utf8', timeout: 30000 }) : null;
+      return { py: py.stdout ? JSON.parse(py.stdout) : null, js: js && js.stdout ? JSON.parse(js.stdout) : null };
+    };
+    const checkResult = (result, expect) => {
+      if (!result) return false;
+      if (expect.status && result.status !== expect.status) return false;
+      if (expect.format_ok !== undefined && result.format_ok !== expect.format_ok) return false;
+      if (expect.checksum_ok !== undefined && result.checksum_ok !== expect.checksum_ok) return false;
+      if (expect.entity_type && result.entity_type !== expect.entity_type) return false;
+      if (expect.name_suffix_consistent !== undefined && result.name_suffix_consistent !== expect.name_suffix_consistent) return false;
+      for (const note of expect.notes_include || []) if (!(result.notes || []).includes(note)) return false;
+      if (expect.masked_prefix && !String(result.masked || '').startsWith(expect.masked_prefix)) return false;
+      return true;
+    };
+    if (testCase.input.type === 'gstin_matrix') {
+      const chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+      const check = (base) => {
+        let total = 0;
+        for (let i = 0; i < 14; i += 1) {
+          const value = chars.indexOf(base[i]);
+          const product = value * (i % 2 === 0 ? 1 : 2);
+          total += Math.floor(product / 36) + (product % 36);
+        }
+        return chars[(36 - (total % 36)) % 36];
+      };
+      for (const base of testCase.input.bases || []) {
+        const good = base + check(base);
+        const bad = base + (check(base) === '0' ? '1' : '0');
+        const valid = runOne('IN', 'gstin', good, 'Acme Pvt Ltd', null);
+        const invalid = runOne('IN', 'gstin', bad, 'Acme Pvt Ltd', null);
+        calls.push({ name: `valid-${good}`, ok: checkResult(valid.py, { status: 'ok', format_ok: true, checksum_ok: true }) && (!valid.js || checkResult(valid.js, { status: 'ok', format_ok: true, checksum_ok: true })) });
+        calls.push({ name: `invalid-${bad}`, ok: checkResult(invalid.py, { status: 'ok', format_ok: true, checksum_ok: false }) && (!invalid.js || checkResult(invalid.js, { status: 'ok', format_ok: true, checksum_ok: false })) });
+      }
+    } else {
+      for (const item of testCase.input.cases || []) {
+        const result = runOne(item.country, item.type, item.value, item.company, item.claimed_state);
+        const ok = checkResult(result.py, item.expect || {}) && (!result.js || checkResult(result.js, item.expect || {}));
+        calls.push({ name: item.name, ok, py: result.py, js: result.js });
+      }
+    }
+    return { ok: calls.every((item) => item.ok), actual: calls };
+  },
+
   manual() {
     return { ok: true, skipped: true, actual: 'requires live network / model behaviour' };
   },

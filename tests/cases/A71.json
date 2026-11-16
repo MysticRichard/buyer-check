@@ -1,0 +1,10 @@
+{
+  "id": "A71",
+  "title": "Z4 GSTIN：5 个按算法生成的合成有效号通过，5 个错误校验位报 false",
+  "type": "idcheck",
+  "input": {
+    "type": "gstin_matrix",
+    "bases": ["27AAACA0000A1Z", "29AAACB0000A1Z", "07AAACC0000A1Z", "33AAACD0000A1Z", "24AAACE0000A1Z"]
+  },
+  "expect": { "all_pass": true }
+}

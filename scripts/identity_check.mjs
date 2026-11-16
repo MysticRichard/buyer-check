@@ -691,6 +691,88 @@ function countryCommand(args) {
   };
 }
 
+const ID_CHARS = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+const GST_STATE_CODES = {
+  '01': 'Jammu and Kashmir', '02': 'Himachal Pradesh', '03': 'Punjab', '04': 'Chandigarh', '05': 'Uttarakhand',
+  '06': 'Haryana', '07': 'Delhi', '08': 'Rajasthan', '09': 'Uttar Pradesh', '10': 'Bihar', '11': 'Sikkim',
+  '12': 'Arunachal Pradesh', '13': 'Nagaland', '14': 'Manipur', '15': 'Mizoram', '16': 'Tripura', '17': 'Meghalaya',
+  '18': 'Assam', '19': 'West Bengal', '20': 'Jharkhand', '21': 'Odisha', '22': 'Chhattisgarh', '23': 'Madhya Pradesh',
+  '24': 'Gujarat', '26': 'Dadra and Nagar Haveli and Daman and Diu', '27': 'Maharashtra', '29': 'Karnataka',
+  '30': 'Goa', '31': 'Lakshadweep', '32': 'Kerala', '33': 'Tamil Nadu', '34': 'Puducherry',
+  '35': 'Andaman and Nicobar Islands', '36': 'Telangana', '37': 'Andhra Pradesh', '38': 'Ladakh',
+};
+const PAN_ENTITY_TYPES = { P: 'individual', C: 'company', H: 'HUF', F: 'firm/LLP', A: 'AOP', T: 'trust', B: 'BOI', L: 'local-authority', J: 'artificial-juridical-person', G: 'government' };
+
+function maskId(value) {
+  const textValue = value === null || value === undefined ? '' : String(value);
+  if (textValue.length <= 4) return '•'.repeat(textValue.length);
+  return textValue.slice(0, 2) + '•'.repeat(textValue.length - 4) + textValue.slice(-2);
+}
+
+function gstinChecksum(value) {
+  if (value.length < 14) return null;
+  let total = 0;
+  for (let index = 0; index < 14; index += 1) {
+    const digit = ID_CHARS.indexOf(value[index]);
+    if (digit < 0) return null;
+    const product = digit * (index % 2 === 0 ? 1 : 2);
+    total += Math.floor(product / 36) + (product % 36);
+  }
+  return ID_CHARS[(36 - (total % 36)) % 36];
+}
+
+function panEntityType(value) {
+  return value && value.length >= 4 ? PAN_ENTITY_TYPES[value[3]] || 'unknown' : 'unknown';
+}
+
+function idcheckCommand(args) {
+  const country = String(args.countryForId || '').toUpperCase();
+  const idType = String(args.idType || '').toLowerCase();
+  const value = String(args.idValue || '').trim().toUpperCase();
+  let caps;
+  try {
+    caps = JSON.parse(readFileSync(new URL('./country_capabilities.json', import.meta.url), 'utf8'));
+  } catch {
+    return { status: 'unavailable', error: 'capabilities-unreadable' };
+  }
+  const entry = (caps.countries || {})[country.toLowerCase()] || {};
+  const rule = (entry.id_formats || []).find((item) => (item.type || item.id_type) === idType);
+  if (!rule || !value) {
+    return { status: 'no-rule', command: 'idcheck', country, type: idType, masked: maskId(value), format_ok: null, checksum_ok: null, entity_type: null, name_suffix_consistent: null, notes: ['暂无已核对的格式规则'], mode: 'offline', rule_verification: null };
+  }
+  const pattern = rule.pattern || rule.regex;
+  const formatOk = pattern ? new RegExp(pattern).test(value) : null;
+  let checksumOk = null;
+  let entityType = null;
+  const notes = [];
+  let stateCode = null;
+  if (formatOk === false) {
+    checksumOk = false;
+    notes.push('format-invalid');
+  } else if (idType === 'gstin') {
+    if (value.length !== 15 || value[13] !== 'Z') {
+      checksumOk = false;
+      notes.push('position-14-not-z');
+    } else checksumOk = gstinChecksum(value) === value.slice(-1);
+    entityType = panEntityType(value.slice(2, 12));
+    stateCode = value.slice(0, 2);
+    const stateName = GST_STATE_CODES[stateCode];
+    if (!stateName) notes.push('state-code-unknown');
+    else if (args.claimedState && normalizeCompany(args.claimedState) !== normalizeCompany(stateName)) notes.push('state-mismatch');
+  } else if (idType === 'pan') {
+    entityType = panEntityType(value);
+  }
+  const company = String(args.companyName || '').trim();
+  let nameSuffixConsistent = null;
+  if (company && entityType) {
+    const corporate = ['PVT', 'PRIVATE', 'LTD', 'LIMITED', 'CORP', 'COMPANY'].some((token) => normalizeCompany(company).includes(token));
+    if (entityType === 'company' && !corporate) nameSuffixConsistent = false;
+    else if (entityType === 'individual' && corporate) nameSuffixConsistent = false;
+    else nameSuffixConsistent = true;
+  }
+  return { status: 'ok', command: 'idcheck', country, type: idType, masked: maskId(value), format_ok: formatOk, checksum_ok: checksumOk, entity_type: entityType, name_suffix_consistent: nameSuffixConsistent, state_code: stateCode, notes, mode: 'offline', rule_verification: rule.verification || 'unverified' };
+}
+
 function usage() {
   return [
     'Usage: node identity_check.mjs site [--domain DOMAIN] [--html-file FILE] [--online]',
@@ -699,12 +781,13 @@ function usage() {
     '       node identity_check.mjs map --company NAME [--phone PHONE] [--online | --fixture-json FILE]',
     '       node identity_check.mjs registry --company NAME [--country NO] [--claimed-country NO] [--online | --fixture-json FILE]',
     '       node identity_check.mjs country --code IN',
+    '       node identity_check.mjs idcheck --country IN --type gstin --value 27AAACA0000A1ZY [--company-name NAME] [--claimed-state STATE]',
   ].join('\n');
 }
 
 function parseArgs(argv) {
   const command = argv[0];
-  const args = { command, domain: null, htmlFile: null, online: false, maxPages: 4, delay: 1, timeout: 10, text: '', paths: [], company: null, phone: null, country: null, claimedCountry: null, countryCode: null, googleKey: null, fixtureJson: null, fixtureSource: 'google_places', limit: 5 };
+  const args = { command, domain: null, htmlFile: null, online: false, maxPages: 4, delay: 1, timeout: 10, text: '', paths: [], company: null, phone: null, country: null, claimedCountry: null, countryCode: null, googleKey: null, fixtureJson: null, fixtureSource: 'google_places', limit: 5, countryForId: null, idType: null, idValue: null, companyName: null, claimedState: null };
   for (let i = 1; i < argv.length; i += 1) {
     const token = argv[i];
     if (token === '--domain') args.domain = argv[++i];
@@ -716,9 +799,13 @@ function parseArgs(argv) {
     else if (token === '--text') args.text = argv[++i];
     else if (token === '--company') args.company = argv[++i];
     else if (token === '--phone') args.phone = argv[++i];
-    else if (token === '--country') args.country = argv[++i];
+    else if (token === '--country') { const value = argv[++i]; args.country = value; args.countryForId = value; }
     else if (token === '--claimed-country') args.claimedCountry = argv[++i];
     else if (token === '--code') args.countryCode = argv[++i];
+    else if (token === '--type') args.idType = argv[++i];
+    else if (token === '--value') args.idValue = argv[++i];
+    else if (token === '--company-name') args.companyName = argv[++i];
+    else if (token === '--claimed-state') args.claimedState = argv[++i];
     else if (token === '--google-key') args.googleKey = argv[++i];
     else if (token === '--fixture-json') args.fixtureJson = argv[++i];
     else if (token === '--fixture-source') args.fixtureSource = argv[++i];
@@ -730,7 +817,7 @@ function parseArgs(argv) {
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
-  if (!['site', 'backlink', 'image', 'map', 'registry', 'country'].includes(args.command)) {
+  if (!['site', 'backlink', 'image', 'map', 'registry', 'country', 'idcheck'].includes(args.command)) {
     console.log(JSON.stringify({ status: 'unavailable', error: 'unknown or missing subcommand' }));
     return 2;
   }
@@ -740,9 +827,10 @@ async function main() {
   else if (args.command === 'map') result = await mapCommand(args);
   else if (args.command === 'registry') result = await registryCommand(args);
   else if (args.command === 'country') result = countryCommand(args);
+  else if (args.command === 'idcheck') result = idcheckCommand(args);
   else result = await imageCommand(args);
   console.log(JSON.stringify(result));
-  return ['ok', 'found', 'not-found', 'ambiguous', 'offline', 'not-in-matrix'].includes(result.status) ? 0 : 1;
+  return ['ok', 'found', 'not-found', 'ambiguous', 'offline', 'not-in-matrix', 'no-rule'].includes(result.status) ? 0 : 1;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

@@ -1,0 +1,11 @@
+{
+  "id": "A74",
+  "title": "Z7 隐私：idcheck 输出只显示掩码，不出现完整证件号",
+  "type": "idcheck",
+  "input": {
+    "cases": [
+      { "name": "masked-gstin", "country": "IN", "type": "gstin", "value": "27AAACA0000A1ZY", "company": "Acme Pvt Ltd", "expect": { "status": "ok", "format_ok": true, "checksum_ok": true, "masked_prefix": "27••" } }
+    ]
+  },
+  "expect": { "all_pass": true }
+}
