@@ -662,6 +662,8 @@ def validate_capabilities(data):
             item = country.get(key)
             if item is not None and (not isinstance(item, dict) or (item.get("verification") is not None and item.get("verification") not in allowed_verification)):
                 errors.append(f"{code}:{key}")
+            if isinstance(item, dict) and item.get("automation_allowed") is True and (item.get("verification") or country.get("verification")) != "official-page":
+                errors.append(f"{code}:{key}.automation")
         for fmt in country.get("id_formats") or []:
             if not fmt.get("id_type") or not fmt.get("label") or not isinstance(fmt.get("length"), int):
                 errors.append(f"{code}:id_formats.fields")
@@ -675,6 +677,8 @@ def validate_capabilities(data):
                     errors.append(f"{code}:id_formats.regex")
             if (fmt.get("checksum") or "none") not in allowed_checksum:
                 errors.append(f"{code}:id_formats.checksum")
+            if fmt.get("verification") is not None and fmt.get("verification") not in allowed_verification:
+                errors.append(f"{code}:id_formats.verification")
     return errors
 
 
@@ -894,10 +898,20 @@ def match_command(args):
     keys = sorted(key for key in buyer_map if key in candidate_map and buyer_map[key] and buyer_map[key] == candidate_map[key])
     if "alias" in keys and not (buyer_alias == "official" and candidate_alias == "official"):
         keys = [key for key in keys if key != "alias"]
+    conflict = any(
+        key in ("tax_id_masked", "registration_no")
+        and buyer_map.get(key)
+        and candidate_map.get(key)
+        and buyer_map[key] != candidate_map[key]
+        for key in ("tax_id_masked", "registration_no")
+    )
     name_keys = {"legal_name", "alias", "person_name"}
     strong_keys = {"address", "tax_id_masked", "phone", "domain", "registration_no"}
-    matched = (bool(name_keys & set(keys)) and bool(strong_keys & set(keys))) or ("domain" in keys and "phone" in keys)
-    if not matched:
+    matched = not conflict and ((bool(name_keys & set(keys)) and bool(strong_keys & set(keys))) or ("domain" in keys and "phone" in keys))
+    if conflict:
+        reason = "conflicting-strong-key"
+        strength = "weak"
+    elif not matched:
         reason = "only-name" if set(keys) <= name_keys else "fewer-than-two-independent-keys"
         strength = "weak"
     elif len(keys) >= 3 or (bool(name_keys & set(keys)) and any(key in keys for key in ("registration_no", "tax_id_masked"))):

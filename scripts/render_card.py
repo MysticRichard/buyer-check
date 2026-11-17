@@ -1072,7 +1072,7 @@ def trade_terms(level, tier, inquiry_type):
     elif level == "需人工核实":
         lines = ["先核验文件再谈大额报价；样品费由买家承担。"]
     elif tier == "高":
-        lines = ["可按常规条款；收款账户仍用已知电话或邮箱双通道确认一次。"]
+        lines = ["可按常规条款；付款前仍做订单前复核，收款账户用已知电话或邮箱双通道确认一次。"]
     else:
         lines = ["首单小额；样品费由买家承担、买家自己的快递账号寄送；定金比例高于常规；分批发货；发货前复核收款账户。"]
     if inquiry_type == "account_change":
@@ -1564,6 +1564,8 @@ def validate_evidence_contract(evidence):
 
 
 def mask_log_text(value):
+    if isinstance(value, bool):
+        return "true" if value else "false"
     raw = text(value)
     raw = re.sub(r"([A-Za-z0-9._%+-])[A-Za-z0-9._%+-]*(@[A-Za-z0-9.-]+\.[A-Za-z]{2,})", r"\1***\2", raw)
     raw = re.sub(r"\+\d[\d\s().-]{6,}\d", lambda match: match.group()[:3] + "***" + match.group()[-2:], raw)

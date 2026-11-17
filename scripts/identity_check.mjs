@@ -666,6 +666,7 @@ function validateCapabilities(data) {
     for (const key of ['registry', 'tax_verification', 'procurement', 'insolvency']) {
       const item = country[key];
       if (item !== undefined && item !== null && (typeof item !== 'object' || (item.verification !== undefined && !allowedVerification.has(item.verification)))) errors.push(`${code}:${key}`);
+      if (item && typeof item === 'object' && item.automation_allowed === true && (item.verification || country.verification) !== 'official-page') errors.push(`${code}:${key}.automation`);
     }
     for (const fmt of country.id_formats || []) {
       if (!fmt.id_type || !fmt.label || !Number.isInteger(fmt.length)) errors.push(`${code}:id_formats.fields`);
@@ -675,6 +676,7 @@ function validateCapabilities(data) {
         try { new RegExp(regexValue); } catch { errors.push(`${code}:id_formats.regex`); }
       }
       if (!allowedChecksum.has(fmt.checksum || 'none')) errors.push(`${code}:id_formats.checksum`);
+      if (fmt.verification !== undefined && !allowedVerification.has(fmt.verification)) errors.push(`${code}:id_formats.verification`);
     }
   }
   return errors;
@@ -854,12 +856,16 @@ function matchCommand(args) {
   if (keys.includes('alias') && !(buyerAlias === 'official' && candidateAlias === 'official')) keys = keys.filter((key) => key !== 'alias');
   const nameKeys = new Set(['legal_name', 'alias', 'person_name']);
   const strongKeys = new Set(['address', 'tax_id_masked', 'phone', 'domain', 'registration_no']);
+  const conflict = ['tax_id_masked', 'registration_no'].some((key) => buyerMap.get(key) && candidateMap.get(key) && buyerMap.get(key) !== candidateMap.get(key));
   const hasName = keys.some((key) => nameKeys.has(key));
   const hasStrong = keys.some((key) => strongKeys.has(key));
-  const matched = (hasName && hasStrong) || (keys.includes('domain') && keys.includes('phone'));
+  const matched = !conflict && ((hasName && hasStrong) || (keys.includes('domain') && keys.includes('phone')));
   let reason;
   let strength;
-  if (!matched) {
+  if (conflict) {
+    reason = 'conflicting-strong-key';
+    strength = 'weak';
+  } else if (!matched) {
     reason = keys.every((key) => nameKeys.has(key)) ? 'only-name' : 'fewer-than-two-independent-keys';
     strength = 'weak';
   } else if (keys.length >= 3 || (hasName && (keys.includes('registration_no') || keys.includes('tax_id_masked')))) {

@@ -1,0 +1,12 @@
+{
+  "id": "A140",
+  "title": "Z9 名称+地址正例；注册号冲突否证匹配（子公司/不同法人不得只靠同名同址通过）",
+  "type": "match",
+  "input": {
+    "cases": [
+      { "name": "name-plus-address", "buyer": { "legal_name": "Acme Trading", "address": "Dubai" }, "candidate": { "legal_name": "Acme Trading", "address": "Dubai" }, "expect": { "matched": true, "strength": "medium", "keys": ["address", "legal_name"] } },
+      { "name": "registration-conflict", "buyer": { "legal_name": "Acme Trading", "address": "Dubai", "registration_no": "R-001" }, "candidate": { "legal_name": "Acme Trading", "address": "Dubai", "registration_no": "R-999" }, "expect": { "matched": false, "strength": "weak" } }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

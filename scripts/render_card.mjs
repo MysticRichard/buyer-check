@@ -916,7 +916,7 @@ export function tradeTerms(level, tier, inquiryType) {
   let lines;
   if (level === '高') lines = ['不建议收款或发货；先完成订单前复核并补齐材料。'];
   else if (level === '需人工核实') lines = ['先核验文件再谈大额报价；样品费由买家承担。'];
-  else if (tier === '高') lines = ['可按常规条款；收款账户仍用已知电话或邮箱双通道确认一次。'];
+  else if (tier === '高') lines = ['可按常规条款；付款前仍做订单前复核，收款账户用已知电话或邮箱双通道确认一次。'];
   else lines = ['首单小额；样品费由买家承担、买家自己的快递账号寄送；定金比例高于常规；分批发货；发货前复核收款账户。'];
   if (inquiryType === 'account_change') lines.push('账户变更：用已知号码电话回访并书面确认，确认前不付款。');
   else if (inquiryType === 'large_first_order') lines.push('大额首单：分批交货，首批小额验证。');
