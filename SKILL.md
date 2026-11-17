@@ -465,7 +465,7 @@ metadata:
 - `scripts/ip_check.py/.mjs` — 邮件来源 IP 分类（默认离线，输出脱敏网段）
 - `scripts/identity_check.py` — 官网画像/社媒回链/头像比对/地图 POI/注册库（v0.9，精简包）
 - `scripts/render_card.py` — 结论卡确定性渲染（v0.9，精简包；Node 对照在仓库）
-- `tests/cases/` — 验收用例 A1–A58
+- `tests/cases/` — 验收用例 A1–A140
 - `tests/eval/` — 行为评测集（45 条合成询盘 + 评分器）
 - `examples/` — 脱敏样例报告
 - `docs/development.md` — 开发文档
