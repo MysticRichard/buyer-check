@@ -960,6 +960,10 @@ def derive_flags(evidence):
         retrieved = [value for value in retrieved if value is not None]
         as_of = max(retrieved).isoformat() if retrieved else "9999-12-31"
     declared_keys = {text(item.get("key")) for item in (evidence.get("match_keys") or []) if isinstance(item, dict) and text(item.get("key"))}
+    declared_alias_official = any(
+        isinstance(item, dict) and text(item.get("key")) == "alias" and text(item.get("alias_source")) == "official"
+        for item in (evidence.get("match_keys") or [])
+    )
     evidence_index = {}
     duplicates = set()
     for item in evidence.get("evidence") or []:
@@ -993,6 +997,8 @@ def derive_flags(evidence):
         if not isinstance(item, dict) or item.get("subject") != "company":
             return False
         keys = {text(key) for key in (item.get("matched_keys") or []) if text(key)}
+        if "alias" in keys and not declared_alias_official:
+            keys.discard("alias")
         if len(keys) < 2 or not keys <= ALLOWED_MATCH_KEYS or keys <= {"legal_name", "alias", "person_name"}:
             return False
         if not declared_keys:
@@ -1441,6 +1447,10 @@ def footprint_lines(evidence):
     if not items:
         return []
     low_confidence = text(evidence.get("confidence")) == "低"
+    declared_alias_official = any(
+        isinstance(item, dict) and text(item.get("key")) == "alias" and text(item.get("alias_source")) == "official"
+        for item in (evidence.get("match_keys") or [])
+    )
     evidence_by_id = {
         text(item.get("id")): item
         for item in evidence.get("evidence") or []
@@ -1468,6 +1478,8 @@ def footprint_lines(evidence):
         suffix = f" [{grade}]" if grade else ""
         keys = [MATCH_KEY_LABELS.get(text(key), text(key)) for key in item.get("matched_keys") or [] if text(key)]
         unique_keys = {text(key) for key in item.get("matched_keys") or [] if text(key)}
+        if "alias" in unique_keys and not declared_alias_official:
+            unique_keys.discard("alias")
         strong = (
             not low_confidence
             and text(item.get("subject")) == "company"

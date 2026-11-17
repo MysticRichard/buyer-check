@@ -1,0 +1,7 @@
+{
+  "id": "A139",
+  "title": "Z9 alias 反绕过：footprint 使用 inferred 别名时不计入匹配，不派生红旗",
+  "type": "render_card",
+  "input": { "fixture": "card_alias_inferred.json" },
+  "expect": { "status": "ok", "risk_score": 0, "level": "低", "derived_flags": [] }
+}

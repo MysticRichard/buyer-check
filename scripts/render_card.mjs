@@ -835,6 +835,7 @@ function deriveFlags(evidence) {
     asOf = dates.length ? new Date(Math.max(...dates)).toISOString().slice(0, 10) : '9999-12-31';
   }
   const declaredKeys = new Set((evidence.match_keys || []).filter((item) => item && typeof item === 'object' && text(item.key)).map((item) => text(item.key)));
+  const declaredAliasOfficial = (evidence.match_keys || []).some((item) => item && typeof item === 'object' && text(item.key) === 'alias' && text(item.alias_source) === 'official');
   const evidenceIndex = new Map();
   const duplicates = new Set();
   for (const item of evidence.evidence || []) {
@@ -859,6 +860,7 @@ function deriveFlags(evidence) {
   const eligible = (item, officialRequired, years) => {
     if (!item || typeof item !== 'object' || item.subject !== 'company') return false;
     const keys = new Set((item.matched_keys || []).map((key) => text(key)).filter(Boolean));
+    if (keys.has('alias') && !declaredAliasOfficial) keys.delete('alias');
     if (keys.size < 2 || [...keys].some((key) => !ALLOWED_MATCH_KEYS.has(key)) || [...keys].every((key) => ['legal_name', 'alias', 'person_name'].includes(key))) return false;
     if (declaredKeys.size === 0 || [...keys].some((key) => !declaredKeys.has(key))) return false;
     if (officialRequired && (effectiveGrade(item) !== 'official' || !full)) return false;
@@ -1014,6 +1016,7 @@ function footprintLines(evidence) {
   const items = (evidence.footprint || []).filter((item) => item && typeof item === 'object' && item.result === 'hit');
   if (!items.length) return [];
   const lowConfidence = text(evidence.confidence) === '低';
+  const declaredAliasOfficial = (evidence.match_keys || []).some((item) => item && typeof item === 'object' && text(item.key) === 'alias' && text(item.alias_source) === 'official');
   const evidenceById = new Map((evidence.evidence || []).filter((item) => item && typeof item === 'object' && text(item.id)).map((item) => [text(item.id), item]));
   const lines = ['**公司公开足迹**'];
   items.slice(0, 3).forEach((item, position) => {
@@ -1035,6 +1038,7 @@ function footprintLines(evidence) {
     const suffix = grade ? ` [${grade}]` : '';
     const keys = (item.matched_keys || []).filter((key) => text(key)).map((key) => MATCH_KEY_LABELS[text(key)] || text(key));
     const uniqueKeys = new Set((item.matched_keys || []).map((key) => text(key)).filter(Boolean));
+    if (uniqueKeys.has('alias') && !declaredAliasOfficial) uniqueKeys.delete('alias');
     const strong = (
       !lowConfidence
       && text(item.subject) === 'company'
