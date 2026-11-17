@@ -360,11 +360,13 @@ const LOCALIZED_LANGS = new Set(['ar', 'fr', 'es', 'pt', 'ru', 'tr', 'id', 'th',
 const NEW_FLAG_IDS = new Set(['RF-FOOT-001', 'RF-FOOT-002', 'RF-FOOT-003', 'RF-FOOT-004', 'RF-FOOT-005', 'RF-ID-004', 'RF-ID-005', 'RF-DOC-001']);
 const LOCAL_FLAG_IDS = new Set(['RF-ID-004', 'RF-ID-005', 'RF-DOC-001']);
 const ALLOWED_MATCH_KEYS = new Set(['legal_name', 'address', 'tax_id_masked', 'phone', 'domain', 'person_name', 'registration_no']);
-const ID_LEAK_RE = /[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]|[A-Z]{5}[0-9]{4}[A-Z]/i;
+const ID_LEAK_RE = /[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]|[A-Z]{5}[0-9]{4}[A-Z]|(?<![A-Za-z0-9])[0-9]{10,}(?![A-Za-z0-9])/i;
 const VERDICT_PESSIMISTIC = ['风险高', '暂停', '停止', '拒绝', '不要付款', '不建议'];
 
 function idLeak(value) {
-  return ID_LEAK_RE.test(text(value).replace(/[\s\-_./•*]/g, ''));
+  const raw = text(value);
+  if (raw.includes('://') || /^[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(raw)) return ID_LEAK_RE.test(raw);
+  return ID_LEAK_RE.test(raw.replace(/[\s\-_./•*]/g, ''));
 }
 const V010_KEYS = ['capabilities', 'footprint', 'id_checks', 'doc_checks', 'search_log', 'match_keys', 'previous', 'country_discovery', 'terms_advice'];
 const EMAIL_RE = /[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}/;
@@ -644,7 +646,7 @@ const MULTI_SUFFIX = new Set(['co.uk', 'org.uk', 'ac.uk', 'com.au', 'net.au', 'c
 
 function urlHost(url) {
   try {
-    return new URL(url).hostname.toLowerCase().replace(/^www\./, '');
+    return new URL(text(url)).hostname.toLowerCase().replace(/\.$/, '').replace(/^www\./, '');
   } catch {
     return '';
   }
@@ -801,7 +803,16 @@ function deriveFlags(evidence) {
   const capabilities = evidence.capabilities || {};
   const tier = capabilities.tier;
   const full = tier === undefined || tier === 'full';
-  const asOf = evidence.as_of || '9999-12-31';
+  let asOf = evidence.as_of;
+  if (!asOf) {
+    const dates = (evidence.footprint || [])
+      .filter((item) => item && typeof item === 'object')
+      .map((item) => parseIsoDate(item.data_as_of))
+      .filter(Boolean)
+      .map((date) => date.getTime());
+    asOf = dates.length ? new Date(Math.max(...dates)).toISOString().slice(0, 10) : '9999-12-31';
+  }
+  const declaredKeys = new Set((evidence.match_keys || []).filter((item) => item && typeof item === 'object' && text(item.key)).map((item) => text(item.key)));
   const evidenceIndex = new Map();
   const duplicates = new Set();
   for (const item of evidence.evidence || []) {
@@ -827,6 +838,7 @@ function deriveFlags(evidence) {
     if (!item || typeof item !== 'object' || item.subject !== 'company') return false;
     const keys = new Set((item.matched_keys || []).map((key) => text(key)).filter(Boolean));
     if (keys.size < 2 || [...keys].some((key) => !ALLOWED_MATCH_KEYS.has(key)) || [...keys].every((key) => ['legal_name', 'person_name', 'alias_name'].includes(key))) return false;
+    if (declaredKeys.size && [...keys].some((key) => !declaredKeys.has(key))) return false;
     if (officialRequired && (effectiveGrade(item) !== 'official' || !full)) return false;
     const ids = (item.evidence_ids || []).map((id) => text(id)).filter(Boolean);
     if (ids.length === 0 || ids.some((id) => !evidenceIndex.has(id) || duplicates.has(id))) return false;
@@ -836,7 +848,7 @@ function deriveFlags(evidence) {
     }
     return withinYears(item.data_as_of, asOf, years);
   };
-  for (const item of (tier === 'offline' ? [] : (evidence.footprint || []))) {
+  for (const item of ((tier === 'offline' || evidence.quick_check === true) ? [] : (evidence.footprint || []))) {
     if (!item || typeof item !== 'object' || item.result !== 'hit') continue;
     let grade = item.source_grade;
     if (tier === 'search-only' && grade === 'official') grade = 'self_declared';
@@ -859,7 +871,7 @@ function deriveFlags(evidence) {
         if (group) groups.add(group);
       }
       if (domains.size >= 2 && groups.size >= 2) add('RF-FOOT-004', item.evidence_ids);
-    } else if (item.probe === 'scale' && ['accused', 'regulator_action', 'registered_entity'].includes(item.role) && grade === 'official' && eligible(item, false, 5) && Number(item.scale_ratio || 0) >= 10) {
+    } else if (item.probe === 'scale' && ['accused', 'regulator_action'].includes(item.role) && grade === 'official' && eligible(item, false, 5) && Number(item.scale_ratio || 0) >= 10) {
       add('RF-FOOT-005', item.evidence_ids);
     }
   }
@@ -888,7 +900,7 @@ export function tradeTerms(level, tier, inquiryType) {
   return lines.slice(0, 2);
 }
 
-const VERDICT_CONTRA = ['可以付款', '可以预付', '直接付款', '倾向继续', '建议继续', '放心下单', '立即付款', '可以寄样', '可以先寄样', '可以发货', '可以生产', '放心发货', '推进', '试单', '下单', '合作', '风险可控'];
+const VERDICT_CONTRA = ['可以付款', '可以预付', '直接付款', '倾向继续', '建议继续', '放心下单', '立即付款', '可以寄样', '可以先寄样', '可以发货', '可以生产', '放心发货', '推进', '试单', '下单', '合作', '风险可控', '可控', '试试', '发一批', '安排生产', '付款后就能发货'];
 const DOC_CLASS_LABELS = { office: '办公软件', design: '图像编辑/设计软件', scan: '扫描件', other: '其他软件', unknown: '未知软件' };
 const FOOTPRINT_LABELS = {
   registry: '注册处条目',
@@ -999,7 +1011,14 @@ function footprintLines(evidence) {
       && uniqueKeys.size >= 2
       && ![...uniqueKeys].every((key) => ['legal_name', 'person_name', 'alias_name'].includes(key))
     );
-    if (strong) {
+    const scoredThird = (
+      ['news', 'forum'].includes(text(item.probe))
+      && text(item.subject) === 'company'
+      && text(item.role) === 'accused'
+      && gradeKey === 'third_party'
+      && uniqueKeys.size >= 2
+    );
+    if (strong || scoredThird) {
       lines.push(`${position + 1}. ${label}：${summary}${suffix} 对上：${keys.join(' + ')}`);
     } else {
       let clue = '';
@@ -1055,11 +1074,18 @@ export function renderCard(evidence, rules) {
   if (capabilities !== undefined && (!capabilities || typeof capabilities !== 'object' || !['full', 'search-only', 'offline'].includes(capabilities.tier))) {
     return { status: 'invalid-input', errors: [{ code: 'invalid-input', field: 'capabilities' }] };
   }
+  if (evidence.search_log !== undefined && evidence.search_log !== null && !Array.isArray(evidence.search_log) && typeof evidence.search_log !== 'object') {
+    return { status: 'invalid-input', errors: [{ code: 'invalid-input', field: 'search_log' }] };
+  }
   const conflicts = validateConflicts(evidence);
   if (conflicts.errors.length > 0) return { status: 'invalid-input', errors: conflicts.errors };
   const quick = evidence.quick_check === true;
-  const quickOver = quick && evidence.search_log && typeof evidence.search_log === 'object'
-    ? (Number(evidence.search_log.searches || 0) > 0 || Number(evidence.search_log.pages ?? evidence.search_log.page_reads ?? 0) > 0)
+  const quickOver = quick
+    ? (Array.isArray(evidence.search_log)
+      ? evidence.search_log.length > 0
+      : evidence.search_log && typeof evidence.search_log === 'object'
+        ? (Number(evidence.search_log.searches || 0) > 0 || Number(evidence.search_log.pages ?? evidence.search_log.page_reads ?? 0) > 0)
+        : false)
     : false;
 
   const baseIds = flagIdsOf(evidence);
@@ -1252,12 +1278,23 @@ export function renderCard(evidence, rules) {
     lines.push(`本次运行能力：${capabilities.tier === 'search-only' ? '仅搜索' : '离线'}`);
   }
   if (quick) lines.push(`快查模式：未查地图、海关、社媒${quickOver ? ' · ⚠ 本次未完成：检索预算已用尽' : ''}`);
-  if (evidence.search_log && typeof evidence.search_log === 'object' && !quick) {
-    const searches = Number(evidence.search_log.searches || 0);
-    const pages = Number(evidence.search_log.pages ?? evidence.search_log.page_reads ?? 0);
-    const budget = evidence.search_log.budget || {};
-    const maxSearches = quick ? 0 : 12;
-    const maxPages = quick ? 0 : 6;
+  else if (v010Signal && countryCode && !countryKnown(countryCode)) lines.push('该国暂无内置入口，已按通用流程查询');
+  if ((Array.isArray(evidence.search_log) || (evidence.search_log && typeof evidence.search_log === 'object')) && !quick) {
+    let searches;
+    let pages;
+    let mode;
+    if (Array.isArray(evidence.search_log)) {
+      const entries = evidence.search_log.filter((item) => item && typeof item === 'object');
+      searches = entries.length;
+      pages = entries.filter((item) => item.used === 'yes').length;
+      mode = '';
+    } else {
+      searches = Number(evidence.search_log.searches || 0);
+      pages = Number(evidence.search_log.pages ?? evidence.search_log.page_reads ?? 0);
+      mode = text(evidence.search_log.mode);
+    }
+    const maxSearches = mode === 'standard' ? 8 : 12;
+    const maxPages = mode === 'standard' ? 4 : 6;
     lines.push(`检索：${searches} 次，打开 ${pages} 个页面`);
     if (searches > maxSearches || pages > maxPages) lines.push('⚠ 本次未完成：检索预算已用尽');
   }

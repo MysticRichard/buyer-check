@@ -822,6 +822,7 @@ async phone_pii(testCase) {
         if (typeof country.name !== 'undefined' && typeof country.name !== 'string') errors.push(`${code}.name`);
         if (typeof country.sources !== 'undefined' && !Array.isArray(country.sources)) errors.push(`${code}.sources`);
         if (!allowedVerification.has(country.verification)) errors.push(`${code}.verification`);
+        if (!country.registry || typeof country.registry !== 'object') errors.push(`${code}.registry`);
         for (const key of ['registry', 'tax_verification', 'procurement', 'insolvency']) {
           if (country[key] === undefined) continue;
           if (!country[key] || typeof country[key] !== 'object') errors.push(`${code}.${key}`);
