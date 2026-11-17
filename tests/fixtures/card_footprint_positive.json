@@ -20,7 +20,7 @@
     { "id": "E2", "url": "https://news.example/a", "retrieved_at": "2026-11-16T00:00:00Z", "source_type": "search", "source_grade": "third_party" }
   ],
   "footprint": [
-    { "probe": "enforcement", "subject": "company", "role": "accused", "source_grade": "official", "matched_keys": ["legal_name", "address"], "category": "fraud", "data_as_of": "2025-01-01", "evidence_ids": ["E1"], "summary": "官方欺诈类处罚" }
+    { "probe": "enforcement", "result": "hit", "subject": "company", "role": "accused", "source_grade": "official", "matched_keys": ["legal_name", "address"], "category": "fraud", "data_as_of": "2025-01-01", "evidence_ids": ["E1"], "summary": "官方欺诈类处罚" }
   ],
   "display": {
     "customer_label": "ACME TRADING LTD",

@@ -766,7 +766,17 @@ def grade_of(entry):
 
 
 def apply_evidence_rules(evidence, attention, verified, missing, attention_from_display, verified_from_display):
+    def entry_grade(entry):
+        base = SOURCE_GRADE_DEFAULT.get(entry.get("source_type"), "self_declared")
+        explicit = entry.get("source_grade")
+        if explicit in ("third_party", "self_declared"):
+            return explicit
+        return base
+
     if "evidence" not in evidence:
+        for item in attention:
+            if item.get("kind") == "flag" and item.get("flag_id") in LOCAL_FLAG_IDS:
+                item["grade_label"] = "离线"
         return attention, verified, missing, 0, 0, 0
     raw = evidence.get("evidence")
     index = {}
@@ -918,11 +928,15 @@ def derive_flags(evidence):
     tier = capabilities.get("tier")
     full = tier in (None, "full")
     as_of = evidence.get("as_of") or "9999-12-31"
-    evidence_index = {
-        text(item.get("id")): item
-        for item in (evidence.get("evidence") or [])
-        if isinstance(item, dict) and text(item.get("id"))
-    }
+    evidence_index = {}
+    duplicates = set()
+    for item in evidence.get("evidence") or []:
+        if not isinstance(item, dict) or not text(item.get("id")):
+            continue
+        evidence_id = text(item.get("id"))
+        if evidence_id in evidence_index:
+            duplicates.add(evidence_id)
+        evidence_index[evidence_id] = item
 
     def add(flag_id, evidence_ids=None):
         if any(item["id"] == flag_id for item in derived):
@@ -952,7 +966,7 @@ def derive_flags(evidence):
         if official_required and (effective_grade(item) != "official" or not full):
             return False
         ids = [text(eid) for eid in (item.get("evidence_ids") or []) if text(eid)]
-        if not ids or any(eid not in evidence_index for eid in ids):
+        if not ids or any(eid not in evidence_index or eid in duplicates for eid in ids):
             return False
         for eid in ids:
             entry = evidence_index.get(eid) or {}
@@ -961,7 +975,7 @@ def derive_flags(evidence):
         return within_years(item.get("data_as_of"), as_of, years)
 
     for item in ([] if tier == "offline" else (evidence.get("footprint") or [])):
-        if not isinstance(item, dict):
+        if not isinstance(item, dict) or item.get("result") != "hit":
             continue
         probe = item.get("probe")
         role = item.get("role")
@@ -1379,6 +1393,11 @@ def footprint_lines(evidence):
     if not items:
         return []
     low_confidence = text(evidence.get("confidence")) == "低"
+    evidence_by_id = {
+        text(item.get("id")): item
+        for item in evidence.get("evidence") or []
+        if isinstance(item, dict) and text(item.get("id"))
+    }
     lines = ["**公司公开足迹**"]
     for position, item in enumerate(items[:3], 1):
         probe = text(item.get("probe"))
@@ -1388,6 +1407,15 @@ def footprint_lines(evidence):
         grade_key = text(item.get("source_grade"))
         if tier == "search-only" and grade_key == "official":
             grade_key = "third_party"
+        if grade_key == "official":
+            ids = [text(eid) for eid in item.get("evidence_ids") or [] if text(eid)]
+            defaults = [SOURCE_GRADE_DEFAULT.get(text((evidence_by_id.get(eid) or {}).get("source_type")), "self_declared") for eid in ids]
+            if "official" not in defaults:
+                grade_key = "third_party" if "third_party" in defaults else "self_declared"
+            for eid in ids:
+                entry = evidence_by_id.get(eid) or {}
+                if text(entry.get("source_type")) != "user_input" and (not text(entry.get("url")) or not text(entry.get("retrieved_at"))):
+                    grade_key = "self_declared"
         grade = SOURCE_GRADE_LABELS.get(grade_key)
         suffix = f" [{grade}]" if grade else ""
         keys = [MATCH_KEY_LABELS.get(text(key), text(key)) for key in item.get("matched_keys") or [] if text(key)]
@@ -1435,6 +1463,18 @@ def validate_evidence_contract(evidence):
         value = text(item.get("value"))
         if re.search(r"[0-9A-Z]{10,}", value, re.I) and not re.search(r"[•*]", value):
             add("plaintext-tax-id", "match_keys.tax_id_masked")
+
+    def scan(value):
+        if isinstance(value, str):
+            return id_leak(value)
+        if isinstance(value, dict):
+            return any(scan(item) for item in value.values())
+        if isinstance(value, list):
+            return any(scan(item) for item in value)
+        return False
+
+    if scan(evidence):
+        add("plaintext-id", "evidence")
     return errors
 
 
@@ -1575,9 +1615,13 @@ def render_card(evidence, rules):
             attention.append(item)
     else:
         attention = [{"kind": "flag", "flag_id": flag["id"], "text": ""} for flag in flag_attention]
+    for flag in derived_flags:
+        if any(item.get("kind") == "flag" and item.get("flag_id") == flag["id"] for item in attention):
+            continue
+        attention.append({"kind": "flag", "flag_id": flag["id"], "text": "", "evidence_ids": flag.get("evidence_ids") or []})
     indexed = list(enumerate(attention))
     indexed.sort(key=lambda pair: (-(flag_weight(pair[1].get("flag_id")) if pair[1].get("kind") == "flag" else -1), pair[0]))
-    attention = [item for _, item in indexed]
+    attention = [item for _, item in indexed][:3]
 
     raw_verified = display.get("verified")
     blocked_checks = {item.get("check") for item in incomplete}
@@ -1803,6 +1847,12 @@ def render_card(evidence, rules):
             del lines[start:end]
         while len(lines) > line_limit and lines and lines[-1] == "":
             lines.pop()
+    if quick and len(lines) > line_limit and len(lines) > first_screen_lines + 1:
+        declaration = lines[-1]
+        body = lines[:-1]
+        while len(body) + 1 > line_limit and len(body) > first_screen_lines:
+            body.pop()
+        lines = body + [declaration]
     if any(id_leak(line) for line in lines):
         return {"status": "invalid-input", "errors": [{"code": "plaintext-id", "field": "card"}]}
 

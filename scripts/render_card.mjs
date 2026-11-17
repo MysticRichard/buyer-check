@@ -664,6 +664,9 @@ function gradeOf(entry) {
 
 function applyEvidenceRules(evidence, attention, verified, missing, attentionFromDisplay, verifiedFromDisplay) {
   if (!('evidence' in evidence)) {
+    for (const item of attention) {
+      if (item && item.kind === 'flag' && LOCAL_FLAG_IDS.has(item.flag_id)) item.grade_label = '离线';
+    }
     return { attention, verified, missing, evidenceMissing: 0, missingOverflow: 0, gradeWarnings: 0 };
   }
   const raw = Array.isArray(evidence.evidence) ? evidence.evidence : [];
@@ -799,7 +802,14 @@ function deriveFlags(evidence) {
   const tier = capabilities.tier;
   const full = tier === undefined || tier === 'full';
   const asOf = evidence.as_of || '9999-12-31';
-  const evidenceIndex = new Map((evidence.evidence || []).filter((item) => item && typeof item === 'object' && text(item.id)).map((item) => [text(item.id), item]));
+  const evidenceIndex = new Map();
+  const duplicates = new Set();
+  for (const item of evidence.evidence || []) {
+    if (!item || typeof item !== 'object' || !text(item.id)) continue;
+    const evidenceId = text(item.id);
+    if (evidenceIndex.has(evidenceId)) duplicates.add(evidenceId);
+    evidenceIndex.set(evidenceId, item);
+  }
   const add = (id, evidenceIds = []) => {
     if (!derived.some((item) => item.id === id)) derived.push({ id, evidence_ids: evidenceIds });
   };
@@ -819,7 +829,7 @@ function deriveFlags(evidence) {
     if (keys.size < 2 || [...keys].some((key) => !ALLOWED_MATCH_KEYS.has(key)) || [...keys].every((key) => ['legal_name', 'person_name', 'alias_name'].includes(key))) return false;
     if (officialRequired && (effectiveGrade(item) !== 'official' || !full)) return false;
     const ids = (item.evidence_ids || []).map((id) => text(id)).filter(Boolean);
-    if (ids.length === 0 || ids.some((id) => !evidenceIndex.has(id))) return false;
+    if (ids.length === 0 || ids.some((id) => !evidenceIndex.has(id) || duplicates.has(id))) return false;
     for (const id of ids) {
       const entry = evidenceIndex.get(id) || {};
       if (text(entry.source_type) !== 'user_input' && (!text(entry.url) || !text(entry.retrieved_at))) return false;
@@ -827,7 +837,7 @@ function deriveFlags(evidence) {
     return withinYears(item.data_as_of, asOf, years);
   };
   for (const item of (tier === 'offline' ? [] : (evidence.footprint || []))) {
-    if (!item || typeof item !== 'object') continue;
+    if (!item || typeof item !== 'object' || item.result !== 'hit') continue;
     let grade = item.source_grade;
     if (tier === 'search-only' && grade === 'official') grade = 'self_declared';
     if (grade === 'official') {
@@ -960,6 +970,7 @@ function footprintLines(evidence) {
   const items = (evidence.footprint || []).filter((item) => item && typeof item === 'object' && item.result === 'hit');
   if (!items.length) return [];
   const lowConfidence = text(evidence.confidence) === '低';
+  const evidenceById = new Map((evidence.evidence || []).filter((item) => item && typeof item === 'object' && text(item.id)).map((item) => [text(item.id), item]));
   const lines = ['**公司公开足迹**'];
   items.slice(0, 3).forEach((item, position) => {
     const probe = text(item.probe);
@@ -967,6 +978,15 @@ function footprintLines(evidence) {
     const summary = (text(item.summary) || '命中公开记录').replace(/\|/g, '/');
     let gradeKey = text(item.source_grade);
     if (tier === 'search-only' && gradeKey === 'official') gradeKey = 'third_party';
+    if (gradeKey === 'official') {
+      const ids = (item.evidence_ids || []).map((id) => text(id)).filter(Boolean);
+      const defaults = ids.map((id) => SOURCE_GRADE_DEFAULT[text((evidenceById.get(id) || {}).source_type)] || 'self_declared');
+      if (!defaults.includes('official')) gradeKey = defaults.includes('third_party') ? 'third_party' : 'self_declared';
+      for (const id of ids) {
+        const entry = evidenceById.get(id) || {};
+        if (text(entry.source_type) !== 'user_input' && (!text(entry.url) || !text(entry.retrieved_at))) gradeKey = 'self_declared';
+      }
+    }
     const grade = SOURCE_GRADE_LABELS[gradeKey];
     const suffix = grade ? ` [${grade}]` : '';
     const keys = (item.matched_keys || []).filter((key) => text(key)).map((key) => MATCH_KEY_LABELS[text(key)] || text(key));
@@ -1010,6 +1030,13 @@ function validateEvidenceContract(evidence) {
     const value = text(item.value);
     if (/[0-9A-Z]{10,}/i.test(value) && !/[•*]/.test(value)) add('plaintext-tax-id', 'match_keys.tax_id_masked');
   }
+  const scan = (value) => {
+    if (typeof value === 'string') return idLeak(value);
+    if (Array.isArray(value)) return value.some(scan);
+    if (value && typeof value === 'object') return Object.values(value).some(scan);
+    return false;
+  };
+  if (scan(evidence)) add('plaintext-id', 'evidence');
   return errors;
 }
 
@@ -1132,6 +1159,10 @@ export function renderCard(evidence, rules) {
   } else {
     attention = flagAttention.map((flag) => ({ kind: 'flag', flag_id: flag.id, text: '' }));
   }
+  for (const flag of derivedFlags) {
+    if (attention.some((item) => item.kind === 'flag' && item.flag_id === flag.id)) continue;
+    attention.push({ kind: 'flag', flag_id: flag.id, text: '', evidence_ids: flag.evidence_ids || [] });
+  }
   attention = attention
     .map((item, index) => ({ item, index }))
     .sort((a, b) => {
@@ -1139,7 +1170,8 @@ export function renderCard(evidence, rules) {
       const weightB = b.item.kind === 'flag' ? flagWeight(b.item.flag_id) : -1;
       return weightB - weightA || a.index - b.index;
     })
-    .map(({ item }) => item);
+    .map(({ item }) => item)
+    .slice(0, 3);
 
   let verified = [];
   const blockedChecks = new Set(incomplete.items.map((item) => item.check));
@@ -1366,6 +1398,13 @@ export function renderCard(evidence, rules) {
       lines.splice(start, end - start);
     }
     while (lines.length > lineLimit && lines[lines.length - 1] === '') lines.pop();
+  }
+  if (quick && lines.length > lineLimit && lines.length > firstScreenLines + 1) {
+    const declaration = lines[lines.length - 1];
+    const body = lines.slice(0, -1);
+    while (body.length + 1 > lineLimit && body.length > firstScreenLines) body.pop();
+    lines.length = 0;
+    lines.push(...body, declaration);
   }
   if (lines.some((line) => idLeak(line))) {
     return { status: 'invalid-input', errors: [{ code: 'plaintext-id', field: 'card' }] };
