@@ -1,0 +1,24 @@
+{
+  "id": "A100",
+  "title": "Z31 版式：含 v0.10 新增块的组合卡片总行数 ≤50、首屏 ≤14",
+  "type": "render_card_lines",
+  "input": {
+    "fixtures": [
+      "card_v010_full.json",
+      "card_v010_invalid_verdict.json",
+      "card_footprint_search_only.json",
+      "card_footprint_offline.json",
+      "card_footprint_positive.json",
+      "card_footprint_negative.json",
+      "card_footprint_spoof.json",
+      "card_harbor.json",
+      "card_searchlog.json",
+      "card_conflict.json",
+      "card_many_conflicts.json",
+      "card_evidence.json",
+      "card_benign.json",
+      "card_manual.json"
+    ]
+  },
+  "expect": { "max_lines": 50, "max_first_screen": 14 }
+}
