@@ -360,13 +360,19 @@ const LOCALIZED_LANGS = new Set(['ar', 'fr', 'es', 'pt', 'ru', 'tr', 'id', 'th',
 const NEW_FLAG_IDS = new Set(['RF-FOOT-001', 'RF-FOOT-002', 'RF-FOOT-003', 'RF-FOOT-004', 'RF-FOOT-005', 'RF-ID-004', 'RF-ID-005', 'RF-DOC-001']);
 const LOCAL_FLAG_IDS = new Set(['RF-ID-004', 'RF-ID-005', 'RF-DOC-001']);
 const ALLOWED_MATCH_KEYS = new Set(['legal_name', 'address', 'tax_id_masked', 'phone', 'domain', 'person_name', 'registration_no']);
-const ID_LEAK_RE = /[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]|[A-Z]{5}[0-9]{4}[A-Z]|(?<![A-Za-z0-9])[0-9]{10,}(?![A-Za-z0-9])/i;
+const GSTIN_RE = /[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]/i;
+const PAN_RE = /[A-Z]{5}[0-9]{4}[A-Z]/i;
+const ID_NUM_RE = /(?<![A-Za-z0-9])[0-9]{10,}(?![A-Za-z0-9])/;
 const VERDICT_PESSIMISTIC = ['风险高', '暂停', '停止', '拒绝', '不要付款', '不建议'];
 
 function idLeak(value) {
   const raw = text(value);
-  if (raw.includes('://') || /^[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(raw)) return ID_LEAK_RE.test(raw);
-  return ID_LEAK_RE.test(raw.replace(/[\s\-_./•*]/g, ''));
+  if (GSTIN_RE.test(raw)) return true;
+  return PAN_RE.test(raw.replace(/[\s\-_./•*]/g, '')) && raw.replace(/[\s\-_./•*]/g, '').length === 10;
+}
+
+function numericLeak(value) {
+  return ID_NUM_RE.test(text(value));
 }
 const V010_KEYS = ['capabilities', 'footprint', 'id_checks', 'doc_checks', 'search_log', 'match_keys', 'previous', 'country_discovery', 'terms_advice'];
 const EMAIL_RE = /[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}/;
@@ -1039,7 +1045,10 @@ function validateEvidenceContract(evidence) {
   for (const item of evidence.id_checks || []) {
     if (!item || typeof item !== 'object') continue;
     const masked = text(item.masked);
-    if (masked && idLeak(masked)) add('plaintext-id', 'id_checks.masked');
+    if (masked && (idLeak(masked) || numericLeak(masked))) add('plaintext-id', 'id_checks.masked');
+    for (const note of item.notes || []) {
+      if (idLeak(note) || numericLeak(note)) add('plaintext-id', 'id_checks.notes');
+    }
   }
   for (const item of evidence.doc_checks || []) {
     if (item && typeof item === 'object' && Object.keys(item).some((key) => text(key).toLowerCase() === 'author')) add('author-not-allowed', 'doc_checks.author');
@@ -1048,6 +1057,28 @@ function validateEvidenceContract(evidence) {
     if (!item || typeof item !== 'object' || text(item.key) !== 'tax_id_masked') continue;
     const value = text(item.value);
     if (/[0-9A-Z]{10,}/i.test(value) && !/[•*]/.test(value)) add('plaintext-tax-id', 'match_keys.tax_id_masked');
+  }
+  for (const item of evidence.footprint || []) {
+    if (item && typeof item === 'object' && (idLeak(item.summary) || numericLeak(item.summary))) add('plaintext-id', 'footprint.summary');
+  }
+  const displayData = evidence.display || {};
+  for (const key of ['verdict', 'flip_hint', 'supplement']) {
+    if (idLeak(displayData[key]) || numericLeak(displayData[key])) add('plaintext-id', `display.${key}`);
+  }
+  for (const item of displayData.attention || []) {
+    if (item && typeof item === 'object' && (idLeak(item.text) || numericLeak(item.text))) add('plaintext-id', 'display.attention');
+  }
+  for (const key of ['verified', 'missing']) {
+    for (const item of displayData[key] || []) {
+      if (item && typeof item === 'object' && (idLeak(item.text) || numericLeak(item.text))) add('plaintext-id', `display.${key}`);
+    }
+  }
+  for (const script of displayData.scripts || []) {
+    if (script && typeof script === 'object') {
+      for (const value of Object.values(script)) {
+        if (typeof value === 'string' && (idLeak(value) || numericLeak(value))) { add('plaintext-id', 'display.scripts'); break; }
+      }
+    }
   }
   const scan = (value) => {
     if (typeof value === 'string') return idLeak(value);
@@ -1443,7 +1474,7 @@ export function renderCard(evidence, rules) {
     lines.length = 0;
     lines.push(...body, declaration);
   }
-  if (lines.some((line) => idLeak(line))) {
+  if (lines.some((line) => idLeak(line) || numericLeak(line))) {
     return { status: 'invalid-input', errors: [{ code: 'plaintext-id', field: 'card' }] };
   }
 

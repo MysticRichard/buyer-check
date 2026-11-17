@@ -28,16 +28,22 @@ from risk_score import load_rules, score as risk_score
 RULES_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "red_flags.json")
 COUNTRY_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "country_capabilities.json")
 _COUNTRY_CODES = None
-ID_LEAK_RE = re.compile(r"[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]|[A-Z]{5}[0-9]{4}[A-Z]|(?<![A-Za-z0-9])[0-9]{10,}(?![A-Za-z0-9])", re.I)
+GSTIN_RE = re.compile(r"[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]", re.I)
+PAN_RE = re.compile(r"[A-Z]{5}[0-9]{4}[A-Z]", re.I)
+ID_NUM_RE = re.compile(r"(?<![A-Za-z0-9])[0-9]{10,}(?![A-Za-z0-9])")
 V010_KEYS = ("capabilities", "footprint", "id_checks", "doc_checks", "search_log", "match_keys", "previous", "country_discovery", "terms_advice")
 
 
 def id_leak(value):
     raw = text(value)
-    if "://" in raw or re.fullmatch(r"[A-Za-z0-9.-]+\.[A-Za-z]{2,}", raw):
-        return bool(ID_LEAK_RE.search(raw))
+    if GSTIN_RE.search(raw):
+        return True
     compact = re.sub(r"[\s\-_./•*]", "", raw)
-    return bool(ID_LEAK_RE.search(compact))
+    return bool(PAN_RE.fullmatch(compact))
+
+
+def numeric_leak(value):
+    return bool(ID_NUM_RE.search(text(value)))
 
 
 def country_known(code):
@@ -1471,8 +1477,11 @@ def validate_evidence_contract(evidence):
         if not isinstance(item, dict):
             continue
         masked = text(item.get("masked"))
-        if masked and id_leak(masked):
+        if masked and (id_leak(masked) or numeric_leak(masked)):
             add("plaintext-id", "id_checks.masked")
+        for note in item.get("notes") or []:
+            if numeric_leak(note) or id_leak(note):
+                add("plaintext-id", "id_checks.notes")
     for item in evidence.get("doc_checks") or []:
         if isinstance(item, dict) and any(text(key).lower() == "author" for key in item):
             add("author-not-allowed", "doc_checks.author")
@@ -1482,6 +1491,26 @@ def validate_evidence_contract(evidence):
         value = text(item.get("value"))
         if re.search(r"[0-9A-Z]{10,}", value, re.I) and not re.search(r"[•*]", value):
             add("plaintext-tax-id", "match_keys.tax_id_masked")
+
+    for item in evidence.get("footprint") or []:
+        if isinstance(item, dict) and (numeric_leak(item.get("summary")) or id_leak(item.get("summary"))):
+            add("plaintext-id", "footprint.summary")
+    for key in ("verdict", "flip_hint", "supplement"):
+        if numeric_leak((evidence.get("display") or {}).get(key)) or id_leak((evidence.get("display") or {}).get(key)):
+            add("plaintext-id", f"display.{key}")
+    for item in (evidence.get("display") or {}).get("attention") or []:
+        if isinstance(item, dict) and (numeric_leak(item.get("text")) or id_leak(item.get("text"))):
+            add("plaintext-id", "display.attention")
+    for key in ("verified", "missing"):
+        for item in (evidence.get("display") or {}).get(key) or []:
+            if isinstance(item, dict) and (numeric_leak(item.get("text")) or id_leak(item.get("text"))):
+                add("plaintext-id", f"display.{key}")
+    for script in (evidence.get("display") or {}).get("scripts") or []:
+        if isinstance(script, dict):
+            for value in script.values():
+                if isinstance(value, str) and (numeric_leak(value) or id_leak(value)):
+                    add("plaintext-id", "display.scripts")
+                    break
 
     def scan(value):
         if isinstance(value, str):
@@ -1886,7 +1915,7 @@ def render_card(evidence, rules):
         while len(body) + 1 > line_limit and len(body) > first_screen_lines:
             body.pop()
         lines = body + [declaration]
-    if any(id_leak(line) for line in lines):
+    if any(id_leak(line) or numeric_leak(line) for line in lines):
         return {"status": "invalid-input", "errors": [{"code": "plaintext-id", "field": "card"}]}
 
     return {
