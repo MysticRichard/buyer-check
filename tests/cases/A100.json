@@ -6,6 +6,7 @@
     "fixtures": [
       "card_v010_full.json",
       "card_v010_invalid_verdict.json",
+      "card_new_flags_positive.json",
       "card_footprint_search_only.json",
       "card_footprint_offline.json",
       "card_footprint_positive.json",

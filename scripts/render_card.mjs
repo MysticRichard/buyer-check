@@ -809,7 +809,7 @@ function deriveFlags(evidence) {
     if (check.name_suffix_consistent === false) add('RF-ID-005');
   }
   for (const check of evidence.doc_checks || []) {
-    if (check && typeof check === 'object' && check.dates_consistent === false && check.producer_class === 'design') add('RF-DOC-001');
+    if (check && typeof check === 'object' && check.dates_consistent === false && (check.producer_class || check.creator_class) === 'design') add('RF-DOC-001');
   }
   return derived;
 }
@@ -1239,6 +1239,7 @@ export function renderCard(evidence, rules) {
     evidence_missing: applied.evidenceMissing,
     source_grade_warnings: applied.gradeWarnings,
     verdict_warning: verdict.warning,
+    derived_flags: derivedFlags.map((item) => item.id),
     line_count: lines.length,
     first_screen_lines: firstScreenLines,
     card: lines.join('\n'),

@@ -398,9 +398,9 @@ metadata:
 
 **可持续更新**：红旗清单与数据源清单独立成文件，遇到新骗局套路只需追加条目，不改主流程。
 
-**通用国家核验（v0.10）**：国家能力矩阵是种子，不是边界。矩阵没有该国时按固定模板（公司登记/税务/采购/破产，英文+当地语言）发现官方入口，结果写 `country_discovery` 且标 `discovered`，不写回仓库；只有 `automation_allowed:true` 且 `official-page` 才做单条查询，其余给链接和检索清单，不批量抓取、不绕验证码。全球兜底：GLEIF LEI、世界银行禁入名单、OFAC 等制裁名单。命令：`python scripts/identity_check.py country --code IN`。
+**通用国家核验（v0.10）**：矩阵是种子，不是边界。未收录国家按模板（公司登记/税务/采购/破产）发现官方入口，标 `discovered`、不写回；只有 `automation_allowed:true` 且 `official-page` 才单条查询，其余给链接，不批量抓取。全球兜底 GLEIF、世界银行禁入、OFAC。命令：`identity_check.py country --code IN`。
 
-**能力降级（v0.10）**：证据包 `capabilities.tier` 为 `full` / `search-only` / `offline`。卡片在覆盖行下只在非 full 时显示「本次运行能力：仅搜索 / 离线」。offline 只跑离线脚本，其余写 `checks_incomplete`（no-network）；search-only 只读搜索摘要，来源最高 third_party，不能触发需要官方页面读取的红旗。平台实际能力由用户确认，不猜。
+**能力降级**：`capabilities.tier` 取 `full`/`search-only`/`offline`；非 full 时显示能力行。offline 只跑离线脚本，其余记 `checks_incomplete`（no-network）；search-only 不触发官方来源红旗。
 
 ## 脚本
 

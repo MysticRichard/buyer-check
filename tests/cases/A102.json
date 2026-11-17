@@ -1,0 +1,24 @@
+{
+  "id": "A102",
+  "title": "Z10/Z16 八条新红旗各有正例；个人/受害者/无法判断不触发；派生编号完整",
+  "type": "render_card",
+  "input": { "fixture": "card_new_flags_positive.json" },
+  "expect": {
+    "status": "ok",
+    "risk_score": 100,
+    "level": "高",
+    "derived_flags": [
+      "RF-FOOT-001",
+      "RF-FOOT-002",
+      "RF-FOOT-003",
+      "RF-FOOT-004",
+      "RF-FOOT-005",
+      "RF-ID-004",
+      "RF-ID-005",
+      "RF-DOC-001"
+    ],
+    "card_includes": ["RF-FOOT-001", "RF-FOOT-002", "RF-FOOT-003", "[官方]", "可能无害"],
+    "line_count_max": 50,
+    "first_screen_max": 14
+  }
+}

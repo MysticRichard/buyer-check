@@ -952,7 +952,7 @@ def derive_flags(evidence):
             add("RF-ID-005")
 
     for check in evidence.get("doc_checks") or []:
-        if isinstance(check, dict) and check.get("dates_consistent") is False and check.get("producer_class") == "design":
+        if isinstance(check, dict) and check.get("dates_consistent") is False and (check.get("producer_class") or check.get("creator_class")) == "design":
             add("RF-DOC-001")
     return derived
 
@@ -1669,6 +1669,7 @@ def render_card(evidence, rules):
         "evidence_missing": evidence_missing,
         "source_grade_warnings": source_grade_warnings,
         "verdict_warning": verdict_warning,
+        "derived_flags": [item["id"] for item in derived_flags],
         "line_count": len(lines),
         "first_screen_lines": first_screen_lines,
         "card": "\n".join(lines),
