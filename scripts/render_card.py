@@ -940,9 +940,9 @@ def derive_flags(evidence):
     full = tier in (None, "full")
     as_of = evidence.get("as_of")
     if not as_of:
-        recorded = [parse_iso_date(item.get("data_as_of")) for item in (evidence.get("footprint") or []) if isinstance(item, dict)]
-        recorded = [value for value in recorded if value is not None]
-        as_of = max(recorded).isoformat() if recorded else "9999-12-31"
+        retrieved = [parse_iso_date(item.get("retrieved_at")) for item in (evidence.get("evidence") or []) if isinstance(item, dict)]
+        retrieved = [value for value in retrieved if value is not None]
+        as_of = max(retrieved).isoformat() if retrieved else "9999-12-31"
     declared_keys = {text(item.get("key")) for item in (evidence.get("match_keys") or []) if isinstance(item, dict) and text(item.get("key"))}
     evidence_index = {}
     duplicates = set()
@@ -979,7 +979,9 @@ def derive_flags(evidence):
         keys = {text(key) for key in (item.get("matched_keys") or []) if text(key)}
         if len(keys) < 2 or not keys <= ALLOWED_MATCH_KEYS or keys <= {"legal_name", "person_name", "alias_name"}:
             return False
-        if declared_keys and not keys <= declared_keys:
+        if not declared_keys:
+            return False
+        if not keys <= declared_keys:
             return False
         if official_required and (effective_grade(item) != "official" or not full):
             return False
@@ -1034,7 +1036,7 @@ def derive_flags(evidence):
             add("RF-ID-005")
 
     for check in evidence.get("doc_checks") or []:
-        if isinstance(check, dict) and check.get("dates_consistent") is False and (check.get("producer_class") or check.get("creator_class")) == "design":
+        if isinstance(check, dict) and check.get("dates_consistent") is False:
             add("RF-DOC-001")
     return derived
 
@@ -1369,6 +1371,13 @@ def verdict_line(display, evidence, level, actions):
 
 
 def check_lines(evidence):
+    note_labels = {
+        "state-mismatch": "州代码与自称州不一致",
+        "format-invalid": "格式不符合规则",
+        "position-14-not-z": "第 14 位不是 Z",
+        "checksum-failed": "校验位不通过",
+        "name-suffix-mismatch": "主体类型与名称后缀不符",
+    }
     lines = []
     for item in evidence.get("id_checks") or []:
         if not isinstance(item, dict) or not item.get("masked"):
@@ -1381,7 +1390,7 @@ def check_lines(evidence):
         if item.get("name_suffix_consistent") is False:
             parts.append("名称后缀不一致（仅提示）")
         for note in item.get("notes") or []:
-            parts.append(text(note))
+            parts.append(note_labels.get(text(note), text(note)))
         lines.append("；".join(parts) + " [离线]")
         if len(lines) >= 3:
             break
@@ -1477,7 +1486,8 @@ def validate_evidence_contract(evidence):
         if not isinstance(item, dict):
             continue
         masked = text(item.get("masked"))
-        if masked and (id_leak(masked) or numeric_leak(masked)):
+        stripped = re.sub(r"[•*]", "", masked)
+        if masked and (id_leak(masked) or numeric_leak(masked) or re.search(r"[0-9A-Z]{10,}", stripped, re.I)):
             add("plaintext-id", "id_checks.masked")
         for note in item.get("notes") or []:
             if numeric_leak(note) or id_leak(note):
@@ -1761,10 +1771,13 @@ def render_card(evidence, rules):
             pages = int(search_log.get("pages", search_log.get("page_reads")) or 0)
             budget = search_log.get("budget") or {}
             mode = text(search_log.get("mode"))
-        if mode == "standard":
-            max_searches, max_pages = 8, 4
-        else:
+        if mode == "deep":
             max_searches, max_pages = 12, 6
+        else:
+            max_searches, max_pages = 8, 4
+        if isinstance(budget, dict):
+            max_searches = min(max_searches, int(budget.get("searches") or max_searches))
+            max_pages = min(max_pages, int(budget.get("pages", budget.get("page_reads")) or max_pages))
         lines.append(f"检索：{searches} 次，打开 {pages} 个页面")
         if searches > max_searches or pages > max_pages:
             lines.append("⚠ 本次未完成：检索预算已用尽")
@@ -2073,9 +2086,10 @@ def main(argv=None) -> int:
             "| --- | --- | --- | --- | --- | --- | --- |",
         ]
         for index, item in enumerate(entries[:50], 1):
+            cell = lambda value: text(value).replace("|", "\\|").replace("\n", " ").replace("\r", " ")
             lines.append(
-                f"| {index} | {text(item.get('query'))} | {text(item.get('tool'))} | {text(item.get('ts'))} | "
-                f"{text(item.get('result_count'))} | {text(item.get('used'))} | {text(item.get('note'))} |"
+                f"| {index} | {cell(item.get('query'))} | {cell(item.get('tool'))} | {cell(item.get('ts'))} | "
+                f"{cell(item.get('result_count'))} | {cell(item.get('used'))} | {cell(item.get('note'))} |"
             )
         result = {"status": "ok", "entries": len(entries), "text": "\n".join(lines)}
         print(json.dumps(result, ensure_ascii=False) if args.json else result["text"])

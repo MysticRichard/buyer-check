@@ -1,0 +1,7 @@
+{
+  "id": "A121",
+  "title": "B41 时间窗反例：无 as_of 时未来记录与超 5 年记录均不派生",
+  "type": "render_card",
+  "input": { "fixture": "card_time_window.json" },
+  "expect": { "status": "ok", "risk_score": 0, "level": "低", "derived_flags": [] }
+}

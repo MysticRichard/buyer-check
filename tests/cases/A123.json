@@ -1,0 +1,7 @@
+{
+  "id": "A123",
+  "title": "Z11 标准档默认预算 8/4：无 mode/budget 时 9 次检索应提示未完成",
+  "type": "render_card",
+  "input": { "fixture": "card_standard_budget.json" },
+  "expect": { "status": "ok", "card_includes": ["⚠ 本次未完成：检索预算已用尽"] }
+}

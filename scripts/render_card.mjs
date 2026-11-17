@@ -811,9 +811,9 @@ function deriveFlags(evidence) {
   const full = tier === undefined || tier === 'full';
   let asOf = evidence.as_of;
   if (!asOf) {
-    const dates = (evidence.footprint || [])
+    const dates = (evidence.evidence || [])
       .filter((item) => item && typeof item === 'object')
-      .map((item) => parseIsoDate(item.data_as_of))
+      .map((item) => parseIsoDate(item.retrieved_at))
       .filter(Boolean)
       .map((date) => date.getTime());
     asOf = dates.length ? new Date(Math.max(...dates)).toISOString().slice(0, 10) : '9999-12-31';
@@ -844,7 +844,7 @@ function deriveFlags(evidence) {
     if (!item || typeof item !== 'object' || item.subject !== 'company') return false;
     const keys = new Set((item.matched_keys || []).map((key) => text(key)).filter(Boolean));
     if (keys.size < 2 || [...keys].some((key) => !ALLOWED_MATCH_KEYS.has(key)) || [...keys].every((key) => ['legal_name', 'person_name', 'alias_name'].includes(key))) return false;
-    if (declaredKeys.size && [...keys].some((key) => !declaredKeys.has(key))) return false;
+    if (declaredKeys.size === 0 || [...keys].some((key) => !declaredKeys.has(key))) return false;
     if (officialRequired && (effectiveGrade(item) !== 'official' || !full)) return false;
     const ids = (item.evidence_ids || []).map((id) => text(id)).filter(Boolean);
     if (ids.length === 0 || ids.some((id) => !evidenceIndex.has(id) || duplicates.has(id))) return false;
@@ -887,7 +887,7 @@ function deriveFlags(evidence) {
     if (check.name_suffix_consistent === false) add('RF-ID-005');
   }
   for (const check of evidence.doc_checks || []) {
-    if (check && typeof check === 'object' && check.dates_consistent === false && (check.producer_class || check.creator_class) === 'design') add('RF-DOC-001');
+    if (check && typeof check === 'object' && check.dates_consistent === false) add('RF-DOC-001');
   }
   return derived;
 }
@@ -955,6 +955,13 @@ function verdictLine(display, evidence, level, actions) {
 }
 
 function checkLines(evidence) {
+  const noteLabels = {
+    'state-mismatch': '州代码与自称州不一致',
+    'format-invalid': '格式不符合规则',
+    'position-14-not-z': '第 14 位不是 Z',
+    'checksum-failed': '校验位不通过',
+    'name-suffix-mismatch': '主体类型与名称后缀不符',
+  };
   const lines = [];
   for (const item of evidence.id_checks || []) {
     if (!item || typeof item !== 'object' || !item.masked) continue;
@@ -963,7 +970,7 @@ function checkLines(evidence) {
     const parts = [`号码：${text(item.type).toUpperCase()} ${text(item.masked)} 格式${formatText}，校验位${checksumText}`];
     if (item.entity_type) parts.push(`主体类型 ${text(item.entity_type)}`);
     if (item.name_suffix_consistent === false) parts.push('名称后缀不一致（仅提示）');
-    for (const note of item.notes || []) parts.push(text(note));
+    for (const note of item.notes || []) parts.push(noteLabels[text(note)] || text(note));
     lines.push(`${parts.join('；')} [离线]`);
     if (lines.length >= 3) break;
   }
@@ -1045,7 +1052,7 @@ function validateEvidenceContract(evidence) {
   for (const item of evidence.id_checks || []) {
     if (!item || typeof item !== 'object') continue;
     const masked = text(item.masked);
-    if (masked && (idLeak(masked) || numericLeak(masked))) add('plaintext-id', 'id_checks.masked');
+    if (masked && (idLeak(masked) || numericLeak(masked) || /[0-9A-Z]{10,}/i.test(masked.replace(/[•*]/g, '')))) add('plaintext-id', 'id_checks.masked');
     for (const note of item.notes || []) {
       if (idLeak(note) || numericLeak(note)) add('plaintext-id', 'id_checks.notes');
     }
@@ -1324,8 +1331,13 @@ export function renderCard(evidence, rules) {
       pages = Number(evidence.search_log.pages ?? evidence.search_log.page_reads ?? 0);
       mode = text(evidence.search_log.mode);
     }
-    const maxSearches = mode === 'standard' ? 8 : 12;
-    const maxPages = mode === 'standard' ? 4 : 6;
+    let maxSearches = mode === 'deep' ? 12 : 8;
+    let maxPages = mode === 'deep' ? 6 : 4;
+    if (evidence.search_log.budget && typeof evidence.search_log.budget === 'object') {
+      const budget = evidence.search_log.budget;
+      maxSearches = Math.min(maxSearches, Number(budget.searches || maxSearches));
+      maxPages = Math.min(maxPages, Number(budget.pages ?? budget.page_reads ?? maxPages));
+    }
     lines.push(`检索：${searches} 次，打开 ${pages} 个页面`);
     if (searches > maxSearches || pages > maxPages) lines.push('⚠ 本次未完成：检索预算已用尽');
   }
