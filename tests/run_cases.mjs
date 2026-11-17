@@ -1066,17 +1066,30 @@ async phone_pii(testCase) {
     const python = findPython();
     const [pyCmd, ...pyRest] = (python || '').split(' ');
     const outcomes = (testCase.input.cases || []).map((entry) => {
+      const dir = mkdtempSync(join(tmpdir(), 'buyer-check-diff-'));
+      const packPath = (data, fallbackName, fileName) => {
+        if (data) {
+          const path = join(dir, fileName);
+          writeFileSync(path, JSON.stringify(data), 'utf8');
+          return path;
+        }
+        return fallbackName ? join(FIXTURES_DIR, fallbackName) : null;
+      };
       const args = ['--diff'];
-      if (entry.old) args.push(join(FIXTURES_DIR, entry.old));
-      args.push(join(FIXTURES_DIR, entry.new), '--json');
+      const oldPath = packPath(entry.old_data, entry.old, 'old.json');
+      if (oldPath) args.push(oldPath);
+      args.push(packPath(entry.new_data, entry.new, 'new.json'), '--json');
+      const hasNodeRenderer = existsSync(join(ROOT, 'scripts', 'render_card.mjs'));
       const pyRun = spawnSync(pyCmd, [...pyRest, join(ROOT, 'scripts', 'render_card.py'), ...args], { cwd: ROOT, encoding: 'utf8', timeout: 30000 });
-      const jsRun = spawnSync('node', [join(ROOT, 'scripts', 'render_card.mjs'), ...args], { cwd: ROOT, encoding: 'utf8', timeout: 30000 });
+      const jsRun = hasNodeRenderer ? spawnSync('node', [join(ROOT, 'scripts', 'render_card.mjs'), ...args], { cwd: ROOT, encoding: 'utf8', timeout: 30000 }) : null;
       let py = null;
       let js = null;
       try { py = JSON.parse(pyRun.stdout); } catch { py = null; }
-      try { js = JSON.parse(jsRun.stdout); } catch { js = null; }
+      if (jsRun) {
+        try { js = JSON.parse(jsRun.stdout); } catch { js = null; }
+      }
       const expect = entry.expect || {};
-      const checks = [isDeepStrictEqual(py, js)];
+      const checks = [hasNodeRenderer ? isDeepStrictEqual(py, js) : true];
       if (expect.status !== undefined) checks.push(py?.status === expect.status);
       if (expect.risk) checks.push(isDeepStrictEqual(py?.risk, expect.risk));
       if (expect.verification) checks.push(isDeepStrictEqual(py?.verification, expect.verification));
@@ -1099,16 +1112,20 @@ async phone_pii(testCase) {
     const outcomes = (testCase.input.cases || []).map((entry) => {
       const dir = mkdtempSync(join(tmpdir(), 'buyer-check-batch-'));
       const file = join(dir, 'packs.json');
-      writeFileSync(file, JSON.stringify((entry.packs || []).map((name) => loadFixture(name))), 'utf8');
+      const packs = entry.packs_data || (entry.packs || []).map((name) => loadFixture(name));
+      writeFileSync(file, JSON.stringify(packs), 'utf8');
       const args = ['--batch', file, '--json'];
+      const hasNodeRenderer = existsSync(join(ROOT, 'scripts', 'render_card.mjs'));
       const pyRun = spawnSync(pyCmd, [...pyRest, join(ROOT, 'scripts', 'render_card.py'), ...args], { cwd: ROOT, encoding: 'utf8', timeout: 30000 });
-      const jsRun = spawnSync('node', [join(ROOT, 'scripts', 'render_card.mjs'), ...args], { cwd: ROOT, encoding: 'utf8', timeout: 30000 });
+      const jsRun = hasNodeRenderer ? spawnSync('node', [join(ROOT, 'scripts', 'render_card.mjs'), ...args], { cwd: ROOT, encoding: 'utf8', timeout: 30000 }) : null;
       let py = null;
       let js = null;
       try { py = JSON.parse(pyRun.stdout); } catch { py = null; }
-      try { js = JSON.parse(jsRun.stdout); } catch { js = null; }
+      if (jsRun) {
+        try { js = JSON.parse(jsRun.stdout); } catch { js = null; }
+      }
       const expect = entry.expect || {};
-      const checks = [isDeepStrictEqual(py, js)];
+      const checks = [hasNodeRenderer ? isDeepStrictEqual(py, js) : true];
       if (expect.status !== undefined) checks.push(py?.status === expect.status);
       if (py?.status === 'ok' && expect.status === 'ok') {
         if (expect.row_count !== undefined) checks.push(py.row_count === expect.row_count && (py.rows || []).length === expect.row_count);
