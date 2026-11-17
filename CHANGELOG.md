@@ -9,7 +9,8 @@
 - 匹配门新增 `alias` 键；仅 `alias_source:"official"` 的别名计入匹配，`inferred` 别名不得单独过关；A136 覆盖推断/官方别名三例。
 - 交易条款在 72 个唯一组合之外，再对 768 种动作阶梯组合逐个复跑行数与矛盾检查。
 - 印度 GSTIN/PAN `source_url` 登记为 `https://www.gst.gov.in/` 与 `https://www.incometax.gov.in/`，核对状态仍为 `secondary-source`，不猜测算法。
-- 精简包仍 28 文件，无新增第三方依赖；A136 为新增用例。
+- 高风险卡片的判断行改为正向规则：存在 ⛔ 时必须包含保守措辞，否则回退模板；alias 贯通到足迹匹配键；`country --validate` 增加 automation 规则。
+- 精简包仍 28 文件，无新增第三方依赖；A136–A138 为新增用例。
 
 ## [0.10.0] - 2026-11-16
 

@@ -1,0 +1,7 @@
+{
+  "id": "A138",
+  "title": "Z9 alias 贯通足迹：official 别名 + 地址通过匹配门并派生 RF-FOOT-001",
+  "type": "render_card",
+  "input": { "fixture": "card_alias_footprint.json" },
+  "expect": { "status": "ok", "risk_score": 27, "level": "低", "derived_flags": ["RF-FOOT-001"] }
+}

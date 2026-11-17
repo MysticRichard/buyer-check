@@ -444,7 +444,7 @@ SCRIPT_FORBIDDEN = ["核实", "背调", "怀疑", "诈骗"]
 LOCALIZED_LANGS = {"ar", "fr", "es", "pt", "ru", "tr", "id", "th", "vi", "hi", "zh"}
 NEW_FLAG_IDS = {"RF-FOOT-001", "RF-FOOT-002", "RF-FOOT-003", "RF-FOOT-004", "RF-FOOT-005", "RF-ID-004", "RF-ID-005", "RF-DOC-001"}
 LOCAL_FLAG_IDS = {"RF-ID-004", "RF-ID-005", "RF-DOC-001"}
-ALLOWED_MATCH_KEYS = {"legal_name", "address", "tax_id_masked", "phone", "domain", "person_name", "registration_no"}
+ALLOWED_MATCH_KEYS = {"legal_name", "alias", "address", "tax_id_masked", "phone", "domain", "person_name", "registration_no"}
 EMAIL_RE = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}")
 PHONE_CANDIDATE_RE = re.compile(r"(?:\+|00)\d[\d\s().\-]{4,20}\d|\d[\d\s().\-]{4,20}\d")
 MASKED_PHONE_RE = re.compile(r"(?:\+|00)?\d[\d\s()\-*]*\*[\d\s()\-*]*")
@@ -993,7 +993,7 @@ def derive_flags(evidence):
         if not isinstance(item, dict) or item.get("subject") != "company":
             return False
         keys = {text(key) for key in (item.get("matched_keys") or []) if text(key)}
-        if len(keys) < 2 or not keys <= ALLOWED_MATCH_KEYS or keys <= {"legal_name", "person_name", "alias_name"}:
+        if len(keys) < 2 or not keys <= ALLOWED_MATCH_KEYS or keys <= {"legal_name", "alias", "person_name"}:
             return False
         if not declared_keys:
             return False
@@ -1330,6 +1330,7 @@ def batch_triage(packs, rules):
 
 VERDICT_CONTRA = ["可以付款", "可以预付", "直接付款", "倾向继续", "建议继续", "放心下单", "立即付款", "可以寄样", "可以先寄样", "可以发货", "可以生产", "放心发货", "推进", "试单", "下单", "合作", "风险可控", "可控", "试试", "试一下", "小批量", "发一批", "安排生产", "付款后就能发货"]
 VERDICT_PESSIMISTIC = ["风险高", "暂停", "停止", "拒绝", "不要付款", "不建议", "风险偏高", "多留心", "多注意"]
+VERDICT_CONSERVATIVE = ["不建议", "暂停", "暂缓", "先补", "先核验", "先确认", "待补", "待核", "风险高", "需人工", "不要", "不能", "停止"]
 DOC_CLASS_LABELS = {"office": "办公软件", "design": "图像编辑/设计软件", "scan": "扫描件", "other": "其他软件", "unknown": "未知软件"}
 FOOTPRINT_LABELS = {
     "registry": "注册处条目",
@@ -1343,6 +1344,7 @@ FOOTPRINT_LABELS = {
 }
 MATCH_KEY_LABELS = {
     "legal_name": "名称",
+    "alias": "别名",
     "address": "地址",
     "tax_id_masked": "税号",
     "phone": "电话",
@@ -1368,6 +1370,8 @@ def verdict_line(display, evidence, level, actions):
     if blocked and any(word in verdict or word in hint for word in VERDICT_CONTRA):
         invalid = True
     if level in ("低", "中") and any(word in verdict or word in hint for word in VERDICT_PESSIMISTIC):
+        invalid = True
+    if blocked and level == "高" and not any(word in verdict or word in hint for word in VERDICT_CONSERVATIVE):
         invalid = True
     if invalid:
         warning = "invalid-display"

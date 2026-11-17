@@ -359,13 +359,14 @@ const SCRIPT_FORBIDDEN = ['核实', '背调', '怀疑', '诈骗'];
 const LOCALIZED_LANGS = new Set(['ar', 'fr', 'es', 'pt', 'ru', 'tr', 'id', 'th', 'vi', 'hi', 'zh']);
 const NEW_FLAG_IDS = new Set(['RF-FOOT-001', 'RF-FOOT-002', 'RF-FOOT-003', 'RF-FOOT-004', 'RF-FOOT-005', 'RF-ID-004', 'RF-ID-005', 'RF-DOC-001']);
 const LOCAL_FLAG_IDS = new Set(['RF-ID-004', 'RF-ID-005', 'RF-DOC-001']);
-const ALLOWED_MATCH_KEYS = new Set(['legal_name', 'address', 'tax_id_masked', 'phone', 'domain', 'person_name', 'registration_no']);
+const ALLOWED_MATCH_KEYS = new Set(['legal_name', 'alias', 'address', 'tax_id_masked', 'phone', 'domain', 'person_name', 'registration_no']);
 const GSTIN_RE = /[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]/i;
 const PAN_RE = /[A-Z]{5}[0-9]{4}[A-Z]/i;
 const PAN_UPPER_RE = /[A-Z]{5}[0-9]{4}[A-Z]/;
 const UPPER_RUN_RE = /(?<![A-Za-z0-9])[0-9A-Z]{10,}(?![A-Za-z0-9])/;
 const ID_NUM_RE = /(?<![A-Za-z0-9])[0-9]{10,}(?![A-Za-z0-9])/;
 const VERDICT_PESSIMISTIC = ['风险高', '暂停', '停止', '拒绝', '不要付款', '不建议', '风险偏高', '多留心', '多注意'];
+const VERDICT_CONSERVATIVE = ['不建议', '暂停', '暂缓', '先补', '先核验', '先确认', '待补', '待核', '风险高', '需人工', '不要', '不能', '停止'];
 
 function idLeak(value) {
   const compact = text(value).replace(/[\s\-_./•*]/g, '');
@@ -858,7 +859,7 @@ function deriveFlags(evidence) {
   const eligible = (item, officialRequired, years) => {
     if (!item || typeof item !== 'object' || item.subject !== 'company') return false;
     const keys = new Set((item.matched_keys || []).map((key) => text(key)).filter(Boolean));
-    if (keys.size < 2 || [...keys].some((key) => !ALLOWED_MATCH_KEYS.has(key)) || [...keys].every((key) => ['legal_name', 'person_name', 'alias_name'].includes(key))) return false;
+    if (keys.size < 2 || [...keys].some((key) => !ALLOWED_MATCH_KEYS.has(key)) || [...keys].every((key) => ['legal_name', 'alias', 'person_name'].includes(key))) return false;
     if (declaredKeys.size === 0 || [...keys].some((key) => !declaredKeys.has(key))) return false;
     if (officialRequired && (effectiveGrade(item) !== 'official' || !full)) return false;
     const ids = (item.evidence_ids || []).map((id) => text(id)).filter(Boolean);
@@ -935,6 +936,7 @@ const FOOTPRINT_LABELS = {
 };
 const MATCH_KEY_LABELS = {
   legal_name: '名称',
+  alias: '别名',
   address: '地址',
   tax_id_masked: '税号',
   phone: '电话',
@@ -956,6 +958,7 @@ function verdictLine(display, evidence, level, actions) {
   const blocked = actions.some((action) => action.status_text === '不建议');
   if (blocked && VERDICT_CONTRA.some((word) => verdict.includes(word) || hint.includes(word))) invalid = true;
   if ((level === '低' || level === '中') && VERDICT_PESSIMISTIC.some((word) => verdict.includes(word) || hint.includes(word))) invalid = true;
+  if (blocked && level === '高' && !VERDICT_CONSERVATIVE.some((word) => verdict.includes(word) || hint.includes(word))) invalid = true;
   if (invalid) {
     warning = 'invalid-display';
     hint = '';

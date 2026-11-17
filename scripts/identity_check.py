@@ -653,6 +653,9 @@ def validate_capabilities(data):
             continue
         if not isinstance(country.get("registry"), dict):
             errors.append(f"{code}:registry")
+        registry = country.get("registry") or {}
+        if registry.get("automation_allowed") is True and (registry.get("verification") or country.get("verification")) != "official-page":
+            errors.append(f"{code}:automation")
         if country.get("verification") not in allowed_verification:
             errors.append(f"{code}:verification")
         for key in ("registry", "tax_verification", "procurement", "insolvency"):

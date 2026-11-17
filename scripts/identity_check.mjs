@@ -660,6 +660,8 @@ function validateCapabilities(data) {
   for (const [code, country] of Object.entries(data.countries || {})) {
     if (!country || typeof country !== 'object') { errors.push(`${code}:not-object`); continue; }
     if (!country.registry || typeof country.registry !== 'object') errors.push(`${code}:registry`);
+    const registry = country.registry || {};
+    if (registry.automation_allowed === true && (registry.verification || country.verification) !== 'official-page') errors.push(`${code}:automation`);
     if (!allowedVerification.has(country.verification)) errors.push(`${code}:verification`);
     for (const key of ['registry', 'tax_verification', 'procurement', 'insolvency']) {
       const item = country[key];

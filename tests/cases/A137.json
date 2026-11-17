@@ -1,0 +1,7 @@
+{
+  "id": "A137",
+  "title": "判断行正向规则：高风险且存在 ⛔ 时，未包含保守措辞的 verdict 必须回退",
+  "type": "render_card",
+  "input": { "fixture": "card_verdict_bypass.json" },
+  "expect": { "status": "ok", "verdict_warning": "invalid-display", "card_includes": ["判断：当前风险高"], "card_excludes": ["可以走下一步"] }
+}
