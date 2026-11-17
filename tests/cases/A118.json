@@ -1,0 +1,7 @@
+{
+  "id": "A118",
+  "title": "B41 反绕过：footprint 声明的 matched_keys 必须是 match_keys 的子集，否则不计分",
+  "type": "render_card",
+  "input": { "fixture": "card_match_subset.json" },
+  "expect": { "status": "ok", "risk_score": 0, "level": "低", "derived_flags": [] }
+}
