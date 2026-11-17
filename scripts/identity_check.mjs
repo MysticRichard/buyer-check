@@ -813,7 +813,7 @@ function idcheckCommand(args) {
   return { status: 'ok', command: 'idcheck', country, type: idType, masked: maskId(value), format_ok: formatOk, checksum_ok: checksumOk, entity_type: entityType, name_suffix_consistent: nameSuffixConsistent, state_code: stateCode, notes, mode: 'offline', rule_verification: rule.verification || 'unverified' };
 }
 
-const MATCH_KEY_TYPES = ['legal_name', 'address', 'tax_id_masked', 'phone', 'domain', 'person_name', 'registration_no'];
+const MATCH_KEY_TYPES = ['legal_name', 'alias', 'address', 'tax_id_masked', 'phone', 'domain', 'person_name', 'registration_no'];
 
 function normalizeMatchValue(key, value) {
   const raw = value === null || value === undefined ? '' : String(value).trim().toLowerCase();
@@ -825,10 +825,12 @@ function normalizeMatchValue(key, value) {
 
 function loadMatchKeys(payload) {
   if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
-    return MATCH_KEY_TYPES.filter((key) => key in payload).map((key) => [key, payload[key]]);
+    return MATCH_KEY_TYPES.filter((key) => key in payload).map((key) => [key, payload[key], key === 'alias' ? payload.alias_source : null]);
   }
   if (Array.isArray(payload)) {
-    return payload.filter((item) => item && typeof item === 'object' && MATCH_KEY_TYPES.includes(item.key)).map((item) => [item.key, item.value]);
+    return payload
+      .filter((item) => item && typeof item === 'object' && MATCH_KEY_TYPES.includes(item.key))
+      .map((item) => [item.key, item.value, item.key === 'alias' ? item.alias_source : null]);
   }
   return [];
 }
@@ -844,18 +846,25 @@ function matchCommand(args) {
   }
   const buyerMap = new Map(buyer.filter(([, value]) => value !== null && value !== undefined).map(([key, value]) => [key, normalizeMatchValue(key, value)]));
   const candidateMap = new Map(candidate.filter(([, value]) => value !== null && value !== undefined).map(([key, value]) => [key, normalizeMatchValue(key, value)]));
-  const keys = [...buyerMap.keys()].filter((key) => candidateMap.has(key) && buyerMap.get(key) && buyerMap.get(key) === candidateMap.get(key)).sort();
-  const matched = (keys.includes('legal_name') && keys.length >= 2) || (keys.includes('domain') && keys.includes('phone'));
+  const buyerAlias = (buyer.find(([key]) => key === 'alias') || [])[2];
+  const candidateAlias = (candidate.find(([key]) => key === 'alias') || [])[2];
+  let keys = [...buyerMap.keys()].filter((key) => candidateMap.has(key) && buyerMap.get(key) && buyerMap.get(key) === candidateMap.get(key)).sort();
+  if (keys.includes('alias') && !(buyerAlias === 'official' && candidateAlias === 'official')) keys = keys.filter((key) => key !== 'alias');
+  const nameKeys = new Set(['legal_name', 'alias', 'person_name']);
+  const strongKeys = new Set(['address', 'tax_id_masked', 'phone', 'domain', 'registration_no']);
+  const hasName = keys.some((key) => nameKeys.has(key));
+  const hasStrong = keys.some((key) => strongKeys.has(key));
+  const matched = (hasName && hasStrong) || (keys.includes('domain') && keys.includes('phone'));
   let reason;
   let strength;
   if (!matched) {
-    reason = keys.length === 1 && keys[0] === 'legal_name' ? 'only-name' : 'fewer-than-two-independent-keys';
+    reason = keys.every((key) => nameKeys.has(key)) ? 'only-name' : 'fewer-than-two-independent-keys';
     strength = 'weak';
-  } else if (keys.length >= 3 || (keys.includes('legal_name') && (keys.includes('registration_no') || keys.includes('tax_id_masked')))) {
-    reason = keys.includes('legal_name') ? 'name-plus-strong-key' : 'domain-plus-phone';
+  } else if (keys.length >= 3 || (hasName && (keys.includes('registration_no') || keys.includes('tax_id_masked')))) {
+    reason = hasName ? 'name-plus-strong-key' : 'domain-plus-phone';
     strength = 'strong';
   } else {
-    reason = keys.includes('legal_name') ? 'name-plus-other' : 'domain-plus-phone';
+    reason = hasName ? 'name-plus-other' : 'domain-plus-phone';
     strength = 'medium';
   }
   return { status: 'ok', matched, keys_matched: keys, strength, reason };

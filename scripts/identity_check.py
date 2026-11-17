@@ -854,7 +854,7 @@ def idcheck_command(args):
     }
 
 
-MATCH_KEY_TYPES = ("legal_name", "address", "tax_id_masked", "phone", "domain", "person_name", "registration_no")
+MATCH_KEY_TYPES = ("legal_name", "alias", "address", "tax_id_masked", "phone", "domain", "person_name", "registration_no")
 
 
 def normalize_match_value(key, value):
@@ -870,9 +870,9 @@ def normalize_match_value(key, value):
 
 def load_match_keys(payload):
     if isinstance(payload, dict):
-        return [(key, payload[key]) for key in MATCH_KEY_TYPES if key in payload]
+        return [(key, payload[key], payload.get("alias_source") if key == "alias" else None) for key in MATCH_KEY_TYPES if key in payload]
     if isinstance(payload, list):
-        return [(item.get("key"), item.get("value")) for item in payload if isinstance(item, dict) and item.get("key") in MATCH_KEY_TYPES]
+        return [(item.get("key"), item.get("value"), item.get("alias_source") if item.get("key") == "alias" else None) for item in payload if isinstance(item, dict) and item.get("key") in MATCH_KEY_TYPES]
     return []
 
 
@@ -884,18 +884,24 @@ def match_command(args):
             candidate = load_match_keys(json.load(handle))
     except (OSError, ValueError, TypeError):
         return {"status": "invalid-input", "error": "invalid match input"}
-    buyer_map = {key: normalize_match_value(key, value) for key, value in buyer if value is not None}
-    candidate_map = {key: normalize_match_value(key, value) for key, value in candidate if value is not None}
+    buyer_map = {key: normalize_match_value(key, value) for key, value, _ in buyer if value is not None}
+    candidate_map = {key: normalize_match_value(key, value) for key, value, _ in candidate if value is not None}
+    buyer_alias = next((source for key, _, source in buyer if key == "alias"), None)
+    candidate_alias = next((source for key, _, source in candidate if key == "alias"), None)
     keys = sorted(key for key in buyer_map if key in candidate_map and buyer_map[key] and buyer_map[key] == candidate_map[key])
-    matched = ("legal_name" in keys and len(keys) >= 2) or ("domain" in keys and "phone" in keys)
+    if "alias" in keys and not (buyer_alias == "official" and candidate_alias == "official"):
+        keys = [key for key in keys if key != "alias"]
+    name_keys = {"legal_name", "alias", "person_name"}
+    strong_keys = {"address", "tax_id_masked", "phone", "domain", "registration_no"}
+    matched = (bool(name_keys & set(keys)) and bool(strong_keys & set(keys))) or ("domain" in keys and "phone" in keys)
     if not matched:
-        reason = "only-name" if keys == ["legal_name"] else "fewer-than-two-independent-keys"
+        reason = "only-name" if set(keys) <= name_keys else "fewer-than-two-independent-keys"
         strength = "weak"
-    elif len(keys) >= 3 or ("legal_name" in keys and any(key in keys for key in ("registration_no", "tax_id_masked"))):
-        reason = "name-plus-strong-key" if "legal_name" in keys else "domain-plus-phone"
+    elif len(keys) >= 3 or (bool(name_keys & set(keys)) and any(key in keys for key in ("registration_no", "tax_id_masked"))):
+        reason = "name-plus-strong-key" if name_keys & set(keys) else "domain-plus-phone"
         strength = "strong"
     else:
-        reason = "name-plus-other" if "legal_name" in keys else "domain-plus-phone"
+        reason = "name-plus-other" if name_keys & set(keys) else "domain-plus-phone"
         strength = "medium"
     return {"status": "ok", "matched": matched, "keys_matched": keys, "strength": strength, "reason": reason}
 
