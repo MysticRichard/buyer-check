@@ -81,7 +81,7 @@ buyer-check/
 │   ├── identity_check.py / .mjs  # 官网画像、社媒回链、头像比对、地图 POI、注册库（v0.9）
 │   ├── render_card.py / .mjs  # 结论卡渲染：核实度、六维表、动作阶梯、结论句（v0.9）
 │   └── brands.json       # 知名公司域名清单
-├── tests/                # 验收用例 A1–A58、一致性测试、行为评测集
+├── tests/                # 验收用例 A1–A140、一致性测试、行为评测集
 ├── examples/             # 脱敏样例报告
 ├── reports/              # 生成的报告（本地保留，不入仓库）
 └── docs/                 # development.md 开发文档、iteration_plan.md 迭代方案
@@ -104,7 +104,7 @@ buyer-check/
 ## 验证
 
 ```bash
-node tests/run_cases.mjs        # 验收用例 A1–A58
+node tests/run_cases.mjs        # 验收用例 A1–A140
 node tests/consistency.mjs      # V5 分数区间遍历 + V6 Python/Node 一致性
 node tests/consistency_scripts.mjs  # 脚本 Python/Node 一致性（含 render_card）
 node scripts/privacy_scan.mjs   # 提交前隐私扫描

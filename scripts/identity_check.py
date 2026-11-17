@@ -667,6 +667,8 @@ def validate_capabilities(data):
         for fmt in country.get("id_formats") or []:
             if not fmt.get("id_type") or not fmt.get("label") or not isinstance(fmt.get("length"), int):
                 errors.append(f"{code}:id_formats.fields")
+            if "source_url" not in fmt or "embedded" not in fmt:
+                errors.append(f"{code}:id_formats.fields")
             regex_value = fmt.get("regex") or fmt.get("pattern")
             if not str(regex_value or "").strip():
                 errors.append(f"{code}:id_formats.regex-empty")
@@ -817,8 +819,11 @@ def idcheck_command(args):
         if len(value) != 15 or value[13] != "Z":
             checksum_ok = False
             notes.append("position-14-not-z")
-        else:
+        elif rule.get("checksum") == "gstin-mod36":
             checksum_ok = gstin_checksum(value) == value[-1]
+        else:
+            checksum_ok = None
+            notes.append("checksum-not-implemented")
         entity_type = pan_entity_type(value[2:12])
         state_code = value[:2]
         state_name = GST_STATE_CODES.get(state_code)

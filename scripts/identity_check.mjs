@@ -670,6 +670,7 @@ function validateCapabilities(data) {
     }
     for (const fmt of country.id_formats || []) {
       if (!fmt.id_type || !fmt.label || !Number.isInteger(fmt.length)) errors.push(`${code}:id_formats.fields`);
+      if (!('source_url' in fmt) || !('embedded' in fmt)) errors.push(`${code}:id_formats.fields`);
       const regexValue = fmt.regex || fmt.pattern;
       if (!String(regexValue || '').trim()) errors.push(`${code}:id_formats.regex-empty`);
       else {
@@ -793,7 +794,11 @@ function idcheckCommand(args) {
     if (value.length !== 15 || value[13] !== 'Z') {
       checksumOk = false;
       notes.push('position-14-not-z');
-    } else checksumOk = gstinChecksum(value) === value.slice(-1);
+    } else if (rule.checksum === 'gstin-mod36') checksumOk = gstinChecksum(value) === value.slice(-1);
+    else {
+      checksumOk = null;
+      notes.push('checksum-not-implemented');
+    }
     entityType = panEntityType(value.slice(2, 12));
     stateCode = value.slice(0, 2);
     const stateName = GST_STATE_CODES[stateCode];
