@@ -30,6 +30,8 @@ COUNTRY_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "country
 _COUNTRY_CODES = None
 GSTIN_RE = re.compile(r"[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]", re.I)
 PAN_RE = re.compile(r"[A-Z]{5}[0-9]{4}[A-Z]", re.I)
+PAN_UPPER_RE = re.compile(r"[A-Z]{5}[0-9]{4}[A-Z]")
+UPPER_RUN_RE = re.compile(r"(?<![A-Za-z0-9])[0-9A-Z]{10,}(?![A-Za-z0-9])")
 ID_NUM_RE = re.compile(r"(?<![A-Za-z0-9])[0-9]{10,}(?![A-Za-z0-9])")
 V010_KEYS = ("capabilities", "footprint", "id_checks", "doc_checks", "search_log", "match_keys", "previous", "country_discovery", "terms_advice")
 
@@ -41,8 +43,22 @@ def id_leak(value):
     return bool(PAN_RE.fullmatch(compact))
 
 
+def text_leak(value):
+    raw = text(value)
+    compact = re.sub(r"[\s\-_./•*]", "", raw)
+    clean_raw = re.sub(r"RF-?[A-Z]+-?\d{3}", "", raw, flags=re.I)
+    return bool(GSTIN_RE.search(compact) or PAN_UPPER_RE.search(compact) or UPPER_RUN_RE.search(clean_raw))
+
+
 def numeric_leak(value):
     return bool(ID_NUM_RE.search(text(value)))
+
+
+def safe_int(value, default=0):
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
 
 
 def country_known(code):
@@ -1389,7 +1405,7 @@ def check_lines(evidence):
         if item.get("entity_type"):
             parts.append(f"主体类型 {text(item.get('entity_type'))}")
         if item.get("name_suffix_consistent") is False:
-            parts.append("名称后缀不一致（仅提示）")
+            parts.append("名称后缀不一致（计分）")
         for note in item.get("notes") or []:
             parts.append(note_labels.get(text(note), text(note)))
         lines.append("；".join(parts) + " [离线]")
@@ -1504,24 +1520,18 @@ def validate_evidence_contract(evidence):
             add("plaintext-tax-id", "match_keys.tax_id_masked")
 
     for item in evidence.get("footprint") or []:
-        if isinstance(item, dict) and (numeric_leak(item.get("summary")) or id_leak(item.get("summary"))):
+        if isinstance(item, dict) and text_leak(item.get("summary")):
             add("plaintext-id", "footprint.summary")
-    for key in ("verdict", "flip_hint", "supplement"):
-        if numeric_leak((evidence.get("display") or {}).get(key)) or id_leak((evidence.get("display") or {}).get(key)):
-            add("plaintext-id", f"display.{key}")
-    for item in (evidence.get("display") or {}).get("attention") or []:
-        if isinstance(item, dict) and (numeric_leak(item.get("text")) or id_leak(item.get("text"))):
-            add("plaintext-id", "display.attention")
-    for key in ("verified", "missing"):
-        for item in (evidence.get("display") or {}).get(key) or []:
-            if isinstance(item, dict) and (numeric_leak(item.get("text")) or id_leak(item.get("text"))):
-                add("plaintext-id", f"display.{key}")
-    for script in (evidence.get("display") or {}).get("scripts") or []:
-        if isinstance(script, dict):
-            for value in script.values():
-                if isinstance(value, str) and (numeric_leak(value) or id_leak(value)):
-                    add("plaintext-id", "display.scripts")
-                    break
+    def scan_display(value):
+        if isinstance(value, str):
+            return text_leak(value)
+        if isinstance(value, dict):
+            return any(scan_display(item) for item in value.values())
+        if isinstance(value, list):
+            return any(scan_display(item) for item in value)
+        return False
+    if scan_display(evidence.get("display") or {}):
+        add("plaintext-id", "display")
 
     def scan(value):
         if isinstance(value, str):
@@ -1541,7 +1551,7 @@ def mask_log_text(value):
     raw = text(value)
     raw = re.sub(r"([A-Za-z0-9._%+-])[A-Za-z0-9._%+-]*(@[A-Za-z0-9.-]+\.[A-Za-z]{2,})", r"\1***\2", raw)
     raw = re.sub(r"\+\d[\d\s().-]{6,}\d", lambda match: match.group()[:3] + "***" + match.group()[-2:], raw)
-    if id_leak(raw) or numeric_leak(raw):
+    if text_leak(raw):
         raw = raw[:2] + "***" + raw[-2:]
     return raw
 
@@ -1769,6 +1779,7 @@ def render_card(evidence, rules):
         lines.append("快查模式：未查地图、海关、社媒" + (" · ⚠ 本次未完成：检索预算已用尽" if quick_over else ""))
     elif v010_signal and country_code and not country_known(country_code):
         lines.append("该国暂无内置入口，已按通用流程查询")
+    search_lines = []
     if isinstance(search_log, (dict, list)) and not quick:
         search_lines = []
         if isinstance(search_log, list):
@@ -1778,8 +1789,8 @@ def render_card(evidence, rules):
             budget = {}
             mode = ""
         else:
-            searches = int(search_log.get("searches") or 0)
-            pages = int(search_log.get("pages", search_log.get("page_reads")) or 0)
+            searches = safe_int(search_log.get("searches"))
+            pages = safe_int(search_log.get("pages", search_log.get("page_reads")))
             budget = search_log.get("budget") or {}
             mode = text(search_log.get("mode"))
         if mode == "deep":
@@ -1787,8 +1798,8 @@ def render_card(evidence, rules):
         else:
             max_searches, max_pages = 8, 4
         if isinstance(budget, dict):
-            max_searches = min(max_searches, int(budget.get("searches") or max_searches))
-            max_pages = min(max_pages, int(budget.get("pages", budget.get("page_reads")) or max_pages))
+            max_searches = min(max_searches, safe_int(budget.get("searches"), max_searches))
+            max_pages = min(max_pages, safe_int(budget.get("pages", budget.get("page_reads")), max_pages))
         search_lines.append(f"检索：{searches} 次，打开 {pages} 个页面")
         if searches > max_searches or pages > max_pages:
             search_lines.append("⚠ 本次未完成：检索预算已用尽")
@@ -1807,9 +1818,9 @@ def render_card(evidence, rules):
     for action in actions:
         condition = f" {action['condition']}" if action["condition"] else ""
         lines.append(f"| {action['label']} | {action['status']} {action['status_text']} |{condition} |")
+    if search_lines:
+        lines.append(" · ".join(search_lines))
     first_screen_lines = len(lines)
-    if isinstance(search_log, (dict, list)) and not quick:
-        lines.extend(search_lines)
     lines.append("")
     lines.append("| 维度 | 状态 | 依据 |")
     lines.append("| --- | --- | --- |")

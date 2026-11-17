@@ -643,6 +643,10 @@ def validate_capabilities(data):
     errors = []
     allowed_verification = {"official-page", "secondary-source", "unverified", "discovered"}
     allowed_checksum = {"none", "gstin-mod36", "pan-structure"}
+    if data.get("schema_version") != "0.6.0":
+        errors.append("schema_version")
+    if not (data.get("countries") or {}):
+        errors.append("countries:empty")
     for code, country in (data.get("countries") or {}).items():
         if not isinstance(country, dict):
             errors.append(f"{code}:not-object")
@@ -658,10 +662,14 @@ def validate_capabilities(data):
         for fmt in country.get("id_formats") or []:
             if not fmt.get("id_type") or not fmt.get("label") or not isinstance(fmt.get("length"), int):
                 errors.append(f"{code}:id_formats.fields")
-            try:
-                re.compile(fmt.get("regex") or "")
-            except re.error:
-                errors.append(f"{code}:id_formats.regex")
+            regex_value = fmt.get("regex") or fmt.get("pattern")
+            if not str(regex_value or "").strip():
+                errors.append(f"{code}:id_formats.regex-empty")
+            else:
+                try:
+                    re.compile(regex_value)
+                except re.error:
+                    errors.append(f"{code}:id_formats.regex")
             if (fmt.get("checksum") or "none") not in allowed_checksum:
                 errors.append(f"{code}:id_formats.checksum")
     return errors
@@ -961,11 +969,11 @@ def docmeta_command(args):
     if creation and args.claimed_date:
         try:
             age = (dt.date.fromisoformat(creation) - dt.date.fromisoformat(args.claimed_date)).days
-            dates_consistent = not (age > 30 and creator_class == "design")
+            dates_consistent = not (age > 30)
         except ValueError:
             dates_consistent = None
     if dates_consistent is False:
-        notes.append("存在可解释的差异（创建日期与自称签发日期相差超过 30 天，且创建软件为图像编辑/设计类）")
+        notes.append("存在可解释的差异（创建日期与自称签发日期相差超过 30 天）")
     elif dates_consistent is True:
         notes.append("未见矛盾")
     else:

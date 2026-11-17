@@ -362,6 +362,8 @@ const LOCAL_FLAG_IDS = new Set(['RF-ID-004', 'RF-ID-005', 'RF-DOC-001']);
 const ALLOWED_MATCH_KEYS = new Set(['legal_name', 'address', 'tax_id_masked', 'phone', 'domain', 'person_name', 'registration_no']);
 const GSTIN_RE = /[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]/i;
 const PAN_RE = /[A-Z]{5}[0-9]{4}[A-Z]/i;
+const PAN_UPPER_RE = /[A-Z]{5}[0-9]{4}[A-Z]/;
+const UPPER_RUN_RE = /(?<![A-Za-z0-9])[0-9A-Z]{10,}(?![A-Za-z0-9])/;
 const ID_NUM_RE = /(?<![A-Za-z0-9])[0-9]{10,}(?![A-Za-z0-9])/;
 const VERDICT_PESSIMISTIC = ['风险高', '暂停', '停止', '拒绝', '不要付款', '不建议', '风险偏高', '多留心', '多注意'];
 
@@ -371,8 +373,20 @@ function idLeak(value) {
   return PAN_RE.test(compact) && compact.length === 10;
 }
 
+function textLeak(value) {
+  const raw = text(value);
+  const compact = raw.replace(/[\s\-_./•*]/g, '');
+  const cleanRaw = raw.replace(/RF-?[A-Z]+-?\d{3}/gi, '');
+  return GSTIN_RE.test(compact) || PAN_UPPER_RE.test(compact) || UPPER_RUN_RE.test(cleanRaw);
+}
+
 function numericLeak(value) {
   return ID_NUM_RE.test(text(value));
+}
+
+function safeNumber(value, fallback = 0) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
 }
 const V010_KEYS = ['capabilities', 'footprint', 'id_checks', 'doc_checks', 'search_log', 'match_keys', 'previous', 'country_discovery', 'terms_advice'];
 const EMAIL_RE = /[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}/;
@@ -971,7 +985,7 @@ function checkLines(evidence) {
     const checksumText = item.checksum_ok === true ? '通过' : item.checksum_ok === false ? '不通过' : '未知';
     const parts = [`号码：${text(item.type).toUpperCase()} ${text(item.masked)} 格式${formatText}，校验位${checksumText}`];
     if (item.entity_type) parts.push(`主体类型 ${text(item.entity_type)}`);
-    if (item.name_suffix_consistent === false) parts.push('名称后缀不一致（仅提示）');
+    if (item.name_suffix_consistent === false) parts.push('名称后缀不一致（计分）');
     for (const note of item.notes || []) parts.push(noteLabels[text(note)] || text(note));
     lines.push(`${parts.join('；')} [离线]`);
     if (lines.length >= 3) break;
@@ -1056,7 +1070,7 @@ function validateEvidenceContract(evidence) {
     const masked = text(item.masked);
     if (masked && (idLeak(masked) || numericLeak(masked) || /[0-9A-Z]{10,}/i.test(masked.replace(/[\s\-_./•*]/g, '')))) add('plaintext-id', 'id_checks.masked');
     for (const note of item.notes || []) {
-      if (idLeak(note) || numericLeak(note)) add('plaintext-id', 'id_checks.notes');
+      if (textLeak(note)) add('plaintext-id', 'id_checks.notes');
     }
   }
   for (const item of evidence.doc_checks || []) {
@@ -1068,27 +1082,16 @@ function validateEvidenceContract(evidence) {
     if (/[0-9A-Z]{10,}/i.test(value) && !/[•*]/.test(value)) add('plaintext-tax-id', 'match_keys.tax_id_masked');
   }
   for (const item of evidence.footprint || []) {
-    if (item && typeof item === 'object' && (idLeak(item.summary) || numericLeak(item.summary))) add('plaintext-id', 'footprint.summary');
+    if (item && typeof item === 'object' && textLeak(item.summary)) add('plaintext-id', 'footprint.summary');
   }
   const displayData = evidence.display || {};
-  for (const key of ['verdict', 'flip_hint', 'supplement']) {
-    if (idLeak(displayData[key]) || numericLeak(displayData[key])) add('plaintext-id', `display.${key}`);
-  }
-  for (const item of displayData.attention || []) {
-    if (item && typeof item === 'object' && (idLeak(item.text) || numericLeak(item.text))) add('plaintext-id', 'display.attention');
-  }
-  for (const key of ['verified', 'missing']) {
-    for (const item of displayData[key] || []) {
-      if (item && typeof item === 'object' && (idLeak(item.text) || numericLeak(item.text))) add('plaintext-id', `display.${key}`);
-    }
-  }
-  for (const script of displayData.scripts || []) {
-    if (script && typeof script === 'object') {
-      for (const value of Object.values(script)) {
-        if (typeof value === 'string' && (idLeak(value) || numericLeak(value))) { add('plaintext-id', 'display.scripts'); break; }
-      }
-    }
-  }
+  const scanDisplay = (value) => {
+    if (typeof value === 'string') return textLeak(value);
+    if (Array.isArray(value)) return value.some(scanDisplay);
+    if (value && typeof value === 'object') return Object.values(value).some(scanDisplay);
+    return false;
+  };
+  if (scanDisplay(displayData)) add('plaintext-id', 'display');
   const scan = (value) => {
     if (typeof value === 'string') return idLeak(value);
     if (Array.isArray(value)) return value.some(scan);
@@ -1330,16 +1333,16 @@ export function renderCard(evidence, rules) {
       pages = entries.filter((item) => item.used === 'yes').length;
       mode = '';
     } else {
-      searches = Number(evidence.search_log.searches || 0);
-      pages = Number(evidence.search_log.pages ?? evidence.search_log.page_reads ?? 0);
+      searches = safeNumber(evidence.search_log.searches);
+      pages = safeNumber(evidence.search_log.pages ?? evidence.search_log.page_reads);
       mode = text(evidence.search_log.mode);
     }
     let maxSearches = mode === 'deep' ? 12 : 8;
     let maxPages = mode === 'deep' ? 6 : 4;
     if (evidence.search_log.budget && typeof evidence.search_log.budget === 'object') {
       const budget = evidence.search_log.budget;
-      maxSearches = Math.min(maxSearches, Number(budget.searches || maxSearches));
-      maxPages = Math.min(maxPages, Number(budget.pages ?? budget.page_reads ?? maxPages));
+      maxSearches = Math.min(maxSearches, safeNumber(budget.searches, maxSearches));
+      maxPages = Math.min(maxPages, safeNumber(budget.pages ?? budget.page_reads, maxPages));
     }
     searchLines.push(`检索：${searches} 次，打开 ${pages} 个页面`);
     if (searches > maxSearches || pages > maxPages) searchLines.push('⚠ 本次未完成：检索预算已用尽');
@@ -1356,8 +1359,8 @@ export function renderCard(evidence, rules) {
   lines.push('| 动作 | 建议 | 条件 |');
   lines.push('| --- | --- | --- |');
   for (const action of actions) lines.push(`| ${action.label} | ${action.status} ${action.status_text} |${action.condition ? ` ${action.condition}` : ''} |`);
+  if (searchLines.length > 0) lines.push(searchLines.join(' · '));
   const firstScreenLines = lines.length;
-  lines.push(...searchLines);
   lines.push('');
   lines.push('| 维度 | 状态 | 依据 |');
   lines.push('| --- | --- | --- |');
@@ -1792,7 +1795,7 @@ function maskLogText(value) {
   let raw = text(value);
   raw = raw.replace(/([A-Za-z0-9._%+-])[A-Za-z0-9._%+-]*(@[A-Za-z0-9.-]+\.[A-Za-z]{2,})/g, '$1***$2');
   raw = raw.replace(/\+\d[\d\s().-]{6,}\d/g, (match) => `${match.slice(0, 3)}***${match.slice(-2)}`);
-  if (idLeak(raw) || numericLeak(raw)) raw = `${raw.slice(0, 2)}***${raw.slice(-2)}`;
+  if (textLeak(raw)) raw = `${raw.slice(0, 2)}***${raw.slice(-2)}`;
   return raw;
 }
 

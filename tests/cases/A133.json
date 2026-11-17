@@ -1,0 +1,7 @@
+{
+  "id": "A133",
+  "title": "B42 反绕过：自由文本 verdict 中嵌入完整 PAN 必须拒收",
+  "type": "render_card",
+  "input": { "fixture": "card_text_leak_verdict.json" },
+  "expect": { "status": "invalid-input" }
+}

@@ -655,6 +655,8 @@ function validateCapabilities(data) {
   const errors = [];
   const allowedVerification = new Set(['official-page', 'secondary-source', 'unverified', 'discovered']);
   const allowedChecksum = new Set(['none', 'gstin-mod36', 'pan-structure']);
+  if (data.schema_version !== '0.6.0') errors.push('schema_version');
+  if (Object.keys(data.countries || {}).length === 0) errors.push('countries:empty');
   for (const [code, country] of Object.entries(data.countries || {})) {
     if (!country || typeof country !== 'object') { errors.push(`${code}:not-object`); continue; }
     if (!country.registry || typeof country.registry !== 'object') errors.push(`${code}:registry`);
@@ -665,7 +667,11 @@ function validateCapabilities(data) {
     }
     for (const fmt of country.id_formats || []) {
       if (!fmt.id_type || !fmt.label || !Number.isInteger(fmt.length)) errors.push(`${code}:id_formats.fields`);
-      try { new RegExp(fmt.regex || ''); } catch { errors.push(`${code}:id_formats.regex`); }
+      const regexValue = fmt.regex || fmt.pattern;
+      if (!String(regexValue || '').trim()) errors.push(`${code}:id_formats.regex-empty`);
+      else {
+        try { new RegExp(regexValue); } catch { errors.push(`${code}:id_formats.regex`); }
+      }
       if (!allowedChecksum.has(fmt.checksum || 'none')) errors.push(`${code}:id_formats.checksum`);
     }
   }

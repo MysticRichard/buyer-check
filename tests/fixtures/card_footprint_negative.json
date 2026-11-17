@@ -300,6 +300,57 @@
         "E1"
       ],
       "summary": "安全检查样例"
+    },
+    {
+      "probe": "enforcement",
+      "result": "hit",
+      "subject": "company",
+      "role": "accused",
+      "source_grade": "official",
+      "matched_keys": [
+        "legal_name",
+        "address"
+      ],
+      "category": "fraud",
+      "data_as_of": "2031-01-01",
+      "evidence_ids": [
+        "E1"
+      ],
+      "summary": "两键但窗外"
+    },
+    {
+      "probe": "enforcement",
+      "result": "hit",
+      "subject": "company",
+      "role": "accused",
+      "source_grade": "official",
+      "matched_keys": [
+        "legal_name",
+        "address"
+      ],
+      "category": "fraud",
+      "data_as_of": "2016-01-01",
+      "evidence_ids": [
+        "E1"
+      ],
+      "summary": "两键但窗外"
+    },
+    {
+      "probe": "enforcement",
+      "result": "hit",
+      "subject": "company",
+      "role": "accused",
+      "source_grade": "official",
+      "matched_keys": [
+        "legal_name",
+        "address"
+      ],
+      "category": "fraud",
+      "data_as_of": "2015-01-01",
+      "evidence_ids": [
+        "E1"
+      ],
+      "summary": "两键但窗外"
     }
   ],
   "display": {

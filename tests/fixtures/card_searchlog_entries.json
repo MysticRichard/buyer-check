@@ -31,7 +31,7 @@
         "note": "命中注册处摘要"
       },
       {
-        "query": "contact +1 202-555-0133 john.doe@example.com",
+        "query": "税号 ABCDE1234F 是否有效 +1 202-555-0133 john.doe@example.com",
         "tool": "search",
         "ts": "2026-11-16 09:05",
         "result_count": 0,

@@ -4,12 +4,71 @@
   "type": "docmeta",
   "input": {
     "cases": [
-      { "name": "office", "claimed_date": "2026-01-01", "pdf": "%PDF-1.4\n1 0 obj<< /Creator (Microsoft Word) /Producer (Microsoft Office) /CreationDate (D:20260110090000) /ModDate (D:20260110090000) /Count 3 >> endobj\n%%EOF", "expect": { "creator_class": "office", "dates_consistent": true, "notes_include": ["未见矛盾"] } },
-      { "name": "design", "claimed_date": "2026-01-01", "pdf": "%PDF-1.4\n1 0 obj<< /Creator (Adobe Photoshop) /Producer (Adobe Photoshop) /CreationDate (D:20260301090000) /ModDate (D:20260301090000) /Count 1 >> endobj\n%%EOF", "expect": { "creator_class": "design", "dates_consistent": false, "notes_include": ["存在可解释的差异"] } },
-      { "name": "scan", "pdf": "%PDF-1.4\n1 0 obj<< /Producer (ScanSnap) /Count 2 >> endobj\n%%EOF", "expect": { "creator_class": "scan", "dates_consistent": null } },
-      { "name": "incremental", "claimed_date": "2026-01-01", "pdf": "%PDF-1.4\n1 0 obj<< /Creator (Adobe Acrobat) /Producer (Adobe Acrobat) /CreationDate (D:20260101090000) /ModDate (D:20260103090000) /Count 4 >> endobj\n%%EOF\n2 0 obj<< /Type /XRef >> endobj\n%%EOF", "expect": { "creator_class": "other", "dates_consistent": true, "incremental_updates": 1 } },
-      { "name": "cleared", "pdf": "%PDF-1.4\n1 0 obj<< >> endobj\n%%EOF", "expect": { "creator_class": "unknown", "dates_consistent": null } }
+      {
+        "name": "office",
+        "claimed_date": "2026-01-01",
+        "pdf": "%PDF-1.4\n1 0 obj<< /Creator (Microsoft Word) /Producer (Microsoft Office) /CreationDate (D:20260110090000) /ModDate (D:20260110090000) /Count 3 >> endobj\n%%EOF",
+        "expect": {
+          "creator_class": "office",
+          "dates_consistent": true,
+          "notes_include": [
+            "未见矛盾"
+          ]
+        }
+      },
+      {
+        "name": "design",
+        "claimed_date": "2026-01-01",
+        "pdf": "%PDF-1.4\n1 0 obj<< /Creator (Adobe Photoshop) /Producer (Adobe Photoshop) /CreationDate (D:20260301090000) /ModDate (D:20260301090000) /Count 1 >> endobj\n%%EOF",
+        "expect": {
+          "creator_class": "design",
+          "dates_consistent": false,
+          "notes_include": [
+            "存在可解释的差异"
+          ]
+        }
+      },
+      {
+        "name": "scan",
+        "pdf": "%PDF-1.4\n1 0 obj<< /Producer (ScanSnap) /Count 2 >> endobj\n%%EOF",
+        "expect": {
+          "creator_class": "scan",
+          "dates_consistent": null
+        }
+      },
+      {
+        "name": "incremental",
+        "claimed_date": "2026-01-01",
+        "pdf": "%PDF-1.4\n1 0 obj<< /Creator (Adobe Acrobat) /Producer (Adobe Acrobat) /CreationDate (D:20260101090000) /ModDate (D:20260103090000) /Count 4 >> endobj\n%%EOF\n2 0 obj<< /Type /XRef >> endobj\n%%EOF",
+        "expect": {
+          "creator_class": "other",
+          "dates_consistent": true,
+          "incremental_updates": 1
+        }
+      },
+      {
+        "name": "cleared",
+        "pdf": "%PDF-1.4\n1 0 obj<< >> endobj\n%%EOF",
+        "expect": {
+          "creator_class": "unknown",
+          "dates_consistent": null
+        }
+      },
+      {
+        "name": "office-mismatch",
+        "claimed_date": "2025-01-01",
+        "pdf": "%PDF-1.4\n1 0 obj<< /Creator (Microsoft Word) /Producer (Microsoft Office) /CreationDate (D:20260110090000) /ModDate (D:20260110090000) /Count 3 >> endobj\n%%EOF",
+        "expect": {
+          "creator_class": "office",
+          "dates_consistent": false,
+          "notes_include": [
+            "存在可解释的差异"
+          ]
+        }
+      }
     ]
   },
-  "expect": { "all_pass": true }
+  "expect": {
+    "all_pass": true
+  }
 }

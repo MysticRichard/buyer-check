@@ -2,11 +2,24 @@
   "id": "A119",
   "title": "Z26 可执行报告附录 D：--report 输出 query/tool/ts/result_count/used/note、跳过项并打码 PII",
   "type": "report",
-  "input": { "fixture": "card_searchlog_entries.json" },
+  "input": {
+    "fixture": "card_searchlog_entries.json"
+  },
   "expect": {
     "entries": 2,
     "skipped": 2,
-    "text_includes": ["附录 D 检索日志与复现路径", "query | tool | ts | result_count | used | note", "ACME TRADING LTD registry", "跳过：tender", "跳过：customs", "***"],
-    "text_excludes": ["+1 202-555-0133", "john.doe@example.com"]
+    "text_includes": [
+      "附录 D 检索日志与复现路径",
+      "query | tool | ts | result_count | used | note",
+      "ACME TRADING LTD registry",
+      "跳过：tender",
+      "跳过：customs",
+      "***"
+    ],
+    "text_excludes": [
+      "+1 202-555-0133",
+      "john.doe@example.com",
+      "ABCDE1234F"
+    ]
   }
 }
