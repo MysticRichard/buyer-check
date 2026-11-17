@@ -1507,7 +1507,7 @@ def validate_evidence_contract(evidence):
         if masked and (id_leak(masked) or numeric_leak(masked) or re.search(r"[0-9A-Z]{10,}", stripped, re.I)):
             add("plaintext-id", "id_checks.masked")
         for note in item.get("notes") or []:
-            if numeric_leak(note) or id_leak(note):
+            if text_leak(note):
                 add("plaintext-id", "id_checks.notes")
     for item in evidence.get("doc_checks") or []:
         if isinstance(item, dict) and any(text(key).lower() == "author" for key in item):
@@ -1578,7 +1578,7 @@ def render_card(evidence, rules):
     quick = evidence.get("quick_check") is True
     quick_over = False
     if quick and isinstance(search_log, dict):
-        quick_over = int(search_log.get("searches") or 0) > 0 or int(search_log.get("pages", search_log.get("page_reads")) or 0) > 0
+        quick_over = safe_int(search_log.get("searches")) > 0 or safe_int(search_log.get("pages", search_log.get("page_reads"))) > 0
     elif quick and isinstance(search_log, list):
         quick_over = len(search_log) > 0
     conflicts, conflict_errors = validate_conflicts(evidence)

@@ -1,0 +1,7 @@
+{
+  "id": "A135",
+  "title": "B42 反绕过：id_checks.notes 句子中嵌入完整 PAN 必须拒收（Py/Node 一致）",
+  "type": "render_card",
+  "input": { "fixture": "card_notes_pan.json" },
+  "expect": { "status": "invalid-input" }
+}
