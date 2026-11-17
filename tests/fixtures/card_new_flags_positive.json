@@ -23,7 +23,7 @@
   "footprint": [
     { "probe": "enforcement", "result": "hit", "subject": "company", "role": "accused", "source_grade": "official", "matched_keys": ["legal_name", "address"], "category": "fraud", "data_as_of": "2025-01-01", "evidence_ids": ["E1"], "summary": "官方欺诈类处罚" },
     { "probe": "enforcement", "result": "hit", "subject": "company", "role": "regulator_action", "source_grade": "official", "matched_keys": ["legal_name", "address"], "category": "fraud", "data_as_of": "2025-01-01", "evidence_ids": ["E1"], "summary": "监管机构处罚" },
-    { "probe": "debarment", "result": "hit", "subject": "company", "role": "unknown", "source_grade": "official", "matched_keys": ["legal_name", "address"], "data_as_of": "2024-01-01", "evidence_ids": ["E1"], "summary": "多边机构禁入名单" },
+    { "probe": "debarment", "result": "hit", "subject": "company", "role": "accused", "source_grade": "official", "matched_keys": ["legal_name", "address"], "data_as_of": "2024-01-01", "evidence_ids": ["E1"], "summary": "多边机构禁入名单" },
     { "probe": "tender", "result": "hit", "subject": "company", "role": "accused", "source_grade": "official", "matched_keys": ["legal_name", "address"], "category": "fraud", "data_as_of": "2025-01-01", "evidence_ids": ["E1"], "summary": "招标材料造假公告" },
     { "probe": "news", "result": "hit", "subject": "company", "role": "accused", "source_grade": "third_party", "matched_keys": ["legal_name", "address"], "data_as_of": "2025-01-01", "evidence_ids": ["E2", "E3"], "summary": "两个独立第三方来源指控同类欺诈" },
     { "probe": "scale", "result": "hit", "subject": "company", "role": "registered_entity", "source_grade": "official", "matched_keys": ["legal_name", "address"], "scale_ratio": 12, "data_as_of": "2025-01-01", "evidence_ids": ["E1"], "summary": "自称规模与官方披露相差 12 倍" },

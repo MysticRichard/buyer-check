@@ -1,0 +1,15 @@
+{
+  "subject": { "company": "ACME TRADING LTD", "country": "IN" },
+  "stage": "inquiry",
+  "checks": [],
+  "flags": [],
+  "capabilities": { "tier": "search-only", "web_search": true, "web_fetch": false, "shell": false, "image_view": false },
+  "search_log": { "searches": 5, "page_reads": 2, "budget": { "searches": 8, "page_reads": 4 } },
+  "quick_check": true,
+  "anchors": { "closure": "single" },
+  "coverage": { "checked": 7, "total": 8, "uncovered": [] },
+  "confidence": "中",
+  "layers": { "company": { "credibility": "medium" }, "person_company_link": { "strength": "medium" }, "person_authenticity": { "level": "unknown" }, "contact": { "phone_matches": true, "business_email": true, "domain_aged": true }, "compliance": { "sanctions": "clear", "negative": "clear" }, "scale": { "map": "unknown", "customs": "unknown" } },
+  "evidence": [{ "id": "E1", "url": "https://registry.example/company/1", "retrieved_at": "2026-11-16T00:00:00Z", "source_type": "registry", "source_grade": "official" }],
+  "display": { "customer_label": "ACME TRADING LTD", "inquiry_type": "一般询盘", "verdict": "公司层信息自洽，倾向小额首单", "evidence_ids": ["E1"], "dim_notes": { "company": "官网与公开资料一致", "link": "邮箱与官网一致", "contact": "电话与邮箱一致", "behavior": "没有询盘原文", "compliance": "制裁无匹配", "scale": "地图和海关都没查到" }, "attention": [], "verified": [], "missing": [], "open_questions": [], "scripts": [] }
+}

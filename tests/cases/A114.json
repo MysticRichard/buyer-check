@@ -1,0 +1,14 @@
+{
+  "id": "A114",
+  "title": "Z16 离线红旗可见性：证件/文件类红旗应出现在需要注意并标离线，而不是缺证据",
+  "type": "render_card",
+  "input": { "fixture": "card_local_flags.json" },
+  "expect": {
+    "status": "ok",
+    "risk_score": 27,
+    "level": "低",
+    "derived_flags": ["RF-ID-004", "RF-DOC-001"],
+    "card_includes": ["RF-ID-004", "RF-DOC-001", "[离线]"],
+    "card_excludes": ["（缺证据）RF-ID-004"]
+  }
+}

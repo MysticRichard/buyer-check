@@ -1,0 +1,7 @@
+{
+  "id": "A113",
+  "title": "B46 反绕过：user_input 证据无 url 时 Python 不崩溃，Py/Node 一致",
+  "type": "render_card",
+  "input": { "fixture": "card_user_input_no_url.json" },
+  "expect": { "status": "ok", "risk_score": 0, "level": "低" }
+}

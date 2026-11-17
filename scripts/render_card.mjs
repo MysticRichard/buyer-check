@@ -358,6 +358,8 @@ const FORBIDDEN = ['骗子', '诈骗犯', '确定是假的', '一定有问题'];
 const SCRIPT_FORBIDDEN = ['核实', '背调', '怀疑', '诈骗'];
 const LOCALIZED_LANGS = new Set(['ar', 'fr', 'es', 'pt', 'ru', 'tr', 'id', 'th', 'vi', 'hi', 'zh']);
 const NEW_FLAG_IDS = new Set(['RF-FOOT-001', 'RF-FOOT-002', 'RF-FOOT-003', 'RF-FOOT-004', 'RF-FOOT-005', 'RF-ID-004', 'RF-ID-005', 'RF-DOC-001']);
+const LOCAL_FLAG_IDS = new Set(['RF-ID-004', 'RF-ID-005', 'RF-DOC-001']);
+const ALLOWED_MATCH_KEYS = new Set(['legal_name', 'address', 'tax_id_masked', 'phone', 'domain', 'person_name', 'registration_no']);
 const V010_KEYS = ['capabilities', 'footprint', 'id_checks', 'doc_checks', 'search_log', 'match_keys', 'previous', 'country_discovery', 'terms_advice'];
 const EMAIL_RE = /[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}/;
 const PHONE_NON_NUMBER_PATTERNS = [
@@ -673,6 +675,7 @@ function applyEvidenceRules(evidence, attention, verified, missing, attentionFro
   }
   const evaluate = (item, target) => {
     const ids = item && item.evidence_ids;
+    if (item && item.kind === 'flag' && LOCAL_FLAG_IDS.has(item.flag_id) && (!Array.isArray(ids) || ids.length === 0)) return { ok: true, label: '', gradeLabel: '离线' };
     if (!Array.isArray(ids) || ids.length === 0) return { ok: false, label: '缺证据', gradeLabel: null };
     const entries = [];
     let allUser = true;
@@ -780,7 +783,8 @@ function withinYears(dataAsOf, asOf, years) {
   const recorded = parseIsoDate(dataAsOf);
   if (!recorded) return false;
   const end = parseIsoDate(asOf) || new Date('9999-12-31T00:00:00Z');
-  return (end.getTime() - recorded.getTime()) / 86400000 <= years * 365;
+  const delta = (end.getTime() - recorded.getTime()) / 86400000;
+  return delta >= 0 && delta <= years * 365;
 }
 
 function deriveFlags(evidence) {
@@ -806,7 +810,7 @@ function deriveFlags(evidence) {
   const eligible = (item, officialRequired, years) => {
     if (!item || typeof item !== 'object' || item.subject !== 'company') return false;
     const keys = new Set((item.matched_keys || []).map((key) => text(key)).filter(Boolean));
-    if (keys.size < 2 || [...keys].every((key) => ['legal_name', 'person_name', 'alias_name'].includes(key))) return false;
+    if (keys.size < 2 || [...keys].some((key) => !ALLOWED_MATCH_KEYS.has(key)) || [...keys].every((key) => ['legal_name', 'person_name', 'alias_name'].includes(key))) return false;
     if (officialRequired && (effectiveGrade(item) !== 'official' || !full)) return false;
     const ids = (item.evidence_ids || []).map((id) => text(id)).filter(Boolean);
     if (ids.length === 0 || ids.some((id) => !evidenceIndex.has(id))) return false;
@@ -822,18 +826,19 @@ function deriveFlags(evidence) {
       if (!grades.includes('official')) grade = grades.includes('third_party') ? 'third_party' : 'self_declared';
     }
     if (item.probe === 'enforcement' && ['accused', 'regulator_action'].includes(item.role) && item.category === 'fraud' && eligible(item, true, 5)) add('RF-FOOT-001', item.evidence_ids);
-    else if (item.probe === 'debarment' && ['accused', 'regulator_action', 'registered_entity', 'unknown'].includes(item.role) && eligible(item, true, 3)) add('RF-FOOT-002', item.evidence_ids);
+    else if (item.probe === 'debarment' && ['accused', 'regulator_action'].includes(item.role) && eligible(item, true, 3)) add('RF-FOOT-002', item.evidence_ids);
     else if (item.probe === 'tender' && ['accused', 'regulator_action'].includes(item.role) && item.category === 'fraud' && eligible(item, true, 5)) add('RF-FOOT-003', item.evidence_ids);
     else if (['news', 'forum'].includes(item.probe) && item.role === 'accused' && grade === 'third_party' && eligible(item, false, 5)) {
       const domains = new Set();
+      const groups = new Set();
       for (const id of item.evidence_ids || []) {
         const entry = evidenceIndex.get(text(id)) || {};
         const domain = registrableDomain(urlHost(entry.url));
         const group = text(entry.media_group);
-        if (group) domains.add(`group:${group}`);
-        else if (domain) domains.add(`domain:${domain}`);
+        if (domain) domains.add(domain);
+        if (group) groups.add(group);
       }
-      if (domains.size >= 2) add('RF-FOOT-004', item.evidence_ids);
+      if (domains.size >= 2 && (groups.size === 0 || groups.size >= 2)) add('RF-FOOT-004', item.evidence_ids);
     } else if (item.probe === 'scale' && ['accused', 'regulator_action', 'registered_entity'].includes(item.role) && grade === 'official' && eligible(item, false, 5) && Number(item.scale_ratio || 0) >= 10) {
       add('RF-FOOT-005', item.evidence_ids);
     }
@@ -863,7 +868,7 @@ export function tradeTerms(level, tier, inquiryType) {
   return lines.slice(0, 2);
 }
 
-const VERDICT_CONTRA = ['可以付款', '可以预付', '直接付款', '倾向继续', '建议继续', '放心下单', '立即付款', '可以寄样', '可以先寄样', '可以发货', '可以生产', '放心发货'];
+const VERDICT_CONTRA = ['可以付款', '可以预付', '直接付款', '倾向继续', '建议继续', '放心下单', '立即付款', '可以寄样', '可以先寄样', '可以发货', '可以生产', '放心发货', '推进', '试单', '下单', '合作', '风险可控'];
 const DOC_CLASS_LABELS = { office: '办公软件', design: '图像编辑/设计软件', scan: '扫描件', other: '其他软件', unknown: '未知软件' };
 const FOOTPRINT_LABELS = {
   registry: '注册处条目',
@@ -984,7 +989,7 @@ function validateEvidenceContract(evidence) {
   for (const item of evidence.id_checks || []) {
     if (!item || typeof item !== 'object') continue;
     const masked = text(item.masked);
-    if (masked && !/[•*]/.test(masked) && /[0-9A-Z]{10,}/i.test(masked)) add('plaintext-id', 'id_checks.masked');
+    if (masked && /[0-9A-Z]{10,}/.test(masked.replace(/[•*]/g, ''))) add('plaintext-id', 'id_checks.masked');
   }
   for (const item of evidence.doc_checks || []) {
     if (item && typeof item === 'object' && Object.keys(item).some((key) => text(key).toLowerCase() === 'author')) add('author-not-allowed', 'doc_checks.author');
@@ -1014,6 +1019,7 @@ export function renderCard(evidence, rules) {
   }
   const conflicts = validateConflicts(evidence);
   if (conflicts.errors.length > 0) return { status: 'invalid-input', errors: conflicts.errors };
+  const quick = evidence.quick_check === true;
 
   const baseIds = flagIdsOf(evidence);
   const derivedFlags = deriveFlags(evidence);
@@ -1199,6 +1205,7 @@ export function renderCard(evidence, rules) {
   if (capabilities && capabilities.tier !== 'full') {
     lines.push(`本次运行能力：${capabilities.tier === 'search-only' ? '仅搜索' : '离线'}`);
   }
+  if (quick) lines.push('快查模式：未查地图、海关、社媒');
   if (evidence.search_log && typeof evidence.search_log === 'object') {
     const searches = Number(evidence.search_log.searches || 0);
     const pages = Number(evidence.search_log.pages ?? evidence.search_log.page_reads ?? 0);
@@ -1232,13 +1239,13 @@ export function renderCard(evidence, rules) {
     optionalBlocks.push({ priority: 1, start: lines.length, length: 1 });
     lines.push(`数据日期：${dataDates.map(([label, date]) => `${label} ${date}`).join(' · ')}`);
   }
-  const checkItems = checkLines(evidence);
+  const checkItems = quick ? [] : checkLines(evidence);
   if (checkItems.length > 0) {
     optionalBlocks.push({ priority: 3, start: lines.length, length: 1 + checkItems.length });
     lines.push('**证件与文件自检**');
     lines.push(...checkItems);
   }
-  const footItems = footprintLines(evidence);
+  const footItems = quick ? [] : footprintLines(evidence);
   if (footItems.length > 0) {
     optionalBlocks.push({ priority: 2, start: lines.length, length: footItems.length });
     lines.push(...footItems);
@@ -1278,9 +1285,9 @@ export function renderCard(evidence, rules) {
   for (const item of missing.slice(0, 2)) lines.push(`- ⚪ ${text(item.text)}`);
   if (applied.missingOverflow > 0) lines.push(`- ⚪ 另有 ${applied.missingOverflow} 项未列出`);
   lines.push('');
-  if (v010Mode) {
+  if (v010Mode && !quick) {
     const inquiryType = (evidence.intake || {}).inquiry_type || 'general';
-    optionalBlocks.push({ priority: 4, start: lines.length, length: 3 + tradeTerms(level, credit.tier, inquiryType).length });
+    optionalBlocks.push({ priority: 4, start: lines.length, length: 2 + tradeTerms(level, credit.tier, inquiryType).length });
     lines.push('**条款建议**');
     for (const term of tradeTerms(level, credit.tier, inquiryType)) lines.push(`- ${term}`);
     lines.push(TRADE_TERMS_DISCLAIMER);
@@ -1313,8 +1320,9 @@ export function renderCard(evidence, rules) {
   lines.push(`${supplement}${punctuation}需要完整报告请回复“出完整报告”。`);
   lines.push(newMode ? '仅基于公开信息的风险信号筛查，不构成对客户的定性。' : '仅为基于公开信息的风险提示，不构成法律意见。');
 
+  const lineLimit = quick ? 30 : 50;
   for (const priority of [1, 2, 3, 4, 5]) {
-    if (lines.length <= 50) break;
+    if (lines.length <= lineLimit) break;
     for (const block of optionalBlocks) {
       if (block.removed || block.priority !== priority) continue;
       const { start, length } = block;
@@ -1325,12 +1333,15 @@ export function renderCard(evidence, rules) {
       }
     }
   }
-  while (lines.length > 50 && lines[lines.length - 1] === '') lines.pop();
-  if (lines.length > 50) {
+  while (lines.length > lineLimit && lines[lines.length - 1] === '') lines.pop();
+  if (lines.length > lineLimit) {
     for (let index = lines.length - 1; index >= firstScreenLines; index -= 1) {
-      if (lines.length <= 50) break;
+      if (lines.length <= lineLimit) break;
       if (lines[index] === '') lines.splice(index, 1);
     }
+  }
+  if (/[0-9A-Z]{10,}/.test(lines.join('\n').replace(/https?:\/\/\S+/g, ' '))) {
+    return { status: 'invalid-input', errors: [{ code: 'plaintext-id', field: 'card' }] };
   }
 
   return {
