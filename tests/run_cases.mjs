@@ -819,12 +819,22 @@ async phone_pii(testCase) {
       if (!data.countries || typeof data.countries !== 'object') errors.push('countries');
       if (!Array.isArray(data.global_sources) || !['gleif-lei', 'worldbank-debarment', 'sanctions-lists'].every((item) => data.global_sources.includes(item))) errors.push('global_sources');
       for (const [code, country] of Object.entries(data.countries || {})) {
+        if (typeof country.name !== 'undefined' && typeof country.name !== 'string') errors.push(`${code}.name`);
+        if (typeof country.sources !== 'undefined' && !Array.isArray(country.sources)) errors.push(`${code}.sources`);
         if (!allowedVerification.has(country.verification)) errors.push(`${code}.verification`);
+        for (const key of ['registry', 'tax_verification', 'procurement', 'insolvency']) {
+          if (country[key] === undefined) continue;
+          if (!country[key] || typeof country[key] !== 'object') errors.push(`${code}.${key}`);
+          else if (country[key].verification !== undefined && !allowedVerification.has(country[key].verification)) errors.push(`${code}.${key}.verification`);
+        }
         const registry = country.registry || {};
         if (registry.automation_allowed === true && (registry.verification || country.verification) !== 'official-page') errors.push(`${code}.automation`);
+        if (country.discovery !== undefined && typeof country.discovery !== 'boolean') errors.push(`${code}.discovery`);
         for (const format of country.id_formats || []) {
-          try { new RegExp(format.pattern); } catch { errors.push(`${code}.id_formats.pattern`); }
+          if (!format.id_type || !format.label || !Number.isInteger(format.length)) errors.push(`${code}.id_formats.fields`);
+          try { new RegExp(format.regex); } catch { errors.push(`${code}.id_formats.regex`); }
           if (!allowedChecksums.has(format.checksum || 'none')) errors.push(`${code}.id_formats.checksum`);
+          if (format.verification !== undefined && !allowedVerification.has(format.verification)) errors.push(`${code}.id_formats.verification`);
         }
       }
       return errors;
@@ -833,6 +843,10 @@ async phone_pii(testCase) {
     const bad = cloneJson(caps);
     bad.countries.__bad = { verification: 'made-up' };
     const badCaught = validate(bad).length > 0;
+    const badRegex = cloneJson(caps);
+    const firstFormat = badRegex.countries.in && badRegex.countries.in.id_formats && badRegex.countries.in.id_formats[0];
+    if (firstFormat) firstFormat.regex = '([';
+    const badRegexCaught = validate(badRegex).length > 0;
     const python = findPython();
     const [pyCmd, ...pyRest] = (python || '').split(' ');
     const cli = (code) => {
@@ -850,11 +864,12 @@ async phone_pii(testCase) {
     const unknownResult = cli('ZZ');
     const ok = errors.length === 0
       && badCaught
+      && badRegexCaught
       && inResult.python?.status === 'ok'
       && unknownResult.python?.status === 'not-in-matrix'
       && inResult.parity !== false
       && unknownResult.parity !== false;
-    return { ok, actual: { errors, badCaught, in: inResult, unknown: unknownResult } };
+    return { ok, actual: { errors, badCaught, badRegexCaught, in: inResult, unknown: unknownResult } };
   },
 
   country_consistency(testCase) {
@@ -1010,6 +1025,7 @@ async phone_pii(testCase) {
       const ok = result?.status === 'ok'
         && (expect.creator_class === undefined || check.creator_class === expect.creator_class)
         && (expect.dates_consistent === undefined || check.dates_consistent === expect.dates_consistent)
+        && (expect.incremental_updates === undefined || check.incremental_updates === expect.incremental_updates)
         && (expect.notes_include || []).every((note) => (check.notes || []).some((item) => item.includes(note)))
         && !JSON.stringify(result).toLowerCase().includes('author')
         && !JSON.stringify(result).includes('伪造')

@@ -756,7 +756,10 @@ def idcheck_command(args):
             "rule_verification": None,
         }
     pattern = rule.get("pattern") or rule.get("regex")
-    format_ok = bool(re.fullmatch(pattern, value)) if pattern else None
+    try:
+        format_ok = bool(re.fullmatch(pattern, value)) if pattern else None
+    except re.error:
+        return {"status": "invalid-input", "command": "idcheck", "error": "invalid-regex"}
     checksum_ok = None
     entity_type = None
     notes = []
@@ -901,6 +904,7 @@ def docmeta_command(args):
 
     creator = field("Creator")
     producer = field("Producer")
+    incremental_updates = max(0, text.count("%%EOF") - 1)
     creation = pdf_date(field("CreationDate"))
     modified = pdf_date(field("ModDate"))
     count = re.search(r"/Count\s+(\d+)", text)
@@ -938,6 +942,7 @@ def docmeta_command(args):
             "creation_date": creation,
             "modification_date": modified,
             "pages": int(count.group(1)) if count else None,
+            "incremental_updates": incremental_updates,
             "dates_consistent": dates_consistent,
             "notes": notes,
         }],

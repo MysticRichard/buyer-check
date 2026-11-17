@@ -1,0 +1,7 @@
+{
+  "id": "A104",
+  "title": "F4 反绕过：footprint 自称 official 但证据为第三方新闻，不派生红旗",
+  "type": "render_card",
+  "input": { "fixture": "card_spoof_grade.json" },
+  "expect": { "status": "ok", "risk_score": 0, "level": "低", "derived_flags": [] }
+}

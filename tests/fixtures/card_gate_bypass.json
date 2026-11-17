@@ -1,0 +1,18 @@
+{
+  "subject": { "company": "ACME TRADING LTD", "country": "IN" },
+  "stage": "inquiry",
+  "checks": [],
+  "flags": [],
+  "anchors": { "closure": "single" },
+  "coverage": { "checked": 7, "total": 8, "uncovered": [] },
+  "confidence": "中",
+  "layers": { "company": { "credibility": "medium" }, "person_company_link": { "strength": "medium" }, "person_authenticity": { "level": "unknown" }, "contact": { "phone_matches": true, "business_email": true, "domain_aged": true }, "compliance": { "sanctions": "clear", "negative": "clear" }, "scale": { "map": "unknown", "customs": "unknown" } },
+  "as_of": "2026-11-16",
+  "evidence": [{ "id": "E1", "url": "https://registry.example/company/1", "retrieved_at": "2026-11-16T00:00:00Z", "source_type": "registry", "source_grade": "official" }],
+  "footprint": [
+    { "probe": "enforcement", "result": "hit", "subject": "company", "role": "accused", "source_grade": "official", "matched_keys": ["legal_name", "legal_name"], "category": "fraud", "data_as_of": "2025-01-01", "evidence_ids": ["E1"], "summary": "重复键冒充两个键" },
+    { "probe": "debarment", "result": "hit", "subject": "company", "role": "victim", "source_grade": "official", "matched_keys": ["legal_name", "address"], "data_as_of": "2025-01-01", "evidence_ids": ["E1"], "summary": "公司是受害者" },
+    { "probe": "enforcement", "result": "hit", "subject": "company", "role": "accused", "source_grade": "official", "matched_keys": ["legal_name", "address"], "category": "fraud", "evidence_ids": ["E1"], "summary": "缺少数据日期" }
+  ],
+  "display": { "customer_label": "ACME TRADING LTD", "inquiry_type": "一般询盘", "dim_notes": { "company": "官网与公开资料一致", "link": "邮箱与官网一致", "contact": "电话与邮箱一致", "behavior": "没有询盘原文", "compliance": "制裁无匹配", "scale": "地图和海关都没查到" }, "attention": [], "verified": [], "missing": [], "open_questions": [], "scripts": [] }
+}

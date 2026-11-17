@@ -1,0 +1,7 @@
+{
+  "id": "A107",
+  "title": "Z7/Z19 反绕过：证据包明文证件号或 doc_checks.author 必须拒收",
+  "type": "render_card",
+  "input": { "fixture": "card_plaintext_id.json" },
+  "expect": { "status": "invalid-input" }
+}

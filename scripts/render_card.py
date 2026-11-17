@@ -26,6 +26,23 @@ from urllib.parse import urlparse
 from risk_score import load_rules, score as risk_score
 
 RULES_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "red_flags.json")
+COUNTRY_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "country_capabilities.json")
+_COUNTRY_CODES = None
+V010_KEYS = ("capabilities", "footprint", "id_checks", "doc_checks", "search_log", "match_keys", "previous", "country_discovery", "terms_advice")
+
+
+def country_known(code):
+    global _COUNTRY_CODES
+    if _COUNTRY_CODES is None:
+        try:
+            with open(COUNTRY_FILE, "r", encoding="utf-8") as handle:
+                data = json.load(handle)
+            _COUNTRY_CODES = {text(key).upper() for key in (data.get("countries") or {})}
+        except (OSError, json.JSONDecodeError):
+            _COUNTRY_CODES = set()
+    if not _COUNTRY_CODES:
+        return True
+    return text(code).upper() in _COUNTRY_CODES
 
 CHECKPOINT_NAMES = {
     "company": "公司名",
@@ -395,6 +412,7 @@ def is_technical(value):
 FORBIDDEN = ["骗子", "诈骗犯", "确定是假的", "一定有问题"]
 SCRIPT_FORBIDDEN = ["核实", "背调", "怀疑", "诈骗"]
 LOCALIZED_LANGS = {"ar", "fr", "es", "pt", "ru", "tr", "id", "th", "vi", "hi", "zh"}
+NEW_FLAG_IDS = {"RF-FOOT-001", "RF-FOOT-002", "RF-FOOT-003", "RF-FOOT-004", "RF-FOOT-005", "RF-ID-004", "RF-ID-005", "RF-DOC-001"}
 EMAIL_RE = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}")
 PHONE_CANDIDATE_RE = re.compile(r"(?:\+|00)\d[\d\s().\-]{4,20}\d|\d[\d\s().\-]{4,20}\d")
 MASKED_PHONE_RE = re.compile(r"(?:\+|00)?\d[\d\s()\-*]*\*[\d\s()\-*]*")
@@ -483,7 +501,7 @@ def validate_display(evidence, rules):
             continue
         if item.get("kind") not in ("flag", "clue"):
             add("invalid_kind", "attention.kind")
-        if item.get("kind") == "flag" and (not item.get("flag_id") or item.get("flag_id") not in flag_ids or item.get("flag_id") not in flag_index):
+        if item.get("kind") == "flag" and (not item.get("flag_id") or item.get("flag_id") not in flag_index):
             add("unknown_flag", "attention.flag_id")
         if not isinstance(item.get("text"), str):
             add("invalid_type", "attention.text")
@@ -878,7 +896,7 @@ def parse_iso_date(value):
 def within_years(data_as_of, as_of, years):
     recorded = parse_iso_date(data_as_of)
     if recorded is None:
-        return True
+        return False
     end = parse_iso_date(as_of) or dt.date(9999, 12, 31)
     return (end - recorded).days <= years * 365
 
@@ -900,12 +918,24 @@ def derive_flags(evidence):
             return
         derived.append({"id": flag_id, "evidence_ids": evidence_ids or []})
 
+    def effective_grade(item):
+        declared = text(item.get("source_grade"))
+        if tier == "search-only" and declared == "official":
+            return "self_declared"
+        if declared == "official":
+            ids = [text(eid) for eid in (item.get("evidence_ids") or []) if text(eid)]
+            grades = [grade_of(evidence_index.get(eid) or {}) for eid in ids]
+            if not any(grade == "official" for grade in grades):
+                return "third_party" if any(grade == "third_party" for grade in grades) else "self_declared"
+        return declared
+
     def eligible(item, official_required, years):
         if not isinstance(item, dict) or item.get("subject") != "company":
             return False
-        if len(item.get("matched_keys") or []) < 2:
+        keys = {text(key) for key in (item.get("matched_keys") or []) if text(key)}
+        if len(keys) < 2 or keys <= {"legal_name", "person_name", "alias_name"}:
             return False
-        if official_required and (item.get("source_grade") != "official" or not full):
+        if official_required and (effective_grade(item) != "official" or not full):
             return False
         ids = [text(eid) for eid in (item.get("evidence_ids") or []) if text(eid)]
         if not ids or any(eid not in evidence_index for eid in ids):
@@ -917,12 +947,10 @@ def derive_flags(evidence):
             continue
         probe = item.get("probe")
         role = item.get("role")
-        grade = item.get("source_grade")
-        if tier == "search-only" and grade == "official":
-            grade = "third_party"
+        grade = effective_grade(item)
         if probe == "enforcement" and role in ("accused", "regulator_action") and item.get("category") == "fraud" and eligible(item, True, 5):
             add("RF-FOOT-001", item.get("evidence_ids"))
-        elif probe == "debarment" and eligible(item, True, 3):
+        elif probe == "debarment" and role in ("accused", "regulator_action", "registered_entity", "unknown") and eligible(item, True, 3):
             add("RF-FOOT-002", item.get("evidence_ids"))
         elif probe == "tender" and role in ("accused", "regulator_action") and item.get("category") == "fraud" and eligible(item, True, 5):
             add("RF-FOOT-003", item.get("evidence_ids"))
@@ -931,11 +959,14 @@ def derive_flags(evidence):
             for eid in item.get("evidence_ids") or []:
                 entry = evidence_index.get(text(eid)) or {}
                 domain = registrable_domain(url_host(entry.get("url")))
-                if domain:
-                    domains.add(domain)
+                group = text(entry.get("media_group"))
+                if group:
+                    domains.add("group:" + group)
+                elif domain:
+                    domains.add("domain:" + domain)
             if len(domains) >= 2:
                 add("RF-FOOT-004", item.get("evidence_ids"))
-        elif probe == "scale" and grade in ("official", "third_party") and eligible(item, False, 5):
+        elif probe == "scale" and role in ("accused", "regulator_action", "registered_entity") and grade == "official" and eligible(item, False, 5):
             try:
                 ratio = float(item.get("scale_ratio") or 0)
             except (TypeError, ValueError):
@@ -962,7 +993,7 @@ TRADE_TERMS_DISCLAIMER = "常见做法参考，不构成法律或财务建议，
 
 def trade_terms(level, tier, inquiry_type):
     if level == "高":
-        lines = ["不建议先发货后收款；仅考虑全款预付、信誉良好银行确认的信用证或第三方担保交易；先完成订单前复核。"]
+        lines = ["不建议收款或发货；先完成订单前复核并补齐材料。"]
     elif level == "需人工核实":
         lines = ["先核验文件再谈大额报价；样品费由买家承担。"]
     elif tier == "高":
@@ -1228,7 +1259,7 @@ def batch_triage(packs, rules):
     return {"status": "ok", "row_count": len(rows), "rows": rows, "hints": hints, "text": "\n".join(lines)}
 
 
-VERDICT_CONTRA = ["可以付款", "可以预付", "直接付款", "倾向继续", "建议继续", "放心下单", "立即付款"]
+VERDICT_CONTRA = ["可以付款", "可以预付", "直接付款", "倾向继续", "建议继续", "放心下单", "立即付款", "可以寄样", "可以先寄样", "可以发货", "可以生产", "放心发货"]
 DOC_CLASS_LABELS = {"office": "办公软件", "design": "图像编辑/设计软件", "scan": "扫描件", "other": "其他软件", "unknown": "未知软件"}
 FOOTPRINT_LABELS = {
     "registry": "注册处条目",
@@ -1257,15 +1288,18 @@ def verdict_line(display, evidence, level, actions):
     if not verdict:
         return "", None
     warning = None
+    hint = text(display.get("flip_hint"))
     available = {text(item.get("id")) for item in evidence.get("evidence") or [] if isinstance(item, dict) and item.get("id")}
     evidence_ids = display.get("evidence_ids")
     invalid = char_length(verdict) > 60
     if not isinstance(evidence_ids, list) or not evidence_ids or any(text(item) not in available for item in evidence_ids):
         invalid = True
-    if any(action.get("status_text") == "不建议" for action in actions) and any(word in verdict for word in VERDICT_CONTRA):
+    blocked = any(action.get("status_text") == "不建议" for action in actions)
+    if blocked and any(word in verdict or word in hint for word in VERDICT_CONTRA):
         invalid = True
     if invalid:
         warning = "invalid-display"
+        hint = ""
         if level == "高":
             verdict = "当前风险高，先暂停付款和寄样，补充材料后再评估"
         elif level == "中":
@@ -1275,7 +1309,6 @@ def verdict_line(display, evidence, level, actions):
         else:
             verdict = "当前风险低，可按常规推进并双确认收款账户"
     line = f"判断：{verdict}"
-    hint = text(display.get("flip_hint"))
     if hint:
         line += f"；{hint}"
     return line, warning
@@ -1336,12 +1369,14 @@ def footprint_lines(evidence):
         grade = SOURCE_GRADE_LABELS.get(grade_key)
         suffix = f" [{grade}]" if grade else ""
         keys = [MATCH_KEY_LABELS.get(text(key), text(key)) for key in item.get("matched_keys") or [] if text(key)]
+        unique_keys = {text(key) for key in item.get("matched_keys") or [] if text(key)}
         strong = (
             not low_confidence
             and text(item.get("subject")) == "company"
             and text(item.get("role")) in ("accused", "regulator_action", "registered_entity")
             and grade_key == "official"
-            and len(keys) >= 2
+            and len(unique_keys) >= 2
+            and not unique_keys <= {"legal_name", "person_name", "alias_name"}
         )
         if strong:
             lines.append(f"{position}. {label}：{summary}{suffix} 对上：{' + '.join(keys)}")
@@ -1353,7 +1388,38 @@ def footprint_lines(evidence):
     return lines
 
 
+def validate_evidence_contract(evidence):
+    errors = []
+
+    def add(code, field):
+        errors.append({"code": code, "field": field})
+
+    for flag in evidence.get("flags") or []:
+        flag_id = flag if isinstance(flag, str) else (flag.get("id") if isinstance(flag, dict) else None)
+        if text(flag_id) in NEW_FLAG_IDS:
+            add("explicit-derived-flag", "flags")
+    for item in evidence.get("id_checks") or []:
+        if not isinstance(item, dict):
+            continue
+        masked = text(item.get("masked"))
+        if masked and not re.search(r"[•*]", masked) and re.search(r"[0-9A-Z]{10,}", masked, re.I):
+            add("plaintext-id", "id_checks.masked")
+    for item in evidence.get("doc_checks") or []:
+        if isinstance(item, dict) and any(text(key).lower() == "author" for key in item):
+            add("author-not-allowed", "doc_checks.author")
+    for item in evidence.get("match_keys") or []:
+        if not isinstance(item, dict) or text(item.get("key")) != "tax_id_masked":
+            continue
+        value = text(item.get("value"))
+        if re.search(r"[0-9A-Z]{10,}", value, re.I) and not re.search(r"[•*]", value):
+            add("plaintext-tax-id", "match_keys.tax_id_masked")
+    return errors
+
+
 def render_card(evidence, rules):
+    contract_errors = validate_evidence_contract(evidence)
+    if contract_errors:
+        return {"status": "invalid-input", "errors": contract_errors}
     display = evidence.get("display") or {}
     errors = validate_display(evidence, rules)
     if errors:
@@ -1407,6 +1473,13 @@ def render_card(evidence, rules):
     level = recomputed["level"]
     score = recomputed["risk_score"]
     confidence = recomputed.get("confidence") or evidence.get("confidence") or "低"
+    country_code = text((evidence.get("subject") or {}).get("country") or (evidence.get("intake") or {}).get("country"))
+    v010_signal = any(key in evidence for key in V010_KEYS) or bool(display.get("verdict")) or any(
+        isinstance(script, dict) and isinstance(script.get("localized"), dict) and script.get("localized")
+        for script in (display.get("scripts") or [])
+    )
+    if country_code and v010_signal and not country_known(country_code):
+        confidence = "中" if confidence == "高" else "低"
 
     behavior_flags = any(re.match(r"^RF-(PAY|ACC|BEH)-", flag_id) for flag_id in ids)
     behavior_status = "有异常" if behavior_flags else ("无异常" if inquiry_text(evidence) else "未核实")
@@ -1431,6 +1504,10 @@ def render_card(evidence, rules):
 
     dim_notes = display.get("dim_notes") or {}
     new_mode = any(key in evidence for key in ("evidence", "checks_incomplete", "conflicts"))
+    v010_mode = any(key in evidence for key in V010_KEYS) or bool(display.get("verdict")) or any(
+        isinstance(script, dict) and isinstance(script.get("localized"), dict) and script.get("localized")
+        for script in (display.get("scripts") or [])
+    )
     dims = []
     for dim in credit["dims"]:
         item = dict(dim)
@@ -1550,11 +1627,13 @@ def render_card(evidence, rules):
         lines.append("本次运行能力：" + ("仅搜索" if capabilities.get("tier") == "search-only" else "离线"))
     if isinstance(search_log, dict):
         searches = int(search_log.get("searches") or 0)
-        pages = int(search_log.get("pages") or 0)
+        pages = int(search_log.get("pages", search_log.get("page_reads")) or 0)
         budget = search_log.get("budget") or {}
+        budget_searches = int(budget.get("searches") or 0)
+        budget_pages = int(budget.get("pages", budget.get("page_reads")) or 0)
         lines.append(f"检索：{searches} 次，打开 {pages} 个页面")
-        if budget and (searches > int(budget.get("searches") or 0) or pages > int(budget.get("pages") or 0)):
-            lines.append("⚠ 检索预算已用尽")
+        if budget and (searches > budget_searches or pages > budget_pages):
+            lines.append("⚠ 本次未完成：检索预算已用尽")
     if incomplete:
         details = "；".join(
             f"{CHECK_LABELS.get(item['check'], item['check'])}未完成（{REASON_LABELS.get(item['reason'], item['reason'])}）→ {item['next_step']}"
@@ -1577,18 +1656,23 @@ def render_card(evidence, rules):
     for dim in dims:
         lines.append(f"| {dim['label']} | {dim['symbol']} {dim['bar']} {dim['status']} | {dim['note']} |")
     lines.append("")
+    optional_blocks = []
     data_dates = collect_data_dates(evidence)
     if data_dates:
+        optional_blocks.append({"priority": 1, "start": len(lines), "length": 1})
         lines.append("数据日期：" + " · ".join(f"{label} {date}" for label, date in data_dates))
     check_items = check_lines(evidence)
     if check_items:
+        optional_blocks.append({"priority": 3, "start": len(lines), "length": 1 + len(check_items)})
         lines.append("**证件与文件自检**")
         lines.extend(check_items)
     foot_items = footprint_lines(evidence)
     if foot_items:
+        optional_blocks.append({"priority": 2, "start": len(lines), "length": len(foot_items)})
         lines.extend(foot_items)
     flip_hint = text(display.get("flip_hint"))
     if new_mode and flip_hint and not verdict_text:
+        optional_blocks.append({"priority": 5, "start": len(lines), "length": 1})
         lines.append(f"什么会改变结论：{flip_hint}")
     lines.append("**需要注意**")
     if not attention:
@@ -1623,9 +1707,10 @@ def render_card(evidence, rules):
     if missing_overflow:
         lines.append(f"- ⚪ 另有 {missing_overflow} 项未列出")
     lines.append("")
-    if new_mode:
+    if v010_mode:
         inquiry_type = (evidence.get("intake") or {}).get("inquiry_type") or "general"
         terms = trade_terms(level, credit["tier"], inquiry_type)
+        optional_blocks.append({"priority": 4, "start": len(lines), "length": 3 + len(terms)})
         lines.append("**条款建议**")
         for term in terms:
             lines.append(f"- {term}")
@@ -1656,6 +1741,28 @@ def render_card(evidence, rules):
         lines.append("仅基于公开信息的风险信号筛查，不构成对客户的定性。")
     else:
         lines.append("仅为基于公开信息的风险提示，不构成法律意见。")
+
+    for priority in (1, 2, 3, 4, 5):
+        if len(lines) <= 50:
+            break
+        for block in list(optional_blocks):
+            if block.get("removed") or block["priority"] != priority:
+                continue
+            start = block["start"]
+            length = block["length"]
+            del lines[start:start + length]
+            block["removed"] = True
+            for other in optional_blocks:
+                if not other.get("removed") and other["start"] > start:
+                    other["start"] = max(0, other["start"] - length)
+    while len(lines) > 50 and lines and lines[-1] == "":
+        lines.pop()
+    if len(lines) > 50:
+        for index in range(len(lines) - 1, first_screen_lines - 1, -1):
+            if len(lines) <= 50:
+                break
+            if lines[index] == "":
+                del lines[index]
 
     return {
         "status": "ok",

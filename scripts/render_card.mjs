@@ -21,6 +21,21 @@ import { score as riskScore, loadRules } from './risk_score.mjs';
 
 const DIR = dirname(fileURLToPath(import.meta.url));
 export const RULES_FILE = join(DIR, 'red_flags.json');
+const COUNTRY_FILE = join(DIR, 'country_capabilities.json');
+let COUNTRY_CODES = null;
+
+function countryKnown(code) {
+  if (COUNTRY_CODES === null) {
+    try {
+      const data = JSON.parse(readFileSync(COUNTRY_FILE, 'utf8'));
+      COUNTRY_CODES = new Set(Object.keys(data.countries || {}).map((key) => text(key).toUpperCase()));
+    } catch {
+      COUNTRY_CODES = new Set();
+    }
+  }
+  if (COUNTRY_CODES.size === 0) return true;
+  return COUNTRY_CODES.has(text(code).toUpperCase());
+}
 
 const CHECKPOINT_NAMES = {
   company: '公司名',
@@ -342,6 +357,8 @@ function isTechnical(value) {
 const FORBIDDEN = ['骗子', '诈骗犯', '确定是假的', '一定有问题'];
 const SCRIPT_FORBIDDEN = ['核实', '背调', '怀疑', '诈骗'];
 const LOCALIZED_LANGS = new Set(['ar', 'fr', 'es', 'pt', 'ru', 'tr', 'id', 'th', 'vi', 'hi', 'zh']);
+const NEW_FLAG_IDS = new Set(['RF-FOOT-001', 'RF-FOOT-002', 'RF-FOOT-003', 'RF-FOOT-004', 'RF-FOOT-005', 'RF-ID-004', 'RF-ID-005', 'RF-DOC-001']);
+const V010_KEYS = ['capabilities', 'footprint', 'id_checks', 'doc_checks', 'search_log', 'match_keys', 'previous', 'country_discovery', 'terms_advice'];
 const EMAIL_RE = /[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}/;
 const PHONE_NON_NUMBER_PATTERNS = [
   '\\b\\d{4}[-/.]\\d{1,2}[-/.]\\d{1,2}\\b',
@@ -418,7 +435,7 @@ export function validateDisplay(evidence, rules) {
   for (const item of attention) {
     if (!item || typeof item !== 'object') { add('invalid_type', 'attention'); continue; }
     if (!['flag', 'clue'].includes(item.kind)) add('invalid_kind', 'attention.kind');
-    if (item.kind === 'flag' && (!item.flag_id || !flagIds.includes(item.flag_id) || !flagIndex.has(item.flag_id))) add('unknown_flag', 'attention.flag_id');
+    if (item.kind === 'flag' && (!item.flag_id || !flagIndex.has(item.flag_id))) add('unknown_flag', 'attention.flag_id');
     if (typeof item.text !== 'string') add('invalid_type', 'attention.text');
     else if (hanLength(item.text) > 30) add('too_long', 'attention.text');
   }
@@ -761,7 +778,7 @@ function parseIsoDate(value) {
 
 function withinYears(dataAsOf, asOf, years) {
   const recorded = parseIsoDate(dataAsOf);
-  if (!recorded) return true;
+  if (!recorded) return false;
   const end = parseIsoDate(asOf) || new Date('9999-12-31T00:00:00Z');
   return (end.getTime() - recorded.getTime()) / 86400000 <= years * 365;
 }
@@ -776,10 +793,21 @@ function deriveFlags(evidence) {
   const add = (id, evidenceIds = []) => {
     if (!derived.some((item) => item.id === id)) derived.push({ id, evidence_ids: evidenceIds });
   };
+  const effectiveGrade = (item) => {
+    const declared = text(item.source_grade);
+    if (tier === 'search-only' && declared === 'official') return 'self_declared';
+    if (declared === 'official') {
+      const ids = (item.evidence_ids || []).map((id) => text(id)).filter(Boolean);
+      const grades = ids.map((id) => gradeOf(evidenceIndex.get(id) || {}));
+      if (!grades.includes('official')) return grades.includes('third_party') ? 'third_party' : 'self_declared';
+    }
+    return declared;
+  };
   const eligible = (item, officialRequired, years) => {
     if (!item || typeof item !== 'object' || item.subject !== 'company') return false;
-    if ((item.matched_keys || []).length < 2) return false;
-    if (officialRequired && (item.source_grade !== 'official' || !full)) return false;
+    const keys = new Set((item.matched_keys || []).map((key) => text(key)).filter(Boolean));
+    if (keys.size < 2 || [...keys].every((key) => ['legal_name', 'person_name', 'alias_name'].includes(key))) return false;
+    if (officialRequired && (effectiveGrade(item) !== 'official' || !full)) return false;
     const ids = (item.evidence_ids || []).map((id) => text(id)).filter(Boolean);
     if (ids.length === 0 || ids.some((id) => !evidenceIndex.has(id))) return false;
     return withinYears(item.data_as_of, asOf, years);
@@ -787,19 +815,26 @@ function deriveFlags(evidence) {
   for (const item of (tier === 'offline' ? [] : (evidence.footprint || []))) {
     if (!item || typeof item !== 'object') continue;
     let grade = item.source_grade;
-    if (tier === 'search-only' && grade === 'official') grade = 'third_party';
+    if (tier === 'search-only' && grade === 'official') grade = 'self_declared';
+    if (grade === 'official') {
+      const ids = (item.evidence_ids || []).map((id) => text(id)).filter(Boolean);
+      const grades = ids.map((id) => gradeOf(evidenceIndex.get(id) || {}));
+      if (!grades.includes('official')) grade = grades.includes('third_party') ? 'third_party' : 'self_declared';
+    }
     if (item.probe === 'enforcement' && ['accused', 'regulator_action'].includes(item.role) && item.category === 'fraud' && eligible(item, true, 5)) add('RF-FOOT-001', item.evidence_ids);
-    else if (item.probe === 'debarment' && eligible(item, true, 3)) add('RF-FOOT-002', item.evidence_ids);
+    else if (item.probe === 'debarment' && ['accused', 'regulator_action', 'registered_entity', 'unknown'].includes(item.role) && eligible(item, true, 3)) add('RF-FOOT-002', item.evidence_ids);
     else if (item.probe === 'tender' && ['accused', 'regulator_action'].includes(item.role) && item.category === 'fraud' && eligible(item, true, 5)) add('RF-FOOT-003', item.evidence_ids);
     else if (['news', 'forum'].includes(item.probe) && item.role === 'accused' && grade === 'third_party' && eligible(item, false, 5)) {
       const domains = new Set();
       for (const id of item.evidence_ids || []) {
         const entry = evidenceIndex.get(text(id)) || {};
         const domain = registrableDomain(urlHost(entry.url));
-        if (domain) domains.add(domain);
+        const group = text(entry.media_group);
+        if (group) domains.add(`group:${group}`);
+        else if (domain) domains.add(`domain:${domain}`);
       }
       if (domains.size >= 2) add('RF-FOOT-004', item.evidence_ids);
-    } else if (item.probe === 'scale' && ['official', 'third_party'].includes(grade) && eligible(item, false, 5) && Number(item.scale_ratio || 0) >= 10) {
+    } else if (item.probe === 'scale' && ['accused', 'regulator_action', 'registered_entity'].includes(item.role) && grade === 'official' && eligible(item, false, 5) && Number(item.scale_ratio || 0) >= 10) {
       add('RF-FOOT-005', item.evidence_ids);
     }
   }
@@ -818,7 +853,7 @@ const TRADE_TERMS_DISCLAIMER = '常见做法参考，不构成法律或财务建
 
 export function tradeTerms(level, tier, inquiryType) {
   let lines;
-  if (level === '高') lines = ['不建议先发货后收款；仅考虑全款预付、信誉良好银行确认的信用证或第三方担保交易；先完成订单前复核。'];
+  if (level === '高') lines = ['不建议收款或发货；先完成订单前复核并补齐材料。'];
   else if (level === '需人工核实') lines = ['先核验文件再谈大额报价；样品费由买家承担。'];
   else if (tier === '高') lines = ['可按常规条款；收款账户仍用已知电话或邮箱双通道确认一次。'];
   else lines = ['首单小额；样品费由买家承担、买家自己的快递账号寄送；定金比例高于常规；分批发货；发货前复核收款账户。'];
@@ -828,7 +863,7 @@ export function tradeTerms(level, tier, inquiryType) {
   return lines.slice(0, 2);
 }
 
-const VERDICT_CONTRA = ['可以付款', '可以预付', '直接付款', '倾向继续', '建议继续', '放心下单', '立即付款'];
+const VERDICT_CONTRA = ['可以付款', '可以预付', '直接付款', '倾向继续', '建议继续', '放心下单', '立即付款', '可以寄样', '可以先寄样', '可以发货', '可以生产', '放心发货'];
 const DOC_CLASS_LABELS = { office: '办公软件', design: '图像编辑/设计软件', scan: '扫描件', other: '其他软件', unknown: '未知软件' };
 const FOOTPRINT_LABELS = {
   registry: '注册处条目',
@@ -855,20 +890,22 @@ function verdictLine(display, evidence, level, actions) {
   let verdict = text(display.verdict);
   if (!verdict) return { text: '', warning: null };
   let warning = null;
+  let hint = text(display.flip_hint);
   const available = new Set((evidence.evidence || []).filter((item) => item && typeof item === 'object' && item.id).map((item) => text(item.id)));
   const evidenceIds = display.evidence_ids;
   let invalid = charLength(verdict) > 60;
   if (!Array.isArray(evidenceIds) || !evidenceIds.length || evidenceIds.some((item) => !available.has(text(item)))) invalid = true;
-  if (actions.some((action) => action.status_text === '不建议') && VERDICT_CONTRA.some((word) => verdict.includes(word))) invalid = true;
+  const blocked = actions.some((action) => action.status_text === '不建议');
+  if (blocked && VERDICT_CONTRA.some((word) => verdict.includes(word) || hint.includes(word))) invalid = true;
   if (invalid) {
     warning = 'invalid-display';
+    hint = '';
     if (level === '高') verdict = '当前风险高，先暂停付款和寄样，补充材料后再评估';
     else if (level === '中') verdict = '当前风险中等，可先小单并双确认收款账户';
     else if (level === '需人工核实') verdict = '当前信息不足，先补一项关键信息再谈风险';
     else verdict = '当前风险低，可按常规推进并双确认收款账户';
   }
   let line = `判断：${verdict}`;
-  const hint = text(display.flip_hint);
   if (hint) line += `；${hint}`;
   return { text: line, warning };
 }
@@ -917,12 +954,14 @@ function footprintLines(evidence) {
     const grade = SOURCE_GRADE_LABELS[gradeKey];
     const suffix = grade ? ` [${grade}]` : '';
     const keys = (item.matched_keys || []).filter((key) => text(key)).map((key) => MATCH_KEY_LABELS[text(key)] || text(key));
+    const uniqueKeys = new Set((item.matched_keys || []).map((key) => text(key)).filter(Boolean));
     const strong = (
       !lowConfidence
       && text(item.subject) === 'company'
       && ['accused', 'regulator_action', 'registered_entity'].includes(text(item.role))
       && gradeKey === 'official'
-      && keys.length >= 2
+      && uniqueKeys.size >= 2
+      && ![...uniqueKeys].every((key) => ['legal_name', 'person_name', 'alias_name'].includes(key))
     );
     if (strong) {
       lines.push(`${position + 1}. ${label}：${summary}${suffix} 对上：${keys.join(' + ')}`);
@@ -935,7 +974,32 @@ function footprintLines(evidence) {
   return lines;
 }
 
+function validateEvidenceContract(evidence) {
+  const errors = [];
+  const add = (code, field) => errors.push({ code, field });
+  for (const flag of evidence.flags || []) {
+    const flagId = typeof flag === 'string' ? flag : flag && flag.id;
+    if (NEW_FLAG_IDS.has(text(flagId))) add('explicit-derived-flag', 'flags');
+  }
+  for (const item of evidence.id_checks || []) {
+    if (!item || typeof item !== 'object') continue;
+    const masked = text(item.masked);
+    if (masked && !/[•*]/.test(masked) && /[0-9A-Z]{10,}/i.test(masked)) add('plaintext-id', 'id_checks.masked');
+  }
+  for (const item of evidence.doc_checks || []) {
+    if (item && typeof item === 'object' && Object.keys(item).some((key) => text(key).toLowerCase() === 'author')) add('author-not-allowed', 'doc_checks.author');
+  }
+  for (const item of evidence.match_keys || []) {
+    if (!item || typeof item !== 'object' || text(item.key) !== 'tax_id_masked') continue;
+    const value = text(item.value);
+    if (/[0-9A-Z]{10,}/i.test(value) && !/[•*]/.test(value)) add('plaintext-tax-id', 'match_keys.tax_id_masked');
+  }
+  return errors;
+}
+
 export function renderCard(evidence, rules) {
+  const contractErrors = validateEvidenceContract(evidence);
+  if (contractErrors.length > 0) return { status: 'invalid-input', errors: contractErrors };
   const display = evidence.display || {};
   const errors = validateDisplay(evidence, rules);
   if (errors.length > 0) return { status: 'invalid-display', errors };
@@ -986,7 +1050,12 @@ export function renderCard(evidence, rules) {
   const credit = computeCredit(evidence);
   const level = recomputed.level;
   const score = recomputed.risk_score;
-  const confidence = recomputed.confidence || evidence.confidence || '低';
+  let confidence = recomputed.confidence || evidence.confidence || '低';
+  const countryCode = text((evidence.subject || {}).country || (evidence.intake || {}).country);
+  const v010Signal = V010_KEYS.some((key) => key in evidence)
+    || Boolean(display.verdict)
+    || (display.scripts || []).some((script) => script && typeof script === 'object' && script.localized && typeof script.localized === 'object' && Object.keys(script.localized).length > 0);
+  if (countryCode && v010Signal && !countryKnown(countryCode)) confidence = confidence === '高' ? '中' : '低';
 
   const behaviorFlags = ids.some((id) => /^RF-(PAY|ACC|BEH)-/.test(id));
   const behaviorStatus = behaviorFlags ? '有异常' : inquiryText(evidence) ? '无异常' : '未核实';
@@ -1011,6 +1080,9 @@ export function renderCard(evidence, rules) {
 
   const dimNotes = display.dim_notes || {};
   const newMode = ['evidence', 'checks_incomplete', 'conflicts'].some((key) => key in evidence);
+  const v010Mode = V010_KEYS.some((key) => key in evidence)
+    || Boolean(display.verdict)
+    || (display.scripts || []).some((script) => script && typeof script === 'object' && script.localized && typeof script.localized === 'object' && Object.keys(script.localized).length > 0);
   const dims = credit.dims.map((dim) => {
     let note = text(dimNotes[dim.key]);
     if (newMode && dim.status === '未核实' && (!note || note === '暂未核实')) note = NEXT_STEPS_DIM[dim.key] || '人工补查一次';
@@ -1129,10 +1201,12 @@ export function renderCard(evidence, rules) {
   }
   if (evidence.search_log && typeof evidence.search_log === 'object') {
     const searches = Number(evidence.search_log.searches || 0);
-    const pages = Number(evidence.search_log.pages || 0);
+    const pages = Number(evidence.search_log.pages ?? evidence.search_log.page_reads ?? 0);
     const budget = evidence.search_log.budget || {};
+    const budgetSearches = Number(budget.searches || 0);
+    const budgetPages = Number(budget.pages ?? budget.page_reads ?? 0);
     lines.push(`检索：${searches} 次，打开 ${pages} 个页面`);
-    if (budget && (searches > Number(budget.searches || 0) || pages > Number(budget.pages || 0))) lines.push('⚠ 检索预算已用尽');
+    if (budget && (searches > budgetSearches || pages > budgetPages)) lines.push('⚠ 本次未完成：检索预算已用尽');
   }
   if (incomplete.items.length > 0) {
     const details = incomplete.items
@@ -1152,17 +1226,28 @@ export function renderCard(evidence, rules) {
   lines.push('| --- | --- | --- |');
   for (const dim of dims) lines.push(`| ${dim.label} | ${dim.symbol} ${dim.bar} ${dim.status} | ${dim.note} |`);
   lines.push('');
+  const optionalBlocks = [];
   const dataDates = collectDataDates(evidence);
-  if (dataDates.length > 0) lines.push(`数据日期：${dataDates.map(([label, date]) => `${label} ${date}`).join(' · ')}`);
+  if (dataDates.length > 0) {
+    optionalBlocks.push({ priority: 1, start: lines.length, length: 1 });
+    lines.push(`数据日期：${dataDates.map(([label, date]) => `${label} ${date}`).join(' · ')}`);
+  }
   const checkItems = checkLines(evidence);
   if (checkItems.length > 0) {
+    optionalBlocks.push({ priority: 3, start: lines.length, length: 1 + checkItems.length });
     lines.push('**证件与文件自检**');
     lines.push(...checkItems);
   }
   const footItems = footprintLines(evidence);
-  if (footItems.length > 0) lines.push(...footItems);
+  if (footItems.length > 0) {
+    optionalBlocks.push({ priority: 2, start: lines.length, length: footItems.length });
+    lines.push(...footItems);
+  }
   const flipHint = text(display.flip_hint);
-  if (newMode && flipHint && !verdict.text) lines.push(`什么会改变结论：${flipHint}`);
+  if (newMode && flipHint && !verdict.text) {
+    optionalBlocks.push({ priority: 5, start: lines.length, length: 1 });
+    lines.push(`什么会改变结论：${flipHint}`);
+  }
   lines.push('**需要注意**');
   if (attention.length === 0) {
     lines.push('- 未发现需要注意的信号');
@@ -1193,8 +1278,9 @@ export function renderCard(evidence, rules) {
   for (const item of missing.slice(0, 2)) lines.push(`- ⚪ ${text(item.text)}`);
   if (applied.missingOverflow > 0) lines.push(`- ⚪ 另有 ${applied.missingOverflow} 项未列出`);
   lines.push('');
-  if (newMode) {
+  if (v010Mode) {
     const inquiryType = (evidence.intake || {}).inquiry_type || 'general';
+    optionalBlocks.push({ priority: 4, start: lines.length, length: 3 + tradeTerms(level, credit.tier, inquiryType).length });
     lines.push('**条款建议**');
     for (const term of tradeTerms(level, credit.tier, inquiryType)) lines.push(`- ${term}`);
     lines.push(TRADE_TERMS_DISCLAIMER);
@@ -1226,6 +1312,26 @@ export function renderCard(evidence, rules) {
   const punctuation = /[。！？]$/.test(supplement) ? '' : '。';
   lines.push(`${supplement}${punctuation}需要完整报告请回复“出完整报告”。`);
   lines.push(newMode ? '仅基于公开信息的风险信号筛查，不构成对客户的定性。' : '仅为基于公开信息的风险提示，不构成法律意见。');
+
+  for (const priority of [1, 2, 3, 4, 5]) {
+    if (lines.length <= 50) break;
+    for (const block of optionalBlocks) {
+      if (block.removed || block.priority !== priority) continue;
+      const { start, length } = block;
+      lines.splice(start, length);
+      block.removed = true;
+      for (const other of optionalBlocks) {
+        if (!other.removed && other.start > start) other.start = Math.max(0, other.start - length);
+      }
+    }
+  }
+  while (lines.length > 50 && lines[lines.length - 1] === '') lines.pop();
+  if (lines.length > 50) {
+    for (let index = lines.length - 1; index >= firstScreenLines; index -= 1) {
+      if (lines.length <= 50) break;
+      if (lines[index] === '') lines.splice(index, 1);
+    }
+  }
 
   return {
     status: 'ok',

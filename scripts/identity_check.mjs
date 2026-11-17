@@ -741,7 +741,12 @@ function idcheckCommand(args) {
     return { status: 'no-rule', command: 'idcheck', country, type: idType, masked: maskId(value), format_ok: null, checksum_ok: null, entity_type: null, name_suffix_consistent: null, notes: ['暂无已核对的格式规则'], mode: 'offline', rule_verification: null };
   }
   const pattern = rule.pattern || rule.regex;
-  const formatOk = pattern ? new RegExp(pattern).test(value) : null;
+  let formatOk = null;
+  try {
+    formatOk = pattern ? new RegExp(pattern).test(value) : null;
+  } catch {
+    return { status: 'invalid-input', command: 'idcheck', error: 'invalid-regex' };
+  }
   let checksumOk = null;
   let entityType = null;
   const notes = [];

@@ -6,7 +6,7 @@
   "expect": {
     "status": "ok",
     "risk_score": 27,
-    "card_includes": ["检索：12 次，打开 8 个页面", "⚠ 检索预算已用尽"],
+    "card_includes": ["检索：12 次，打开 8 个页面", "⚠ 本次未完成：检索预算已用尽"],
     "line_count_max": 50,
     "first_screen_max": 14
   }

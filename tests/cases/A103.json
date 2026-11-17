@@ -1,0 +1,7 @@
+{
+  "id": "A103",
+  "title": "F4 反绕过：显式写入 flags 的官方来源红旗必须拒收（不能绕过匹配门/证据/能力档）",
+  "type": "render_card",
+  "input": { "fixture": "card_inject_flag.json" },
+  "expect": { "status": "invalid-input" }
+}
