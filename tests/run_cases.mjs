@@ -1162,7 +1162,13 @@ async phone_pii(testCase) {
     const python = findPython();
     if (!python) return { skipped: true, actual: 'python not found' };
     const [pyCmd, ...pyRest] = python.split(' ');
-    const run = spawnSync(pyCmd, [...pyRest, join(ROOT, 'scripts', 'render_card.py'), '--report', join(FIXTURES_DIR, testCase.input.fixture), '--json'], { cwd: ROOT, encoding: 'utf8', timeout: 30000 });
+    let fixturePath = join(FIXTURES_DIR, testCase.input.fixture);
+    if (testCase.input.fixture_data) {
+      const dir = mkdtempSync(join(tmpdir(), 'buyer-check-report-'));
+      fixturePath = join(dir, 'fixture.json');
+      writeFileSync(fixturePath, JSON.stringify(testCase.input.fixture_data), 'utf8');
+    }
+    const run = spawnSync(pyCmd, [...pyRest, join(ROOT, 'scripts', 'render_card.py'), '--report', fixturePath, '--json'], { cwd: ROOT, encoding: 'utf8', timeout: 30000 });
     let result = null;
     try { result = JSON.parse(run.stdout); } catch { result = null; }
     const expect = testCase.expect || {};
