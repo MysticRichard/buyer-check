@@ -1,0 +1,14 @@
+{
+  "id": "A72",
+  "title": "Z5 PAN 第 4 位主体类型：公司/个人/合伙/信托解析正确，名称后缀矛盾只产生候选",
+  "type": "idcheck",
+  "input": {
+    "cases": [
+      { "name": "company-ok", "country": "IN", "type": "pan", "value": "AAACA0000A", "company": "Acme Pvt Ltd", "expect": { "status": "ok", "format_ok": true, "checksum_ok": null, "entity_type": "company", "name_suffix_consistent": true } },
+      { "name": "individual", "country": "IN", "type": "pan", "value": "AAAPA0000A", "company": "Acme Pvt Ltd", "expect": { "status": "ok", "format_ok": true, "entity_type": "individual", "name_suffix_consistent": false } },
+      { "name": "firm", "country": "IN", "type": "pan", "value": "AAAFA0000A", "company": "Acme Trading", "expect": { "status": "ok", "entity_type": "firm/LLP" } },
+      { "name": "trust", "country": "IN", "type": "pan", "value": "AAATA0000A", "company": "Acme Trust", "expect": { "status": "ok", "entity_type": "trust" } }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

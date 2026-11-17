@@ -1,0 +1,7 @@
+{
+  "id": "A111",
+  "title": "B42 反绕过：证件号明文出现在 id_checks.notes 时整卡拒收",
+  "type": "render_card",
+  "input": { "fixture": "card_text_leak.json" },
+  "expect": { "status": "invalid-input" }
+}

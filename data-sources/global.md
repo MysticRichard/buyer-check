@@ -139,3 +139,18 @@
 - 失败：返回 `status: "unavailable"` 与 `timeout` / `http-<code>` / `fetch-failed`，不抛异常。
 - 命令：`python scripts/identity_check.py registry --company "Equinor ASA" --country NO --online`；Node 对照为 `identity_check.mjs registry`。
 - 其他国家：维持注册库链接 + 一次动作，不硬实现、不猜测。
+## 十三、通用国家入口发现与全球兜底（v0.10）
+
+矩阵是种子，不是边界。矩阵没有该国、或条目是 `unverified` / `secondary-source` / `discovered` 时，按固定模板用英文和当地语言各检索一次：
+
+1. `"<country> company registry official site"` / `"<country> 公司登记 官方网站"`
+2. `"<country> business register ministry of justice / commerce / economy"`
+3. `"<country> tax authority taxpayer verification"`
+4. `"<country> government procurement portal"`
+5. `"<country> insolvency register official"`
+
+只采信政府域名或官方授权域名；打开页面记录“是否免费、是否登录、是否验证码、语言、检索键”，看不到的填 `null`。结果写入证据包 `country_discovery`，状态 `discovered`，卡片注明“该国入口为自动发现，未经核实”，**不写回仓库**。用户或维护者确认后才作为新条目提交。
+
+**自动化许可**：只有 `registry.automation_allowed: true` 且 `verification: official-page` 时，才允许对单条记录做一次查询；`null` / `false` 一律只给链接 + 检索清单；不批量抓取、不绕验证码、不登录。
+
+**全球兜底**（任何国家都列）：① GLEIF LEI 查询（免费，只覆盖持有 LEI 的主体）；② 世界银行禁入企业名单；③ OFAC 等制裁名单。OpenCorporates 的免费额度与条款未核实前只给链接，不写成结论。上述入口的具体页面与条款由开发/维护者打开核对后填入；核对不了保持 `secondary-source` 或 `unverified`。

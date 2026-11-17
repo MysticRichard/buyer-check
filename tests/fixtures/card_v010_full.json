@@ -1,0 +1,57 @@
+{
+  "subject": { "company": "Meridian Trade Imports Pvt Ltd", "country": "IN", "domain": "meridian-imports.example" },
+  "stage": "inquiry",
+  "intake": { "company": "Meridian Trade Imports Pvt Ltd", "inquiry_type": "general", "inquiry_text": "Please confirm the delivery schedule for the industrial pumps." },
+  "checks": [
+    { "id": "domain", "dimension": "domain", "result": "normal" },
+    { "id": "phone", "dimension": "phone", "result": "normal" },
+    { "id": "email", "dimension": "email", "result": "normal" }
+  ],
+  "flags": [],
+  "id_checks": [
+    { "type": "gstin", "country": "IN", "masked": "27•••••••••••ZY", "format_ok": true, "checksum_ok": true, "entity_type": "company", "name_suffix_consistent": true, "notes": [], "mode": "offline" }
+  ],
+  "doc_checks": [
+    { "file_label": "注册证书.pdf", "creator_class": "office", "dates_consistent": true, "pages": 3, "mode": "offline" }
+  ],
+  "footprint": [
+    { "probe": "registry", "result": "hit", "subject": "company", "role": "registered_entity", "source_grade": "official", "matched_keys": ["legal_name", "address"], "evidence_ids": ["E1"], "summary": "状态存续，注册地址与询盘一致" },
+    { "probe": "news", "result": "hit", "subject": "unknown", "role": "unknown", "source_grade": "third_party", "matched_keys": ["legal_name"], "evidence_ids": ["E2"], "summary": "某新闻提到同名公司涉诉，主体和角色未确认" },
+    { "probe": "registry", "result": "miss", "subject": "company", "role": "unknown", "source_grade": "official", "matched_keys": [], "evidence_ids": [], "summary": "不应展示的未命中记录" }
+  ],
+  "evidence": [
+    { "id": "E1", "url": "https://registry.example/meridian", "retrieved_at": "2026-11-16T09:00:00Z", "source_type": "registry" },
+    { "id": "E2", "url": "https://news.example/meridian", "retrieved_at": "2026-11-16T09:00:00Z", "source_type": "search" }
+  ],
+  "anchors": { "closure": "bidirectional" },
+  "coverage": { "checked": 6, "total": 8, "uncovered": ["map:not-covered:needs-browser", "customs:not-covered:no-matrix"] },
+  "confidence": "中",
+  "layers": {
+    "company": { "credibility": "medium" },
+    "person_company_link": { "strength": "medium" },
+    "person_authenticity": { "level": "unknown" },
+    "contact": { "phone_matches": true, "business_email": true, "domain_aged": true },
+    "compliance": { "sanctions": "clear", "negative": "clear" },
+    "scale": { "map": "matched", "customs": "consistent" }
+  },
+  "display": {
+    "customer_label": "Meridian Trade Imports（印度 / 班加罗尔）",
+    "inquiry_type": "一般询盘",
+    "verdict": "公司层信息自洽，倾向小额首单",
+    "evidence_ids": ["E1"],
+    "flip_hint": "税号在官方库核验有效后，核实度可升为高",
+    "dim_notes": {
+      "company": "官网和注册资料都自称进口商",
+      "link": "联系人邮箱与官网一致",
+      "contact": "电话和邮箱能对上",
+      "behavior": "没有异常付款要求",
+      "compliance": "制裁清单无匹配",
+      "scale": "地图商家页吻合"
+    },
+    "attention": [],
+    "verified": [{ "text": "注册处条目状态存续", "evidence_ids": ["E1"] }],
+    "missing": [],
+    "open_questions": [],
+    "scripts": []
+  }
+}

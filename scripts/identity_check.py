@@ -21,6 +21,7 @@ import hashlib
 import html as html_lib
 import json
 import os
+import datetime as dt
 import re
 import socket
 import sys
@@ -629,6 +630,370 @@ def registry_command(args):
     return {"status": "found", **base, **entry, "country_mismatch": mismatch}
 
 
+DISCOVERY_TEMPLATES = [
+    "“<country> company registry official site” + “<country> 公司登记 官方网站”",
+    "“<country> business register ministry of justice / commerce / economy”",
+    "“<country> tax authority taxpayer verification”",
+    "“<country> government procurement portal”",
+    "“<country> insolvency register official”",
+]
+
+
+def validate_capabilities(data):
+    errors = []
+    allowed_verification = {"official-page", "secondary-source", "unverified", "discovered"}
+    allowed_checksum = {"none", "gstin-mod36", "pan-structure"}
+    if data.get("schema_version") != "0.6.0":
+        errors.append("schema_version")
+    if not (data.get("countries") or {}):
+        errors.append("countries:empty")
+    for code, country in (data.get("countries") or {}).items():
+        if not isinstance(country, dict):
+            errors.append(f"{code}:not-object")
+            continue
+        if not isinstance(country.get("registry"), dict):
+            errors.append(f"{code}:registry")
+        if country.get("verification") not in allowed_verification:
+            errors.append(f"{code}:verification")
+        for key in ("registry", "tax_verification", "procurement", "insolvency"):
+            item = country.get(key)
+            if item is not None and (not isinstance(item, dict) or (item.get("verification") is not None and item.get("verification") not in allowed_verification)):
+                errors.append(f"{code}:{key}")
+        for fmt in country.get("id_formats") or []:
+            if not fmt.get("id_type") or not fmt.get("label") or not isinstance(fmt.get("length"), int):
+                errors.append(f"{code}:id_formats.fields")
+            regex_value = fmt.get("regex") or fmt.get("pattern")
+            if not str(regex_value or "").strip():
+                errors.append(f"{code}:id_formats.regex-empty")
+            else:
+                try:
+                    re.compile(regex_value)
+                except re.error:
+                    errors.append(f"{code}:id_formats.regex")
+            if (fmt.get("checksum") or "none") not in allowed_checksum:
+                errors.append(f"{code}:id_formats.checksum")
+    return errors
+
+
+def country_command(args):
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "country_capabilities.json")
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            data = json.load(handle)
+    except (OSError, ValueError):
+        return {"status": "unavailable", "error": "capabilities-unreadable"}
+    if getattr(args, "validate", False):
+        errors = validate_capabilities(data)
+        return {"status": "ok" if not errors else "invalid-input", "countries": len(data.get("countries") or {}), "errors": errors}
+    code = (args.code or "").strip().upper()
+    if not code:
+        return {"status": "invalid-input", "error": "missing country code"}
+    country = (data.get("countries") or {}).get(code.lower())
+    if not country:
+        return {
+            "status": "not-in-matrix",
+            "country": code,
+            "discovery": {
+                "used": "discovery",
+                "verification": "discovered",
+                "templates": DISCOVERY_TEMPLATES,
+                "note": "本次运行临时发现，不写回仓库；官方页面核对前只给链接和检索清单",
+            },
+            "global_sources": data.get("global_sources") or [],
+        }
+    registry = country.get("registry") or {}
+    registry_view = {
+        "name": registry.get("name"),
+        "url": registry.get("url"),
+        "verification": registry.get("verification") or country.get("verification") or "unverified",
+        "automation_allowed": registry.get("automation_allowed") is True,
+    }
+    return {
+        "status": "ok",
+        "country": code,
+        "name": country.get("name"),
+        "verification": country.get("verification") or "unverified",
+        "registry": registry_view,
+        "tax_verification": country.get("tax_verification"),
+        "procurement": country.get("procurement"),
+        "insolvency": country.get("insolvency"),
+        "id_formats": country.get("id_formats") or [],
+        "sources": country.get("sources") or [],
+        "global_sources": data.get("global_sources") or [],
+        "discovery": False,
+    }
+
+
+ID_CHARS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+GST_STATE_CODES = {
+    "01": "Jammu and Kashmir", "02": "Himachal Pradesh", "03": "Punjab", "04": "Chandigarh",
+    "05": "Uttarakhand", "06": "Haryana", "07": "Delhi", "08": "Rajasthan", "09": "Uttar Pradesh",
+    "10": "Bihar", "11": "Sikkim", "12": "Arunachal Pradesh", "13": "Nagaland", "14": "Manipur",
+    "15": "Mizoram", "16": "Tripura", "17": "Meghalaya", "18": "Assam", "19": "West Bengal",
+    "20": "Jharkhand", "21": "Odisha", "22": "Chhattisgarh", "23": "Madhya Pradesh", "24": "Gujarat",
+    "26": "Dadra and Nagar Haveli and Daman and Diu", "27": "Maharashtra", "29": "Karnataka",
+    "30": "Goa", "31": "Lakshadweep", "32": "Kerala", "33": "Tamil Nadu", "34": "Puducherry",
+    "35": "Andaman and Nicobar Islands", "36": "Telangana", "37": "Andhra Pradesh", "38": "Ladakh",
+}
+PAN_ENTITY_TYPES = {
+    "P": "individual", "C": "company", "H": "HUF", "F": "firm/LLP", "A": "AOP",
+    "T": "trust", "B": "BOI", "L": "local-authority", "J": "artificial-juridical-person", "G": "government",
+}
+
+
+def mask_id(value):
+    value = "" if value is None else str(value)
+    if len(value) <= 4:
+        return "•" * len(value)
+    return value[:2] + "•" * (len(value) - 4) + value[-2:]
+
+
+def gstin_checksum(value):
+    if len(value) < 15:
+        return None
+    total = 0
+    for index in range(14):
+        digit = ID_CHARS.index(value[index]) if value[index] in ID_CHARS else None
+        if digit is None:
+            return None
+        product = digit * (1 if index % 2 == 0 else 2)
+        total += product // 36 + product % 36
+    return ID_CHARS[(36 - total % 36) % 36]
+
+
+def pan_entity_type(value):
+    if len(value) < 4:
+        return "unknown"
+    return PAN_ENTITY_TYPES.get(value[3], "unknown")
+
+
+def idcheck_command(args):
+    country = (args.country or "").upper()
+    id_type = (args.id_type or "").lower()
+    value = (args.value or "").strip().upper()
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "country_capabilities.json")
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            caps = json.load(handle)
+    except (OSError, ValueError):
+        return {"status": "unavailable", "error": "capabilities-unreadable"}
+    entry = (caps.get("countries") or {}).get(country.lower()) or {}
+    rule = next((item for item in entry.get("id_formats") or [] if (item.get("type") or item.get("id_type")) == id_type), None)
+    if not rule or not value:
+        return {
+            "status": "no-rule",
+            "command": "idcheck",
+            "country": country,
+            "type": id_type,
+            "masked": mask_id(value),
+            "format_ok": None,
+            "checksum_ok": None,
+            "entity_type": None,
+            "name_suffix_consistent": None,
+            "notes": ["暂无已核对的格式规则"],
+            "mode": "offline",
+            "rule_verification": None,
+        }
+    pattern = rule.get("pattern") or rule.get("regex")
+    try:
+        format_ok = bool(re.fullmatch(pattern, value)) if pattern else None
+    except re.error:
+        return {"status": "invalid-input", "command": "idcheck", "error": "invalid-regex"}
+    checksum_ok = None
+    entity_type = None
+    notes = []
+    state_code = None
+    if format_ok is False:
+        checksum_ok = False
+        notes.append("format-invalid")
+    elif id_type == "gstin":
+        if len(value) != 15 or value[13] != "Z":
+            checksum_ok = False
+            notes.append("position-14-not-z")
+        else:
+            checksum_ok = gstin_checksum(value) == value[-1]
+        entity_type = pan_entity_type(value[2:12])
+        state_code = value[:2]
+        state_name = GST_STATE_CODES.get(state_code)
+        if not state_name:
+            notes.append("state-code-unknown")
+        elif args.claimed_state and normalize_company(args.claimed_state) != normalize_company(state_name):
+            notes.append("state-mismatch")
+    elif id_type == "pan":
+        entity_type = pan_entity_type(value)
+    company = (args.company_name or "").strip()
+    name_suffix_consistent = None
+    if company and entity_type:
+        corporate = any(token in normalize_company(company) for token in ("PVT", "PRIVATE", "LTD", "LIMITED", "CORP", "COMPANY"))
+        firm = any(token in normalize_company(company) for token in ("LLP", "PARTNERSHIP", "FIRM"))
+        trust = "TRUST" in normalize_company(company)
+        if entity_type == "company" and not corporate:
+            name_suffix_consistent = False
+        elif entity_type == "individual" and corporate:
+            name_suffix_consistent = False
+        elif entity_type == "firm/LLP" and (corporate or not firm):
+            name_suffix_consistent = False
+        elif entity_type == "trust" and not trust:
+            name_suffix_consistent = False
+        else:
+            name_suffix_consistent = True
+    return {
+        "status": "ok",
+        "command": "idcheck",
+        "country": country,
+        "type": id_type,
+        "masked": mask_id(value),
+        "format_ok": format_ok,
+        "checksum_ok": checksum_ok,
+        "entity_type": entity_type,
+        "name_suffix_consistent": name_suffix_consistent,
+        "state_code": state_code,
+        "notes": notes,
+        "mode": "offline",
+        "rule_verification": rule.get("verification") or "unverified",
+    }
+
+
+MATCH_KEY_TYPES = ("legal_name", "address", "tax_id_masked", "phone", "domain", "person_name", "registration_no")
+
+
+def normalize_match_value(key, value):
+    raw = "" if value is None else str(value).strip().lower()
+    if key == "phone":
+        return re.sub(r"\D", "", raw)
+    if key == "domain":
+        return raw.replace("www.", "", 1)
+    if key in ("tax_id_masked", "registration_no"):
+        return re.sub(r"[^0-9a-z]", "", raw)
+    return re.sub(r"\s+", " ", re.sub(r"[^0-9a-z\u4e00-\u9fff ]", "", raw)).strip()
+
+
+def load_match_keys(payload):
+    if isinstance(payload, dict):
+        return [(key, payload[key]) for key in MATCH_KEY_TYPES if key in payload]
+    if isinstance(payload, list):
+        return [(item.get("key"), item.get("value")) for item in payload if isinstance(item, dict) and item.get("key") in MATCH_KEY_TYPES]
+    return []
+
+
+def match_command(args):
+    try:
+        with open(args.buyer_json, "r", encoding="utf-8") as handle:
+            buyer = load_match_keys(json.load(handle))
+        with open(args.candidate_json, "r", encoding="utf-8") as handle:
+            candidate = load_match_keys(json.load(handle))
+    except (OSError, ValueError, TypeError):
+        return {"status": "invalid-input", "error": "invalid match input"}
+    buyer_map = {key: normalize_match_value(key, value) for key, value in buyer if value is not None}
+    candidate_map = {key: normalize_match_value(key, value) for key, value in candidate if value is not None}
+    keys = sorted(key for key in buyer_map if key in candidate_map and buyer_map[key] and buyer_map[key] == candidate_map[key])
+    matched = ("legal_name" in keys and len(keys) >= 2) or ("domain" in keys and "phone" in keys)
+    if not matched:
+        reason = "only-name" if keys == ["legal_name"] else "fewer-than-two-independent-keys"
+        strength = "weak"
+    elif len(keys) >= 3 or ("legal_name" in keys and any(key in keys for key in ("registration_no", "tax_id_masked"))):
+        reason = "name-plus-strong-key" if "legal_name" in keys else "domain-plus-phone"
+        strength = "strong"
+    else:
+        reason = "name-plus-other" if "legal_name" in keys else "domain-plus-phone"
+        strength = "medium"
+    return {"status": "ok", "matched": matched, "keys_matched": keys, "strength": strength, "reason": reason}
+
+
+def keywords_command(args):
+    text_value = (args.text or "").lower()
+    languages = [item.strip() for item in (args.languages or "en").split(",") if item.strip()]
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "country_capabilities.json")
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            caps = json.load(handle)
+    except (OSError, ValueError):
+        return {"status": "unavailable", "error": "capabilities-unreadable"}
+    groups = caps.get("multilingual_keywords") or {}
+    matches = []
+    for language in languages:
+        for probe, words in (groups.get(language) or {}).items():
+            for word in words:
+                if word.lower() in text_value:
+                    matches.append({"language": language, "probe": probe, "keyword": word})
+    return {"status": "ok", "matches": matches, "languages": languages, "meta": groups.get("meta")}
+
+
+def pdf_date(value):
+    match = re.match(r"D:(\d{4})(\d{2})(\d{2})", value or "")
+    if not match:
+        return None
+    return f"{match.group(1)}-{match.group(2)}-{match.group(3)}"
+
+
+def pdf_info_text(value):
+    return (value or "").replace("\\(", "(").replace("\\)", ")").strip()
+
+
+def docmeta_command(args):
+    path = args.file
+    try:
+        with open(path, "rb") as handle:
+            data = handle.read()
+    except OSError:
+        return {"status": "unreadable", "doc_checks": []}
+    if not data.startswith(b"%PDF"):
+        return {"status": "unreadable", "doc_checks": []}
+    text = data.decode("latin-1", errors="ignore")
+
+    def field(name):
+        match = re.search(r"/" + name + r"\s*(?:\(([^)]*)\)|<([0-9A-Fa-f]+)>)", text)
+        if not match:
+            return None
+        return pdf_info_text(match.group(1) if match.group(1) is not None else match.group(2))
+
+    creator = field("Creator")
+    producer = field("Producer")
+    incremental_updates = max(0, text.count("%%EOF") - 1)
+    creation = pdf_date(field("CreationDate"))
+    modified = pdf_date(field("ModDate"))
+    count = re.search(r"/Count\s+(\d+)", text)
+    software = " ".join(item for item in (creator, producer) if item).lower()
+    if any(token in software for token in ("photoshop", "canva", "illustrator", "indesign")):
+        creator_class = "design"
+    elif any(token in software for token in ("word", "excel", "powerpoint", "office")):
+        creator_class = "office"
+    elif any(token in software for token in ("scan", "scansnap", "epson")):
+        creator_class = "scan"
+    elif creator or producer:
+        creator_class = "other"
+    else:
+        creator_class = "unknown"
+    dates_consistent = None
+    notes = []
+    if creation and args.claimed_date:
+        try:
+            age = (dt.date.fromisoformat(creation) - dt.date.fromisoformat(args.claimed_date)).days
+            dates_consistent = not (age > 30)
+        except ValueError:
+            dates_consistent = None
+    if dates_consistent is False:
+        notes.append("存在可解释的差异（创建日期与自称签发日期相差超过 30 天）")
+    elif dates_consistent is True:
+        notes.append("未见矛盾")
+    else:
+        notes.append("元数据不完整或已重写；仅提示，不计分")
+    return {
+        "status": "ok",
+        "doc_checks": [{
+            "type": "pdf",
+            "file_name": os.path.basename(path),
+            "creator_class": creator_class,
+            "creation_date": creation,
+            "modification_date": modified,
+            "pages": int(count.group(1)) if count else None,
+            "incremental_updates": incremental_updates,
+            "dates_consistent": dates_consistent,
+            "notes": notes,
+        }],
+    }
+
+
 def build_parser():
     parser = argparse.ArgumentParser(description="buyer-check identity helpers (site/backlink/image).")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -667,6 +1032,29 @@ def build_parser():
     registry.add_argument("--online", action="store_true")
     registry.add_argument("--fixture-json")
     registry.add_argument("--timeout", type=int, default=10)
+
+    country = sub.add_parser("country", help="return a country capability profile or discovery templates")
+    country.add_argument("--code")
+    country.add_argument("--validate", action="store_true")
+
+    idcheck = sub.add_parser("idcheck", help="offline tax/registration ID format and checksum check")
+    idcheck.add_argument("--country", required=True)
+    idcheck.add_argument("--type", dest="id_type", required=True)
+    idcheck.add_argument("--value", required=True)
+    idcheck.add_argument("--company-name", dest="company_name")
+    idcheck.add_argument("--claimed-state", dest="claimed_state")
+
+    match = sub.add_parser("match", help="deterministic entity matching gate")
+    match.add_argument("--buyer-json", required=True)
+    match.add_argument("--candidate-json", required=True)
+
+    keywords = sub.add_parser("keywords", help="match multilingual footprint keywords")
+    keywords.add_argument("--text", required=True)
+    keywords.add_argument("--languages", default="en")
+
+    docmeta = sub.add_parser("docmeta", help="read PDF metadata without OCR or third-party libraries")
+    docmeta.add_argument("--file", required=True)
+    docmeta.add_argument("--claimed-date")
     return parser
 
 
@@ -680,10 +1068,20 @@ def main(argv=None):
         result = map_command(args)
     elif args.command == "registry":
         result = registry_command(args)
+    elif args.command == "country":
+        result = country_command(args)
+    elif args.command == "idcheck":
+        result = idcheck_command(args)
+    elif args.command == "match":
+        result = match_command(args)
+    elif args.command == "keywords":
+        result = keywords_command(args)
+    elif args.command == "docmeta":
+        result = docmeta_command(args)
     else:
         result = image_command(args)
     print(json.dumps(result, ensure_ascii=False))
-    return 0 if result.get("status") in ("ok", "found", "not-found", "ambiguous", "offline") else 1
+    return 0 if result.get("status") in ("ok", "found", "not-found", "ambiguous", "offline", "not-in-matrix", "no-rule") else 1
 
 
 if __name__ == "__main__":

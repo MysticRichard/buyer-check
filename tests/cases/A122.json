@@ -1,0 +1,7 @@
+{
+  "id": "A122",
+  "title": "B42 反绕过：masked 为 10 位字母数字（无分隔）必须拒收",
+  "type": "render_card",
+  "input": { "fixture": "card_masked_alnum.json" },
+  "expect": { "status": "invalid-input" }
+}

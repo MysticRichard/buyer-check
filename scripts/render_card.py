@@ -16,6 +16,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import json
 import os
 import re
@@ -25,6 +26,53 @@ from urllib.parse import urlparse
 from risk_score import load_rules, score as risk_score
 
 RULES_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "red_flags.json")
+COUNTRY_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "country_capabilities.json")
+_COUNTRY_CODES = None
+GSTIN_RE = re.compile(r"[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]", re.I)
+PAN_RE = re.compile(r"[A-Z]{5}[0-9]{4}[A-Z]", re.I)
+PAN_UPPER_RE = re.compile(r"[A-Z]{5}[0-9]{4}[A-Z]")
+UPPER_RUN_RE = re.compile(r"(?<![A-Za-z0-9])[0-9A-Z]{10,}(?![A-Za-z0-9])")
+ID_NUM_RE = re.compile(r"(?<![A-Za-z0-9])[0-9]{10,}(?![A-Za-z0-9])")
+V010_KEYS = ("capabilities", "footprint", "id_checks", "doc_checks", "search_log", "match_keys", "previous", "country_discovery", "terms_advice")
+
+
+def id_leak(value):
+    compact = re.sub(r"[\s\-_./•*]", "", text(value))
+    if GSTIN_RE.search(compact):
+        return True
+    return bool(PAN_RE.fullmatch(compact))
+
+
+def text_leak(value):
+    raw = text(value)
+    compact = re.sub(r"[\s\-_./•*]", "", raw)
+    clean_raw = re.sub(r"RF-?[A-Z]+-?\d{3}", "", raw, flags=re.I)
+    return bool(GSTIN_RE.search(compact) or PAN_UPPER_RE.search(compact) or UPPER_RUN_RE.search(clean_raw))
+
+
+def numeric_leak(value):
+    return bool(ID_NUM_RE.search(text(value)))
+
+
+def safe_int(value, default=0):
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def country_known(code):
+    global _COUNTRY_CODES
+    if _COUNTRY_CODES is None:
+        try:
+            with open(COUNTRY_FILE, "r", encoding="utf-8") as handle:
+                data = json.load(handle)
+            _COUNTRY_CODES = {text(key).upper() for key in (data.get("countries") or {})}
+        except (OSError, json.JSONDecodeError):
+            _COUNTRY_CODES = set()
+    if not _COUNTRY_CODES:
+        return True
+    return text(code).upper() in _COUNTRY_CODES
 
 CHECKPOINT_NAMES = {
     "company": "公司名",
@@ -393,6 +441,10 @@ def is_technical(value):
 
 FORBIDDEN = ["骗子", "诈骗犯", "确定是假的", "一定有问题"]
 SCRIPT_FORBIDDEN = ["核实", "背调", "怀疑", "诈骗"]
+LOCALIZED_LANGS = {"ar", "fr", "es", "pt", "ru", "tr", "id", "th", "vi", "hi", "zh"}
+NEW_FLAG_IDS = {"RF-FOOT-001", "RF-FOOT-002", "RF-FOOT-003", "RF-FOOT-004", "RF-FOOT-005", "RF-ID-004", "RF-ID-005", "RF-DOC-001"}
+LOCAL_FLAG_IDS = {"RF-ID-004", "RF-ID-005", "RF-DOC-001"}
+ALLOWED_MATCH_KEYS = {"legal_name", "address", "tax_id_masked", "phone", "domain", "person_name", "registration_no"}
 EMAIL_RE = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}")
 PHONE_CANDIDATE_RE = re.compile(r"(?:\+|00)\d[\d\s().\-]{4,20}\d|\d[\d\s().\-]{4,20}\d")
 MASKED_PHONE_RE = re.compile(r"(?:\+|00)?\d[\d\s()\-*]*\*[\d\s()\-*]*")
@@ -481,7 +533,7 @@ def validate_display(evidence, rules):
             continue
         if item.get("kind") not in ("flag", "clue"):
             add("invalid_kind", "attention.kind")
-        if item.get("kind") == "flag" and (not item.get("flag_id") or item.get("flag_id") not in flag_ids or item.get("flag_id") not in flag_index):
+        if item.get("kind") == "flag" and (not item.get("flag_id") or item.get("flag_id") not in flag_index):
             add("unknown_flag", "attention.flag_id")
         if not isinstance(item.get("text"), str):
             add("invalid_type", "attention.text")
@@ -529,6 +581,18 @@ def validate_display(evidence, rules):
             for phrase in SCRIPT_FORBIDDEN:
                 if phrase in item.get("en", "") or phrase in item.get("zh", ""):
                     add("forbidden_word", "scripts")
+        localized = item.get("localized")
+        if localized is not None:
+            if not isinstance(localized, dict):
+                add("invalid_type", "scripts.localized")
+            else:
+                for lang, value in localized.items():
+                    if lang not in LOCALIZED_LANGS or not isinstance(value, str):
+                        add("invalid_type", "scripts.localized")
+                        continue
+                    for phrase in SCRIPT_FORBIDDEN:
+                        if phrase in value:
+                            add("forbidden_word", "scripts.localized")
 
     questions = display.get("open_questions")
     if questions is not None:
@@ -704,8 +768,10 @@ MULTI_SUFFIX = {"co.uk", "org.uk", "ac.uk", "com.au", "net.au", "co.jp", "com.br
 
 def url_host(url):
     try:
-        return urlparse(url).netloc.lower().removeprefix("www.")
-    except ValueError:
+        parsed = urlparse(text(url).strip())
+        host = (parsed.netloc or "").lower().split("@")[-1].split(":")[0].rstrip(".")
+        return host.removeprefix("www.")
+    except (TypeError, ValueError):
         return ""
 
 
@@ -726,7 +792,17 @@ def grade_of(entry):
 
 
 def apply_evidence_rules(evidence, attention, verified, missing, attention_from_display, verified_from_display):
+    def entry_grade(entry):
+        base = SOURCE_GRADE_DEFAULT.get(entry.get("source_type"), "self_declared")
+        explicit = entry.get("source_grade")
+        if explicit in ("third_party", "self_declared"):
+            return explicit
+        return base
+
     if "evidence" not in evidence:
+        for item in attention:
+            if item.get("kind") == "flag" and item.get("flag_id") in LOCAL_FLAG_IDS:
+                item["grade_label"] = "离线"
         return attention, verified, missing, 0, 0, 0
     raw = evidence.get("evidence")
     index = {}
@@ -748,6 +824,8 @@ def apply_evidence_rules(evidence, attention, verified, missing, attention_from_
     def evaluate(item, target):
         nonlocal grade_warnings
         ids = item.get("evidence_ids")
+        if item.get("kind") == "flag" and item.get("flag_id") in LOCAL_FLAG_IDS and not ids:
+            return True, "", "离线"
         if not isinstance(ids, list) or not ids:
             return False, "缺证据", None
         entries = []
@@ -854,7 +932,634 @@ def validate_conflicts(evidence):
     return items, errors
 
 
+def parse_iso_date(value):
+    try:
+        return dt.date.fromisoformat(text(value)[:10])
+    except ValueError:
+        return None
+
+
+def within_years(data_as_of, as_of, years):
+    recorded = parse_iso_date(data_as_of)
+    if recorded is None:
+        return False
+    end = parse_iso_date(as_of) or dt.date(9999, 12, 31)
+    delta = (end - recorded).days
+    return 0 <= delta <= years * 365
+
+
+def derive_flags(evidence):
+    derived = []
+    capabilities = evidence.get("capabilities") or {}
+    tier = capabilities.get("tier")
+    full = tier in (None, "full")
+    low_confidence = text(evidence.get("confidence")) == "低"
+    as_of = evidence.get("as_of")
+    if not as_of:
+        retrieved = [parse_iso_date(item.get("retrieved_at")) for item in (evidence.get("evidence") or []) if isinstance(item, dict)]
+        retrieved = [value for value in retrieved if value is not None]
+        as_of = max(retrieved).isoformat() if retrieved else "9999-12-31"
+    declared_keys = {text(item.get("key")) for item in (evidence.get("match_keys") or []) if isinstance(item, dict) and text(item.get("key"))}
+    evidence_index = {}
+    duplicates = set()
+    for item in evidence.get("evidence") or []:
+        if not isinstance(item, dict) or not text(item.get("id")):
+            continue
+        evidence_id = text(item.get("id"))
+        if evidence_id in evidence_index:
+            duplicates.add(evidence_id)
+        evidence_index[evidence_id] = item
+
+    def add(flag_id, evidence_ids=None):
+        if any(item["id"] == flag_id for item in derived):
+            return
+        derived.append({"id": flag_id, "evidence_ids": evidence_ids or []})
+
+    def effective_grade(item):
+        declared = text(item.get("source_grade"))
+        if tier == "search-only" and declared == "official":
+            return "self_declared"
+        ids = [text(eid) for eid in (item.get("evidence_ids") or []) if text(eid)]
+        base_grades = [SOURCE_GRADE_DEFAULT.get(text((evidence_index.get(eid) or {}).get("source_type")), "self_declared") for eid in ids]
+        if declared == "official" and "official" in base_grades:
+            return "official"
+        if declared in ("third_party", "self_declared"):
+            return declared
+        if "third_party" in base_grades:
+            return "third_party"
+        return "self_declared"
+
+    def eligible(item, official_required, years):
+        if not isinstance(item, dict) or item.get("subject") != "company":
+            return False
+        keys = {text(key) for key in (item.get("matched_keys") or []) if text(key)}
+        if len(keys) < 2 or not keys <= ALLOWED_MATCH_KEYS or keys <= {"legal_name", "person_name", "alias_name"}:
+            return False
+        if not declared_keys:
+            return False
+        if not keys <= declared_keys:
+            return False
+        if official_required and (effective_grade(item) != "official" or not full):
+            return False
+        ids = [text(eid) for eid in (item.get("evidence_ids") or []) if text(eid)]
+        if not ids or any(eid not in evidence_index or eid in duplicates for eid in ids):
+            return False
+        for eid in ids:
+            entry = evidence_index.get(eid) or {}
+            if text(entry.get("source_type")) != "user_input" and (not text(entry.get("url")) or not text(entry.get("retrieved_at"))):
+                return False
+        return within_years(item.get("data_as_of"), as_of, years)
+
+    for item in ([] if (tier == "offline" or low_confidence or evidence.get("quick_check") is True) else (evidence.get("footprint") or [])):
+        if not isinstance(item, dict) or item.get("result") != "hit":
+            continue
+        probe = item.get("probe")
+        role = item.get("role")
+        grade = effective_grade(item)
+        if probe == "enforcement" and role in ("accused", "regulator_action") and item.get("category") == "fraud" and eligible(item, True, 5):
+            add("RF-FOOT-001", item.get("evidence_ids"))
+        elif probe == "debarment" and role in ("accused", "regulator_action") and eligible(item, True, 3):
+            add("RF-FOOT-002", item.get("evidence_ids"))
+        elif probe == "tender" and role in ("accused", "regulator_action") and item.get("category") == "fraud" and eligible(item, True, 5):
+            add("RF-FOOT-003", item.get("evidence_ids"))
+        elif probe in ("news", "forum") and role == "accused" and grade == "third_party" and eligible(item, False, 5):
+            domains = set()
+            groups = set()
+            for eid in item.get("evidence_ids") or []:
+                entry = evidence_index.get(text(eid)) or {}
+                domain = registrable_domain(url_host(entry.get("url")))
+                group = text(entry.get("media_group"))
+                if domain:
+                    domains.add(domain)
+                if group:
+                    groups.add(group)
+            if len(domains) >= 2 and (not groups or len(groups) >= 2):
+                add("RF-FOOT-004", item.get("evidence_ids"))
+        elif probe == "scale" and role in ("accused", "regulator_action") and grade == "official" and eligible(item, False, 5):
+            try:
+                ratio = float(item.get("scale_ratio") or 0)
+            except (TypeError, ValueError):
+                ratio = 0
+            if ratio >= 10:
+                add("RF-FOOT-005", item.get("evidence_ids"))
+
+    for check in evidence.get("id_checks") or []:
+        if not isinstance(check, dict):
+            continue
+        if check.get("format_ok") is False or check.get("checksum_ok") is False:
+            add("RF-ID-004")
+        if check.get("name_suffix_consistent") is False:
+            add("RF-ID-005")
+
+    for check in evidence.get("doc_checks") or []:
+        if isinstance(check, dict) and check.get("dates_consistent") is False:
+            add("RF-DOC-001")
+    return derived
+
+
+TRADE_TERMS_DISCLAIMER = "常见做法参考，不构成法律或财务建议，具体条款以贵司风控和合同为准。"
+
+
+def trade_terms(level, tier, inquiry_type):
+    if level == "高":
+        lines = ["不建议收款或发货；先完成订单前复核并补齐材料。"]
+    elif level == "需人工核实":
+        lines = ["先核验文件再谈大额报价；样品费由买家承担。"]
+    elif tier == "高":
+        lines = ["可按常规条款；收款账户仍用已知电话或邮箱双通道确认一次。"]
+    else:
+        lines = ["首单小额；样品费由买家承担、买家自己的快递账号寄送；定金比例高于常规；分批发货；发货前复核收款账户。"]
+    if inquiry_type == "account_change":
+        lines.append("账户变更：用已知号码电话回访并书面确认，确认前不付款。")
+    elif inquiry_type == "large_first_order":
+        lines.append("大额首单：分批交货，首批小额验证。")
+    elif inquiry_type == "tender":
+        lines.append("招标：投标保证金或先付费用先在官方公告确认。")
+    return lines[:2]
+
+
+def _match_key_set(evidence):
+    entries = evidence.get("match_keys")
+    if not isinstance(entries, list):
+        return None
+    result = set()
+    for item in entries:
+        if isinstance(item, dict) and item.get("key") and item.get("value"):
+            result.add(f"{item.get('key')}={item.get('value')}")
+    return result
+
+
+def _footprint_key_set(evidence):
+    entries = evidence.get("footprint_keys")
+    if isinstance(entries, list):
+        return {str(item) for item in entries if isinstance(item, str)}
+    result = set()
+    for item in evidence.get("footprint") or []:
+        if isinstance(item, dict) and item.get("probe") and item.get("result"):
+            result.add(f"{item.get('probe')}:{item.get('result')}")
+    return result
+
+
+def _incomplete_key_set(evidence):
+    result = set()
+    for item in evidence.get("checks_incomplete") or []:
+        if isinstance(item, dict) and item.get("check"):
+            result.add(f"{item.get('check')}:{item.get('reason') or 'unknown'}")
+    return result
+
+
+def _risk_of(evidence):
+    score = evidence.get("score") or {}
+    value = score.get("risk_score", score.get("total", 0))
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _signed(value):
+    return f"+{value}" if value > 0 else str(value)
+
+
+def diff_packs(old, new):
+    old_keys = _match_key_set(old)
+    new_keys = _match_key_set(new)
+    if old_keys and new_keys and old_keys != new_keys:
+        return {"status": "different-subject", "reason": "match-keys-mismatch"}
+
+    old_risk = _risk_of(old)
+    new_risk = _risk_of(new)
+    old_credit = old.get("verification")
+    if not isinstance(old_credit, int):
+        old_credit = compute_credit(old)["score"]
+    new_credit = compute_credit(new)["score"]
+    old_flags = set(flag_ids_of(old))
+    new_flags = set(flag_ids_of(new))
+    added_flags = sorted(new_flags - old_flags)
+    removed_flags = sorted(old_flags - new_flags)
+    old_foot = _footprint_key_set(old)
+    new_foot = _footprint_key_set(new)
+    added_foot = sorted(new_foot - old_foot)
+    removed_foot = sorted(old_foot - new_foot)
+    old_incomplete = _incomplete_key_set(old)
+    new_incomplete = _incomplete_key_set(new)
+    added_incomplete = sorted(new_incomplete - old_incomplete)
+    removed_incomplete = sorted(old_incomplete - new_incomplete)
+
+    date = old.get("date") or "上次"
+    changes = [f"风险 {old_risk} → {new_risk}（{_signed(new_risk - old_risk)}）· 核实度 {old_credit} → {new_credit}（{_signed(new_credit - old_credit)}）"]
+    if added_flags or removed_flags:
+        parts = []
+        if added_flags:
+            parts.append("新增红旗：" + "、".join(added_flags))
+        if removed_flags:
+            parts.append("消失红旗：" + "、".join(removed_flags))
+        changes.append("；".join(parts))
+    if added_incomplete or removed_incomplete:
+        parts = []
+        if added_incomplete:
+            parts.append("新增：" + "、".join(added_incomplete))
+        if removed_incomplete:
+            parts.append("消失：" + "、".join(removed_incomplete))
+        changes.append("未完成项 " + "；".join(parts))
+    if added_foot or removed_foot:
+        parts = []
+        if added_foot:
+            parts.append("新增足迹：" + "、".join(added_foot))
+        if removed_foot:
+            parts.append("消失足迹：" + "、".join(removed_foot))
+        changes.append("；".join(parts))
+    if not changes:
+        changes = ["无变化"]
+    changes = changes[:5]
+    return {
+        "status": "ok",
+        "previous_date": date,
+        "changes": changes,
+        "text": "\n".join([f"**相比 {date} 的变化**"] + changes),
+        "risk": {"from": old_risk, "to": new_risk, "delta": new_risk - old_risk},
+        "verification": {"from": old_credit, "to": new_credit, "delta": new_credit - old_credit},
+        "added_flags": added_flags,
+        "removed_flags": removed_flags,
+        "footprint_added": added_foot,
+        "footprint_removed": removed_foot,
+        "incomplete_added": added_incomplete,
+        "incomplete_removed": removed_incomplete,
+    }
+
+
+def diff_with_previous(evidence):
+    previous = evidence.get("previous")
+    if not isinstance(previous, dict):
+        return {"status": "ok", "changes": [], "text": "", "note": "no-previous"}
+    old = {
+        "date": previous.get("date"),
+        "score": {"risk_score": previous.get("score", 0)},
+        "flags": previous.get("red_flags") or [],
+        "footprint_keys": previous.get("footprint_keys") or [],
+        "verification": previous.get("verification") if isinstance(previous.get("verification"), int) else None,
+    }
+    return diff_packs(old, evidence)
+
+
+BATCH_SYMBOLS = {"低": "🟢", "中": "🟡", "高": "🔴", "需人工核实": "⚪"}
+BATCH_RANK = {"优先跟进": 0, "先核验": 1, "暂缓": 2}
+
+
+def _batch_name(evidence, index):
+    subject = evidence.get("subject") or {}
+    intake = evidence.get("intake") or {}
+    name = subject.get("company") or intake.get("company")
+    if name:
+        return text(name)[:40]
+    email = text(subject.get("email") or intake.get("email"))
+    if "@" in email:
+        return email.split("@")[-1].lower()
+    domain = subject.get("domain") or intake.get("domain")
+    if domain:
+        return text(domain).lower()
+    return f"第 {index} 封"
+
+
+def _batch_email_domain(evidence):
+    subject = evidence.get("subject") or {}
+    intake = evidence.get("intake") or {}
+    email = text(subject.get("email") or intake.get("email")).lower()
+    if "@" in email:
+        return email.split("@")[-1]
+    return text(subject.get("domain") or intake.get("domain")).lower()
+
+
+def _batch_phone(evidence):
+    subject = evidence.get("subject") or {}
+    intake = evidence.get("intake") or {}
+    raw = text(subject.get("phone") or intake.get("phone"))
+    digits = re.sub(r"\D", "", raw)
+    return digits if len(digits) >= 6 else ""
+
+
+def _normalized_inquiry(evidence):
+    raw = text((evidence.get("intake") or {}).get("inquiry_text"))
+    return re.sub(r"\s+", " ", raw).strip().lower()
+
+
+def _shared_fragment(left, right):
+    if not left or not right:
+        return False
+    if left == right:
+        return True
+    if len(left) < 12 or len(right) < 12:
+        return False
+    grams = {left[i:i + 12] for i in range(len(left) - 11)}
+    return any(right[i:i + 12] in grams for i in range(len(right) - 11))
+
+
+def _batch_top_risk(evidence, rules):
+    attention = [item for item in ((evidence.get("display") or {}).get("attention") or []) if isinstance(item, dict) and item.get("text")]
+    if attention:
+        return text(attention[0].get("text"))
+    ids = flag_ids_of(evidence)
+    if ids:
+        for flag in rules.get("flags") or []:
+            if isinstance(flag, dict) and flag.get("id") == ids[0]:
+                return text(flag.get("name") or ids[0])
+        return ids[0]
+    return "—"
+
+
+def batch_triage(packs, rules):
+    if not isinstance(packs, list) or not (2 <= len(packs) <= 10):
+        return {"status": "invalid-input", "error": "batch requires 2-10 evidence packs"}
+    rows = []
+    for position, evidence in enumerate(packs):
+        if not isinstance(evidence, dict):
+            return {"status": "invalid-input", "error": f"pack {position + 1} must be an object"}
+        result = render_card({**evidence, "quick_check": True}, rules)
+        if result.get("status") != "ok":
+            return {"status": "invalid-input", "error": f"pack {position + 1}: {result.get('status')}"}
+        level = result.get("level") or "需人工核实"
+        credit = (result.get("credit") or {}).get("score", 0)
+        if level == "高":
+            next_step = "暂缓"
+        elif level == "低" and credit >= 60:
+            next_step = "优先跟进"
+        else:
+            next_step = "先核验"
+        rows.append({
+            "index": position + 1,
+            "name": _batch_name(evidence, position + 1).replace("|", "/"),
+            "level": level,
+            "symbol": BATCH_SYMBOLS.get(level, "⚪"),
+            "credit": credit,
+            "risk": _batch_top_risk(evidence, rules).replace("|", "/"),
+            "next": next_step,
+            "risk_score": result.get("risk_score", 0),
+        })
+
+    pairs = []
+    for i in range(len(packs)):
+        for j in range(i + 1, len(packs)):
+            reasons = []
+            domain_i = _batch_email_domain(packs[i])
+            if domain_i and domain_i == _batch_email_domain(packs[j]):
+                reasons.append("邮箱域")
+            phone_i = _batch_phone(packs[i])
+            if phone_i and phone_i == _batch_phone(packs[j]):
+                reasons.append("电话")
+            if _shared_fragment(_normalized_inquiry(packs[i]), _normalized_inquiry(packs[j])):
+                reasons.append("话术片段")
+            if reasons:
+                joined = "和相同".join(reasons) if len(reasons) == 2 else "、".join(reasons)
+                pairs.append(f"第 {i + 1} 封与第 {j + 1} 封使用相同{joined}，可能来自同一来源")
+    hints = [("⚠ " + "；".join(pairs))] if pairs else []
+
+    rows.sort(key=lambda row: (BATCH_RANK.get(row["next"], 1), row["risk_score"], -row["credit"], row["index"]))
+    lines = [
+        "| # | 公司 / 邮箱域 | 等级 | 核实度 | 最大风险 | 建议 |",
+        "| --- | --- | --- | --- | --- | --- |",
+    ]
+    for row in rows:
+        lines.append(f"| {row['index']} | {row['name']} | {row['symbol']} {row['level']} | {row['credit']} | {row['risk']} | {row['next']} |")
+    if hints:
+        lines.append("")
+        lines.extend(hints)
+    lines.append("")
+    lines.append("回复序号可对该封做完整查询。")
+    return {"status": "ok", "row_count": len(rows), "rows": rows, "hints": hints, "text": "\n".join(lines)}
+
+
+VERDICT_CONTRA = ["可以付款", "可以预付", "直接付款", "倾向继续", "建议继续", "放心下单", "立即付款", "可以寄样", "可以先寄样", "可以发货", "可以生产", "放心发货", "推进", "试单", "下单", "合作", "风险可控", "可控", "试试", "试一下", "小批量", "发一批", "安排生产", "付款后就能发货"]
+VERDICT_PESSIMISTIC = ["风险高", "暂停", "停止", "拒绝", "不要付款", "不建议", "风险偏高", "多留心", "多注意"]
+DOC_CLASS_LABELS = {"office": "办公软件", "design": "图像编辑/设计软件", "scan": "扫描件", "other": "其他软件", "unknown": "未知软件"}
+FOOTPRINT_LABELS = {
+    "registry": "注册处条目",
+    "tender": "招投标公告",
+    "debarment": "禁入名单",
+    "enforcement": "监管处罚",
+    "news": "新闻",
+    "forum": "论坛",
+    "trade_data": "海关/贸易数据",
+    "scale": "规模",
+}
+MATCH_KEY_LABELS = {
+    "legal_name": "名称",
+    "address": "地址",
+    "tax_id_masked": "税号",
+    "phone": "电话",
+    "domain": "域名",
+    "person_name": "人名",
+    "registration_no": "注册号",
+}
+SOURCE_GRADE_LABELS = {"official": "官方", "third_party": "第三方", "self_declared": "自述"}
+
+
+def verdict_line(display, evidence, level, actions):
+    verdict = text(display.get("verdict"))
+    if not verdict:
+        return "", None
+    warning = None
+    hint = text(display.get("flip_hint"))
+    available = {text(item.get("id")) for item in evidence.get("evidence") or [] if isinstance(item, dict) and item.get("id")}
+    evidence_ids = display.get("evidence_ids")
+    invalid = char_length(verdict) > 60
+    if not isinstance(evidence_ids, list) or not evidence_ids or any(text(item) not in available for item in evidence_ids):
+        invalid = True
+    blocked = any(action.get("status_text") == "不建议" for action in actions)
+    if blocked and any(word in verdict or word in hint for word in VERDICT_CONTRA):
+        invalid = True
+    if level in ("低", "中") and any(word in verdict or word in hint for word in VERDICT_PESSIMISTIC):
+        invalid = True
+    if invalid:
+        warning = "invalid-display"
+        hint = ""
+        if level == "高":
+            verdict = "当前风险高，先暂停付款和寄样，补充材料后再评估"
+        elif level == "中":
+            verdict = "当前风险中等，可先小单并双确认收款账户"
+        elif level == "需人工核实":
+            verdict = "当前信息不足，先补一项关键信息再谈风险"
+        else:
+            verdict = "当前风险低，可按常规推进并双确认收款账户"
+    line = f"判断：{verdict}"
+    if hint:
+        line += f"；{hint}"
+    return line, warning
+
+
+def check_lines(evidence):
+    note_labels = {
+        "state-mismatch": "州代码与自称州不一致",
+        "format-invalid": "格式不符合规则",
+        "position-14-not-z": "第 14 位不是 Z",
+        "checksum-failed": "校验位不通过",
+        "name-suffix-mismatch": "主体类型与名称后缀不符",
+        "state-code-unknown": "州代码未收录",
+    }
+    lines = []
+    for item in evidence.get("id_checks") or []:
+        if not isinstance(item, dict) or not item.get("masked"):
+            continue
+        format_text = {True: "通过", False: "不通过"}.get(item.get("format_ok"), "未知")
+        checksum_text = {True: "通过", False: "不通过"}.get(item.get("checksum_ok"), "未知")
+        parts = [f"号码：{text(item.get('type')).upper()} {text(item.get('masked'))} 格式{format_text}，校验位{checksum_text}"]
+        if item.get("entity_type"):
+            parts.append(f"主体类型 {text(item.get('entity_type'))}")
+        if item.get("name_suffix_consistent") is False:
+            parts.append("名称后缀不一致（计分）")
+        for note in item.get("notes") or []:
+            parts.append(note_labels.get(text(note), text(note)))
+        lines.append("；".join(parts) + " [离线]")
+        if len(lines) >= 3:
+            break
+    for item in evidence.get("doc_checks") or []:
+        if len(lines) >= 3:
+            break
+        if not isinstance(item, dict):
+            continue
+        label = text(item.get("file_label") or item.get("file_name") or "文件")
+        creator = text(item.get("creator_class") or item.get("producer_class"))
+        class_label = DOC_CLASS_LABELS.get(creator, "未知软件")
+        if item.get("dates_consistent") is True:
+            note = "元数据未见矛盾"
+        elif item.get("dates_consistent") is False:
+            note = "存在可解释的差异"
+        else:
+            note = "元数据不完整或已重写；仅提示，不计分"
+        lines.append(f"文件：{label} 创建软件为{class_label}，{note} [离线]")
+    return lines
+
+
+def footprint_lines(evidence):
+    tier = (evidence.get("capabilities") or {}).get("tier")
+    if tier == "offline":
+        return []
+    items = [item for item in evidence.get("footprint") or [] if isinstance(item, dict) and item.get("result") == "hit"]
+    if not items:
+        return []
+    low_confidence = text(evidence.get("confidence")) == "低"
+    evidence_by_id = {
+        text(item.get("id")): item
+        for item in evidence.get("evidence") or []
+        if isinstance(item, dict) and text(item.get("id"))
+    }
+    lines = ["**公司公开足迹**"]
+    for position, item in enumerate(items[:3], 1):
+        probe = text(item.get("probe"))
+        label = FOOTPRINT_LABELS.get(probe, "公开记录")
+        summary = text(item.get("summary")) or "命中公开记录"
+        summary = summary.replace("|", "/")
+        grade_key = text(item.get("source_grade"))
+        if tier == "search-only" and grade_key == "official":
+            grade_key = "third_party"
+        if grade_key == "official":
+            ids = [text(eid) for eid in item.get("evidence_ids") or [] if text(eid)]
+            defaults = [SOURCE_GRADE_DEFAULT.get(text((evidence_by_id.get(eid) or {}).get("source_type")), "self_declared") for eid in ids]
+            if "official" not in defaults:
+                grade_key = "third_party" if "third_party" in defaults else "self_declared"
+            for eid in ids:
+                entry = evidence_by_id.get(eid) or {}
+                if text(entry.get("source_type")) != "user_input" and (not text(entry.get("url")) or not text(entry.get("retrieved_at"))):
+                    grade_key = "self_declared"
+        grade = SOURCE_GRADE_LABELS.get(grade_key)
+        suffix = f" [{grade}]" if grade else ""
+        keys = [MATCH_KEY_LABELS.get(text(key), text(key)) for key in item.get("matched_keys") or [] if text(key)]
+        unique_keys = {text(key) for key in item.get("matched_keys") or [] if text(key)}
+        strong = (
+            not low_confidence
+            and text(item.get("subject")) == "company"
+            and text(item.get("role")) in ("accused", "regulator_action", "registered_entity")
+            and grade_key == "official"
+            and len(unique_keys) >= 2
+            and not unique_keys <= {"legal_name", "person_name", "alias_name"}
+        )
+        scored_third = (
+            text(item.get("probe")) in ("news", "forum")
+            and text(item.get("subject")) == "company"
+            and text(item.get("role")) == "accused"
+            and grade_key == "third_party"
+            and len(unique_keys) >= 2
+        )
+        if strong or scored_third:
+            lines.append(f"{position}. {label}：{summary}{suffix} 对上：{' + '.join(keys)}")
+        else:
+            clue = ""
+            if keys:
+                clue = f"（对上：{' + '.join(keys)}）" if len(keys) >= 2 else "（对上：仅名称）"
+            lines.append(f"{position}. 线索：{label}：{summary}{suffix}，未计分{clue}")
+    return lines
+
+
+def validate_evidence_contract(evidence):
+    errors = []
+
+    def add(code, field):
+        errors.append({"code": code, "field": field})
+
+    for flag in evidence.get("flags") or []:
+        flag_id = flag if isinstance(flag, str) else (flag.get("id") if isinstance(flag, dict) else None)
+        if text(flag_id) in NEW_FLAG_IDS:
+            add("explicit-derived-flag", "flags")
+    for item in evidence.get("id_checks") or []:
+        if not isinstance(item, dict):
+            continue
+        masked = text(item.get("masked"))
+        stripped = re.sub(r"[\s\-_./•*]", "", masked)
+        if masked and (id_leak(masked) or numeric_leak(masked) or re.search(r"[0-9A-Z]{10,}", stripped, re.I)):
+            add("plaintext-id", "id_checks.masked")
+        for note in item.get("notes") or []:
+            if text_leak(note):
+                add("plaintext-id", "id_checks.notes")
+    for item in evidence.get("doc_checks") or []:
+        if isinstance(item, dict) and any(text(key).lower() == "author" for key in item):
+            add("author-not-allowed", "doc_checks.author")
+    for item in evidence.get("match_keys") or []:
+        if not isinstance(item, dict) or text(item.get("key")) != "tax_id_masked":
+            continue
+        value = text(item.get("value"))
+        if re.search(r"[0-9A-Z]{10,}", value, re.I) and not re.search(r"[•*]", value):
+            add("plaintext-tax-id", "match_keys.tax_id_masked")
+
+    for item in evidence.get("footprint") or []:
+        if isinstance(item, dict) and text_leak(item.get("summary")):
+            add("plaintext-id", "footprint.summary")
+    def scan_display(value):
+        if isinstance(value, str):
+            return text_leak(value)
+        if isinstance(value, dict):
+            return any(scan_display(item) for item in value.values())
+        if isinstance(value, list):
+            return any(scan_display(item) for item in value)
+        return False
+    if scan_display(evidence.get("display") or {}):
+        add("plaintext-id", "display")
+
+    def scan(value):
+        if isinstance(value, str):
+            return id_leak(value)
+        if isinstance(value, dict):
+            return any(scan(item) for item in value.values())
+        if isinstance(value, list):
+            return any(scan(item) for item in value)
+        return False
+
+    if scan(evidence):
+        add("plaintext-id", "evidence")
+    return errors
+
+
+def mask_log_text(value):
+    raw = text(value)
+    raw = re.sub(r"([A-Za-z0-9._%+-])[A-Za-z0-9._%+-]*(@[A-Za-z0-9.-]+\.[A-Za-z]{2,})", r"\1***\2", raw)
+    raw = re.sub(r"\+\d[\d\s().-]{6,}\d", lambda match: match.group()[:3] + "***" + match.group()[-2:], raw)
+    if text_leak(raw):
+        raw = raw[:2] + "***" + raw[-2:]
+    return raw
+
+
 def render_card(evidence, rules):
+    contract_errors = validate_evidence_contract(evidence)
+    if contract_errors:
+        return {"status": "invalid-input", "errors": contract_errors}
     display = evidence.get("display") or {}
     errors = validate_display(evidence, rules)
     if errors:
@@ -864,11 +1569,26 @@ def render_card(evidence, rules):
         return {"status": "invalid-input", "errors": incomplete_errors}
     if evidence.get("evidence") is not None and not isinstance(evidence.get("evidence"), list):
         return {"status": "invalid-input", "errors": [{"code": "invalid-input", "field": "evidence"}]}
+    capabilities = evidence.get("capabilities")
+    if capabilities is not None and (not isinstance(capabilities, dict) or capabilities.get("tier") not in ("full", "search-only", "offline")):
+        return {"status": "invalid-input", "errors": [{"code": "invalid-input", "field": "capabilities"}]}
+    search_log = evidence.get("search_log")
+    if search_log is not None and not isinstance(search_log, (dict, list)):
+        return {"status": "invalid-input", "errors": [{"code": "invalid-input", "field": "search_log"}]}
+    quick = evidence.get("quick_check") is True
+    quick_over = False
+    if quick and isinstance(search_log, dict):
+        quick_over = safe_int(search_log.get("searches")) > 0 or safe_int(search_log.get("pages", search_log.get("page_reads"))) > 0
+    elif quick and isinstance(search_log, list):
+        quick_over = len(search_log) > 0
     conflicts, conflict_errors = validate_conflicts(evidence)
     if conflict_errors:
         return {"status": "invalid-input", "errors": conflict_errors}
 
     ids = flag_ids_of(evidence)
+    derived_flags = derive_flags(evidence)
+    ids = list(dict.fromkeys(ids + [item["id"] for item in derived_flags]))
+    derived_map = {item["id"]: item for item in derived_flags}
     flag_index = {flag.get("id"): flag for flag in (rules.get("flags") or [])}
     flag_weight = lambda flag_id: (flag_index.get(flag_id) or {}).get("weight", 0)
 
@@ -899,6 +1619,13 @@ def render_card(evidence, rules):
     level = recomputed["level"]
     score = recomputed["risk_score"]
     confidence = recomputed.get("confidence") or evidence.get("confidence") or "低"
+    country_code = text((evidence.get("subject") or {}).get("country") or (evidence.get("intake") or {}).get("country"))
+    v010_signal = any(key in evidence for key in V010_KEYS) or bool(display.get("verdict")) or any(
+        isinstance(script, dict) and isinstance(script.get("localized"), dict) and script.get("localized")
+        for script in (display.get("scripts") or [])
+    )
+    if country_code and v010_signal and not country_known(country_code):
+        confidence = "中" if confidence == "高" else "低"
 
     behavior_flags = any(re.match(r"^RF-(PAY|ACC|BEH)-", flag_id) for flag_id in ids)
     behavior_status = "有异常" if behavior_flags else ("无异常" if inquiry_text(evidence) else "未核实")
@@ -919,9 +1646,14 @@ def render_card(evidence, rules):
     uncovered_text = "、".join(uncovered_sentence(entry) for entry in uncovered) if uncovered else "无"
     first_uncovered = CHECKPOINT_NAMES.get(parse_uncovered(uncovered[0])["checkpoint"], "公司注册记录") if uncovered else "公司注册记录"
     conclusion = compute_conclusion(level, actions, first_uncovered)
+    verdict_text, verdict_warning = verdict_line(display, evidence, level, actions)
 
     dim_notes = display.get("dim_notes") or {}
     new_mode = any(key in evidence for key in ("evidence", "checks_incomplete", "conflicts"))
+    v010_mode = any(key in evidence for key in V010_KEYS) or bool(display.get("verdict")) or any(
+        isinstance(script, dict) and isinstance(script.get("localized"), dict) and script.get("localized")
+        for script in (display.get("scripts") or [])
+    )
     dims = []
     for dim in credit["dims"]:
         item = dict(dim)
@@ -956,14 +1688,20 @@ def render_card(evidence, rules):
         for flag in flag_attention:
             item = {"kind": "flag", "flag_id": flag["id"], "text": ""}
             evidence_ids = flag_entries.get(flag["id"], {}).get("evidence_ids")
+            if not evidence_ids:
+                evidence_ids = derived_map.get(flag["id"], {}).get("evidence_ids")
             if isinstance(evidence_ids, list) and evidence_ids:
                 item["evidence_ids"] = evidence_ids
             attention.append(item)
     else:
         attention = [{"kind": "flag", "flag_id": flag["id"], "text": ""} for flag in flag_attention]
+    for flag in derived_flags:
+        if any(item.get("kind") == "flag" and item.get("flag_id") == flag["id"] for item in attention):
+            continue
+        attention.append({"kind": "flag", "flag_id": flag["id"], "text": "", "evidence_ids": flag.get("evidence_ids") or []})
     indexed = list(enumerate(attention))
     indexed.sort(key=lambda pair: (-(flag_weight(pair[1].get("flag_id")) if pair[1].get("kind") == "flag" else -1), pair[0]))
-    attention = [item for _, item in indexed]
+    attention = [item for _, item in indexed][:3]
 
     raw_verified = display.get("verified")
     blocked_checks = {item.get("check") for item in incomplete}
@@ -1035,12 +1773,44 @@ def render_card(evidence, rules):
     else:
         lines.append(f"## {color} {level_label} · 风险 {score}/100 {bar} ｜ 核实度 {credit['score']}/100（{credit['tier']}）{incomplete_suffix}")
     lines.append(f"置信度：{confidence}（锚点 {anchors}/3）｜覆盖：{0 if effective_covered is None else effective_covered}/{total}｜未覆盖：{uncovered_text}")
+    if capabilities and capabilities.get("tier") != "full" and not quick:
+        lines.append("本次运行能力：" + ("仅搜索" if capabilities.get("tier") == "search-only" else "离线"))
+    if quick:
+        lines.append("快查模式：未查地图、海关、社媒" + (" · ⚠ 本次未完成：检索预算已用尽" if quick_over else ""))
+    elif v010_signal and country_code and not country_known(country_code):
+        lines.append("该国暂无内置入口，已按通用流程查询")
+    search_lines = []
+    if isinstance(search_log, (dict, list)) and not quick:
+        search_lines = []
+        if isinstance(search_log, list):
+            entries = [item for item in search_log if isinstance(item, dict)]
+            searches = len(entries)
+            pages = sum(1 for item in entries if item.get("used") == "yes")
+            budget = {}
+            mode = ""
+        else:
+            searches = safe_int(search_log.get("searches"))
+            pages = safe_int(search_log.get("pages", search_log.get("page_reads")))
+            budget = search_log.get("budget") or {}
+            mode = text(search_log.get("mode"))
+        if mode == "deep":
+            max_searches, max_pages = 12, 6
+        else:
+            max_searches, max_pages = 8, 4
+        if isinstance(budget, dict):
+            max_searches = min(max_searches, safe_int(budget.get("searches"), max_searches))
+            max_pages = min(max_pages, safe_int(budget.get("pages", budget.get("page_reads")), max_pages))
+        search_lines.append(f"检索：{searches} 次，打开 {pages} 个页面")
+        if searches > max_searches or pages > max_pages:
+            search_lines.append("⚠ 本次未完成：检索预算已用尽")
     if incomplete:
         details = "；".join(
             f"{CHECK_LABELS.get(item['check'], item['check'])}未完成（{REASON_LABELS.get(item['reason'], item['reason'])}）→ {item['next_step']}"
             for item in incomplete
         )
         lines.append(f"⚠ 本次未完成：{details}")
+    if verdict_text:
+        lines.append(verdict_text)
     lines.append(f"**结论：{conclusion}** 客户：{customer_label(evidence, display)} · {inquiry_label(evidence, display)}")
     lines.append("")
     lines.append("| 动作 | 建议 | 条件 |")
@@ -1048,6 +1818,8 @@ def render_card(evidence, rules):
     for action in actions:
         condition = f" {action['condition']}" if action["condition"] else ""
         lines.append(f"| {action['label']} | {action['status']} {action['status_text']} |{condition} |")
+    if search_lines:
+        lines.append(" · ".join(search_lines))
     first_screen_lines = len(lines)
     lines.append("")
     lines.append("| 维度 | 状态 | 依据 |")
@@ -1055,11 +1827,23 @@ def render_card(evidence, rules):
     for dim in dims:
         lines.append(f"| {dim['label']} | {dim['symbol']} {dim['bar']} {dim['status']} | {dim['note']} |")
     lines.append("")
+    optional_blocks = []
     data_dates = collect_data_dates(evidence)
     if data_dates:
+        optional_blocks.append({"priority": 1, "start": len(lines), "length": 1})
         lines.append("数据日期：" + " · ".join(f"{label} {date}" for label, date in data_dates))
+    check_items = [] if quick else check_lines(evidence)
+    if check_items:
+        optional_blocks.append({"priority": 3, "start": len(lines), "length": 1 + len(check_items)})
+        lines.append("**证件与文件自检**")
+        lines.extend(check_items)
+    foot_items = [] if quick else footprint_lines(evidence)
+    if foot_items:
+        optional_blocks.append({"priority": 2, "start": len(lines), "length": len(foot_items)})
+        lines.extend(foot_items)
     flip_hint = text(display.get("flip_hint"))
-    if new_mode and flip_hint:
+    if new_mode and flip_hint and not verdict_text:
+        optional_blocks.append({"priority": 5, "start": len(lines), "length": 1})
         lines.append(f"什么会改变结论：{flip_hint}")
     lines.append("**需要注意**")
     if not attention:
@@ -1094,6 +1878,14 @@ def render_card(evidence, rules):
     if missing_overflow:
         lines.append(f"- ⚪ 另有 {missing_overflow} 项未列出")
     lines.append("")
+    if v010_mode and not quick:
+        inquiry_type = (evidence.get("intake") or {}).get("inquiry_type") or "general"
+        terms = trade_terms(level, credit["tier"], inquiry_type)
+        optional_blocks.append({"priority": 4, "start": len(lines), "length": 2 + len(terms)})
+        lines.append("**条款建议**")
+        for term in terms:
+            lines.append(f"- {term}")
+        lines.append(TRADE_TERMS_DISCLAIMER)
     if action_rows:
         lines.append("**一次动作**")
         for action in action_rows:
@@ -1121,6 +1913,48 @@ def render_card(evidence, rules):
     else:
         lines.append("仅为基于公开信息的风险提示，不构成法律意见。")
 
+    line_limit = 30 if quick else 50
+    for priority in (1, 2, 3, 4, 5):
+        if len(lines) <= line_limit:
+            break
+        for block in list(optional_blocks):
+            if block.get("removed") or block["priority"] != priority:
+                continue
+            start = block["start"]
+            length = block["length"]
+            del lines[start:start + length]
+            block["removed"] = True
+            for other in optional_blocks:
+                if not other.get("removed") and other["start"] > start:
+                    other["start"] = max(0, other["start"] - length)
+    while len(lines) > line_limit and lines and lines[-1] == "":
+        lines.pop()
+    if len(lines) > line_limit:
+        for index in range(len(lines) - 1, first_screen_lines - 1, -1):
+            if len(lines) <= line_limit:
+                break
+            if lines[index] == "":
+                del lines[index]
+    if quick and len(lines) > line_limit:
+        for title, stop in (("**已核实**", "**没查到（没查到不代表没问题）**"), ("**一次动作**", "**建议这样回复（任选）**")):
+            if len(lines) <= line_limit:
+                break
+            start = next((index for index, line in enumerate(lines) if line == title), None)
+            if start is None:
+                continue
+            end = next((index for index in range(start + 1, len(lines)) if lines[index] == stop), len(lines))
+            del lines[start:end]
+        while len(lines) > line_limit and lines and lines[-1] == "":
+            lines.pop()
+    if quick and len(lines) > line_limit and len(lines) > first_screen_lines + 1:
+        declaration = lines[-1]
+        body = lines[:-1]
+        while len(body) + 1 > line_limit and len(body) > first_screen_lines:
+            body.pop()
+        lines = body + [declaration]
+    if any(id_leak(line) or numeric_leak(line) for line in lines):
+        return {"status": "invalid-input", "errors": [{"code": "plaintext-id", "field": "card"}]}
+
     return {
         "status": "ok",
         "credit": {"score": credit["score"], "tier": credit["tier"]},
@@ -1132,6 +1966,8 @@ def render_card(evidence, rules):
         "conclusion": conclusion,
         "evidence_missing": evidence_missing,
         "source_grade_warnings": source_grade_warnings,
+        "verdict_warning": verdict_warning,
+        "derived_flags": [item["id"] for item in derived_flags],
         "line_count": len(lines),
         "first_screen_lines": first_screen_lines,
         "card": "\n".join(lines),
@@ -1173,6 +2009,9 @@ def build_parser():
     parser.add_argument("source", nargs="?", help="evidence pack JSON path, or - for stdin")
     parser.add_argument("--json", action="store_true", help="print computed fields and card as JSON")
     parser.add_argument("--ladder", action="store_true", help="print the full 768-combination action ladder")
+    parser.add_argument("--diff", nargs="+", metavar="PACK", help="compare old/new evidence packs, or one pack with previous")
+    parser.add_argument("--batch", nargs="+", metavar="PACK", help="triage 2-10 quick-check evidence packs, or one JSON array file")
+    parser.add_argument("--report", action="store_true", help="render the search-log appendix from the evidence pack")
     parser.add_argument("--rules", default=RULES_FILE, help="path to red_flags.json")
     return parser
 
@@ -1187,6 +2026,103 @@ def main(argv=None) -> int:
 
     if args.ladder:
         print(json.dumps({"status": "ok", "combos": ladder_combinations()}, ensure_ascii=False))
+        return 0
+    if args.diff:
+        if len(args.diff) not in (1, 2):
+            print(json.dumps({"status": "invalid-input", "error": "--diff accepts one or two evidence packs"}, ensure_ascii=False))
+            return 1
+        try:
+            packs = []
+            for path in args.diff:
+                if path == "-":
+                    packs.append(json.load(sys.stdin))
+                else:
+                    with open(path, "r", encoding="utf-8") as handle:
+                        packs.append(json.load(handle))
+        except (OSError, json.JSONDecodeError) as exc:
+            print(json.dumps({"status": "invalid-input", "error": str(exc)}, ensure_ascii=False))
+            return 1
+        if any(not isinstance(pack, dict) for pack in packs):
+            print(json.dumps({"status": "invalid-input", "error": "evidence pack must be an object"}, ensure_ascii=False))
+            return 1
+        result = diff_with_previous(packs[0]) if len(packs) == 1 else diff_packs(packs[0], packs[1])
+        if args.json or result["status"] != "ok":
+            print(json.dumps(result, ensure_ascii=False))
+        else:
+            print(result["text"])
+        return 0 if result["status"] == "ok" else 1
+    if args.batch:
+        try:
+            loaded = []
+            for path in args.batch:
+                if path == "-":
+                    loaded.append(json.load(sys.stdin))
+                else:
+                    with open(path, "r", encoding="utf-8") as handle:
+                        loaded.append(json.load(handle))
+        except (OSError, json.JSONDecodeError) as exc:
+            print(json.dumps({"status": "invalid-input", "error": str(exc)}, ensure_ascii=False))
+            return 1
+        if len(loaded) == 1:
+            packs = loaded[0]
+            if not isinstance(packs, list):
+                print(json.dumps({"status": "invalid-input", "error": "batch file must contain an array of evidence packs"}, ensure_ascii=False))
+                return 1
+        else:
+            packs = loaded
+            if any(not isinstance(pack, dict) for pack in packs):
+                print(json.dumps({"status": "invalid-input", "error": "evidence pack must be an object"}, ensure_ascii=False))
+                return 1
+        result = batch_triage(packs, rules)
+        if args.json or result["status"] != "ok":
+            print(json.dumps(result, ensure_ascii=False))
+        else:
+            print(result["text"])
+        return 0 if result["status"] == "ok" else 1
+    if args.report:
+        if not args.source:
+            print(json.dumps({"status": "invalid-input", "error": "missing evidence pack path"}, ensure_ascii=False))
+            return 1
+        try:
+            if args.source == "-":
+                evidence = json.load(sys.stdin)
+            else:
+                with open(args.source, "r", encoding="utf-8") as handle:
+                    evidence = json.load(handle)
+        except (OSError, json.JSONDecodeError) as exc:
+            print(json.dumps({"status": "invalid-input", "error": str(exc)}, ensure_ascii=False))
+            return 1
+        if not isinstance(evidence, dict):
+            print(json.dumps({"status": "invalid-input", "error": "evidence pack must be an object"}, ensure_ascii=False))
+            return 1
+        search_log = evidence.get("search_log")
+        if isinstance(search_log, dict):
+            entries = search_log.get("entries") or []
+        elif isinstance(search_log, list):
+            entries = search_log
+        else:
+            entries = []
+        entries = [item for item in entries if isinstance(item, dict)]
+        lines = [
+            "## 附录 D 检索日志与复现路径",
+            "",
+            "| # | query | tool | ts | result_count | used | note |",
+            "| --- | --- | --- | --- | --- | --- | --- |",
+        ]
+        for index, item in enumerate(entries[:50], 1):
+            cell = lambda value: mask_log_text(value).replace("|", "\\|").replace("\n", " ").replace("\r", " ")
+            lines.append(
+                f"| {index} | {cell(item.get('query'))} | {cell(item.get('tool'))} | {cell(item.get('ts'))} | "
+                f"{cell(item.get('result_count'))} | {cell(item.get('used'))} | {cell(item.get('note'))} |"
+            )
+        skipped = search_log.get("skipped") if isinstance(search_log, dict) else None
+        skipped = [item for item in (skipped or []) if isinstance(item, dict)]
+        lines.append("")
+        lines.append(f"- 检索 {len(entries)} 条；跳过 {len(skipped)} 项")
+        for item in skipped:
+            lines.append(f"- 跳过：{mask_log_text(item.get('probe'))}（{mask_log_text(item.get('reason'))}）")
+        result = {"status": "ok", "entries": len(entries), "skipped": len(skipped), "text": "\n".join(lines)}
+        print(json.dumps(result, ensure_ascii=False) if args.json else result["text"])
         return 0
     if not args.source:
         print(json.dumps({"status": "invalid-input", "error": "missing evidence pack path"}, ensure_ascii=False))

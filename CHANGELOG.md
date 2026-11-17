@@ -2,6 +2,20 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与语义化版本。迭代方案见 [docs/iteration_plan.md](docs/iteration_plan.md)（v0.4.1–v0.6.0）、[docs/iteration_plan_v0.7.md](docs/iteration_plan_v0.7.md)（v0.7.0）、[docs/iteration_plan_v0.8.md](docs/iteration_plan_v0.8.md)（v0.8.0）与 [docs/iteration_plan_v0.9.md](docs/iteration_plan_v0.9.md)（v0.9.0，含 v0.8.1）。
 
+## [0.10.0] - 2026-11-16
+
+### 新增：通用核验与决策增强（F1–F12）
+
+- 国家能力表升级到 schema 0.6.0（20 国 + `global_sources` + `rules` + 多语言关键词）；未收录国家按固定模板发现官方入口，结果标 `discovered` 且不写回仓库；新增 `identity_check country`。
+- 证件号本地自检 `identity_check idcheck`：印度 GSTIN（mod-36）与 PAN（第 4 位主体类型），只输出掩码；未核对国家返回 `no-rule`，不猜测。规则表标注 `secondary-source`。
+- 实体匹配门 `identity_check match`：仅名称不算匹配，需 ≥2 个独立键或 domain+phone；新增 8 类公司公开足迹探针、检索预算行与多语言检索词。
+- 新增 8 条官方来源红旗 `RF-FOOT-001`–`005`、`RF-ID-004`/`005`、`RF-DOC-001`（23 → 31 条）；只在匹配门通过、官方来源、主体为公司、角色为 accused/regulator_action、时间窗内且 `evidence_ids` 真实时派生。
+- 文件元数据自检 `docmeta`（标准库，只读 PDF Info，不存 Author/正文，只写“未见矛盾/存在可解释的差异”）；交易条款建议；付款画像映射既有 RF-PAY/RF-ACC 红旗。
+- 结论卡新增：判断行（`display.verdict` 与动作阶梯/证据校验，失败回退模板并记 `invalid-display`）、证件与文件自检（≤3 行）、公司公开足迹（≤3 行，线索不计分）、能力行、检索行；条款建议移到“没查到”之后。
+- 批量分诊 `--batch`（2–10 封，表 ≤12 行，重复邮箱域/电话/话术提示）；复查对比 `--diff`（≤6 行，`match_keys` 不符返回 `different-subject`）；检索日志附录 D（query/tool/ts/result_count/used/note，打码与复现路径）；客户语言话术 `scripts[].localized`（11 种语言，报告内标注“机器翻译，发出前请核对”，卡片仍只英文+中文）。
+- 能力降级：`search-only` 下官方足迹降为第三方且不派生官方来源红旗，`offline` 不渲染足迹；卡片显示“本次运行能力：仅搜索/离线”。
+- 版本号 0.10.0；评分公式、分档 0–29/30–59/60–100、权重、覆盖分母 8、核实度仅显示不计分全部未改；精简包仍 28 文件，无新增第三方依赖；新增用例 A68–A135。
+
 ## [0.9.2] - 2026-11-13
 
 ### 修复

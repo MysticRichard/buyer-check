@@ -1,0 +1,7 @@
+{
+  "id": "A86",
+  "title": "Z20–Z21 交易条款：72 种颜色×核实度档×询盘类型组合无空洞、≤2 行、带免责，且不与高等级动作矛盾",
+  "type": "trade_terms",
+  "input": {},
+  "expect": { "all_pass": true }
+}

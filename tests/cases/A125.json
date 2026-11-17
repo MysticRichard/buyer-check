@@ -1,0 +1,7 @@
+{
+  "id": "A125",
+  "title": "P3-5 RF-DOC-001：办公软件类日期矛盾同样触发（权重 1）",
+  "type": "render_card",
+  "input": { "fixture": "card_doc_office_mismatch.json" },
+  "expect": { "status": "ok", "risk_score": 9, "level": "低", "derived_flags": ["RF-DOC-001"] }
+}

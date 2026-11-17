@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Acceptance checks for the optional phone_check enrichment (H1-H5, v0.7.0).
+ * Acceptance checks for the optional phone_check enrichment (H1-H6, v0.7.0).
  *
  * H1 without the optional library the output keys match v0.6.0 exactly.
  * H2 with the library the optional fields appear.
@@ -186,11 +186,24 @@ function main() {
     examples.join(', '),
   );
 
+  // ---------- H6: Lebanon mobile numbers are 7-8 national digits ----------
+  for (const [label, run] of [
+    ['Python', runPython(python, ['phone_check.py', '+961 3 555 010', '--country', 'LB'])],
+    ['Node', runNode(['+961 3 555 010', '--country', 'LB'])],
+  ]) {
+    const result = parse(run, `lebanon ${label}`);
+    check(
+      `H6 ${label} accepts a 7-digit Lebanon mobile`,
+      result.valid === true && result.country === 'LB' && result.line_type === 'mobile',
+      JSON.stringify({ valid: result.valid, country: result.country, line_type: result.line_type }),
+    );
+  }
+
   if (failures > 0) {
     console.log(`\n${failures} failure(s), ${skipped} skipped`);
     process.exit(1);
   }
-  console.log(`\nphone_check enrichment acceptance (H1-H5) passed${skipped ? `, ${skipped} skipped` : ''}`);
+  console.log(`\nphone_check enrichment acceptance (H1-H6) passed${skipped ? `, ${skipped} skipped` : ''}`);
 }
 
 main();

@@ -1,0 +1,65 @@
+{
+  "subject": { "company": "ACME TRADING LTD", "country": "IN" },
+  "stage": "inquiry",
+  "checks": [],
+  "flags": [],
+  "anchors": { "closure": "single" },
+  "coverage": { "checked": 6, "total": 8, "uncovered": ["map:not-covered:needs-browser", "customs:not-covered:no-matrix"] },
+  "confidence": "中",
+  "layers": { "company": { "credibility": "medium" }, "person_company_link": { "strength": "medium" }, "person_authenticity": { "level": "unknown" }, "contact": { "phone_matches": true, "business_email": true, "domain_aged": true }, "compliance": { "sanctions": "clear", "negative": "clear" }, "scale": { "map": "matched", "customs": "unknown" } },
+  "as_of": "2026-11-16",
+  "evidence": [
+    { "id": "E1", "url": "https://registry.example/company/1", "retrieved_at": "2026-11-16T00:00:00Z", "source_type": "registry", "source_grade": "official" },
+    { "id": "E2", "url": "https://news.example/a", "retrieved_at": "2026-11-16T00:00:00Z", "source_type": "search", "source_grade": "third_party" },
+    { "id": "E3", "url": "https://other-news.example/b", "retrieved_at": "2026-11-16T00:00:00Z", "source_type": "search", "source_grade": "third_party" }
+  ],
+  "footprint": [
+    { "probe": "registry", "result": "hit", "subject": "company", "role": "registered_entity", "source_grade": "official", "matched_keys": ["legal_name", "address"], "evidence_ids": ["E1"], "summary": "状态存续，注册地址一致" },
+    { "probe": "enforcement", "result": "hit", "subject": "company", "role": "accused", "source_grade": "official", "matched_keys": ["legal_name", "address"], "category": "fraud", "data_as_of": "2025-01-01", "evidence_ids": ["E1"], "summary": "官方欺诈类处罚" },
+    { "probe": "news", "result": "hit", "subject": "unknown", "role": "unknown", "source_grade": "third_party", "matched_keys": ["legal_name"], "data_as_of": "2025-01-01", "evidence_ids": ["E2"], "summary": "同名公司涉诉，主体未确认" }
+  ],
+  "id_checks": [
+    { "type": "gstin", "country": "IN", "masked": "27•••••••••••ZY", "format_ok": true, "checksum_ok": true, "entity_type": "company", "name_suffix_consistent": true, "notes": [], "mode": "offline" },
+    { "type": "pan", "country": "IN", "masked": "AA••••••0A", "format_ok": true, "checksum_ok": null, "entity_type": "company", "name_suffix_consistent": true, "notes": [], "mode": "offline" },
+    { "type": "gstin", "country": "IN", "masked": "29•••••••••••ZT", "format_ok": true, "checksum_ok": true, "entity_type": "company", "name_suffix_consistent": true, "notes": [], "mode": "offline" }
+  ],
+  "doc_checks": [
+    { "file_label": "注册证书.pdf", "creator_class": "office", "dates_consistent": true, "pages": 3, "mode": "offline" },
+    { "file_label": "税务证明.pdf", "creator_class": "scan", "dates_consistent": null, "pages": 2, "mode": "offline" },
+    { "file_label": "报价单.pdf", "creator_class": "other", "dates_consistent": true, "pages": 1, "mode": "offline" }
+  ],
+  "search_log": { "searches": 9, "page_reads": 10, "budget": { "searches": 12, "page_reads": 6 } },
+  "checks_incomplete": [{ "check": "sanctions", "reason": "download-failed", "next_step": "在 OFAC 官方站按公司名手动查一次" }],
+  "conflicts": [
+    { "topic": "注册地址", "a": { "claim": "官网写孟买", "evidence_id": "E1" }, "b": { "claim": "名录写班加罗尔", "evidence_id": "E2" } },
+    { "topic": "成立年份", "a": { "claim": "官网写 2015", "evidence_id": "E1" }, "b": { "claim": "新闻写 2018", "evidence_id": "E2" } }
+  ],
+  "display": {
+    "customer_label": "ACME TRADING LTD",
+    "inquiry_type": "一般询盘",
+    "verdict": "公司层信息自洽，可以先寄样，风险可控",
+    "evidence_ids": ["E1"],
+    "flip_hint": "对方可信，可以直接付款",
+    "dim_notes": { "company": "官网与公开资料一致", "link": "邮箱与官网一致", "contact": "电话与邮箱一致", "behavior": "没有询盘原文", "compliance": "存在官方处罚记录", "scale": "地图商家页吻合" },
+    "attention": [
+      { "kind": "clue", "text": "注册地址与名录不一致", "evidence_ids": ["E2"] },
+      { "kind": "clue", "text": "成立年份有两个版本", "evidence_ids": ["E2"] },
+      { "kind": "flag", "flag_id": "RF-FOOT-001", "text": "官方欺诈类处罚", "evidence_ids": ["E1"] }
+    ],
+    "verified": [
+      { "text": "注册处条目状态存续", "evidence_ids": ["E1"] },
+      { "text": "制裁名单没有匹配", "evidence_ids": ["E1"] },
+      { "text": "官网电话与客户一致", "evidence_ids": ["E1"] }
+    ],
+    "missing": [
+      { "text": "海关公开库没有记录", "gain": 2, "action": { "label": "海关", "link_text": "在海关注册库查找", "url": "https://example.com/customs", "instruction": "回传是否有该公司进出口记录" } },
+      { "text": "地图规模未确认", "gain": 1, "action": { "label": "地图", "link_text": "在 Google 地图搜索", "url": "https://www.google.com/maps/search/ACME", "instruction": "回传建筑规模与招牌" } }
+    ],
+    "open_questions": ["注册地址", "成立年份"],
+    "scripts": [
+      { "en": "Could you confirm the registered address?", "zh": "请确认注册地址。" },
+      { "en": "Could you share the registration certificate?", "zh": "请提供注册证书。" },
+      { "en": "Could you confirm the year of establishment?", "zh": "请确认成立年份。" }
+    ]
+  }
+}

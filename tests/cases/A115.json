@@ -1,0 +1,7 @@
+{
+  "id": "A115",
+  "title": "B42 反绕过：10 位纯数字证件号（masked 或 notes）必须拒收",
+  "type": "render_card",
+  "input": { "fixture": "card_numeric_id.json" },
+  "expect": { "status": "invalid-input" }
+}

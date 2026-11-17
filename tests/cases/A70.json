@@ -1,0 +1,10 @@
+{
+  "id": "A70",
+  "title": "Z3 官方入口发现流程已写入 SKILL 与 global.md，含 discovered/automation_allowed/全球兜底",
+  "type": "doc_contains",
+  "input": {
+    "files": ["SKILL.md", "data-sources/global.md"],
+    "needles": ["官方入口", "discovered", "automation_allowed", "GLEIF", "世界银行", "不批量抓取"]
+  },
+  "expect": { "all_pass": true }
+}

@@ -1,0 +1,48 @@
+{
+  "subject": { "company": "Meridian Trade Imports Pvt Ltd", "country": "IN", "domain": "meridian-imports.example" },
+  "stage": "pre-order",
+  "match_keys": [
+    { "key": "legal_name", "value": "Meridian Trade Imports Pvt Ltd", "source_id": "E1" },
+    { "key": "address", "value": "Bengaluru, Karnataka", "source_id": "E1" }
+  ],
+  "checks": [
+    { "id": "domain", "dimension": "domain", "result": "normal" },
+    { "id": "phone", "dimension": "phone", "result": "normal" },
+    { "id": "email", "dimension": "email", "result": "normal" },
+    { "id": "sanctions", "dimension": "sanctions", "result": "normal" }
+  ],
+  "flags": [],
+  "footprint": [
+    { "probe": "registry", "result": "miss", "subject": "company", "role": "unknown", "source_grade": "official", "matched_keys": [], "evidence_ids": [] }
+  ],
+  "anchors": { "closure": "bidirectional" },
+  "coverage": { "checked": 6, "total": 8, "uncovered": ["map:not-covered:needs-browser", "customs:not-covered:no-matrix"] },
+  "confidence": "中",
+  "layers": {
+    "company": { "credibility": "medium" },
+    "person_company_link": { "strength": "weak" },
+    "person_authenticity": { "level": "unknown" },
+    "contact": { "phone_matches": true, "business_email": true, "domain_aged": false },
+    "compliance": { "sanctions": "clear", "negative": "unchecked" },
+    "scale": { "map": "matched", "customs": "consistent" }
+  },
+  "score": { "total": 5, "risk_score": 20, "level": "低" },
+  "date": "2026-11-10",
+  "display": {
+    "customer_label": "Meridian Trade Imports Pvt Ltd（印度 / 班加罗尔）",
+    "inquiry_type": "一般询盘",
+    "dim_notes": {
+      "company": "官网和注册资料都自称进口商",
+      "link": "联系人邮箱与官网一致",
+      "contact": "电话和邮箱能对上，域名较新",
+      "behavior": "没有异常付款要求",
+      "compliance": "制裁清单无匹配",
+      "scale": "地图商家页吻合"
+    },
+    "attention": [],
+    "verified": [],
+    "missing": [],
+    "open_questions": [],
+    "scripts": []
+  }
+}

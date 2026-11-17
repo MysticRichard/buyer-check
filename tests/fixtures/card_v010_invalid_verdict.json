@@ -1,0 +1,48 @@
+{
+  "subject": { "company": "Meridian Trade Imports Pvt Ltd", "country": "IN", "domain": "meridian-imports.example" },
+  "stage": "inquiry",
+  "intake": { "company": "Meridian Trade Imports Pvt Ltd", "inquiry_type": "general", "inquiry_text": "Please confirm the delivery schedule for the industrial pumps." },
+  "checks": [
+    { "id": "domain", "dimension": "domain", "result": "normal" },
+    { "id": "phone", "dimension": "phone", "result": "normal" },
+    { "id": "email", "dimension": "email", "result": "normal" }
+  ],
+  "flags": [],
+  "id_checks": [],
+  "doc_checks": [],
+  "footprint": [],
+  "evidence": [
+    { "id": "E1", "url": "https://registry.example/meridian", "retrieved_at": "2026-11-16T09:00:00Z", "source_type": "registry" }
+  ],
+  "anchors": { "closure": "bidirectional" },
+  "coverage": { "checked": 6, "total": 8, "uncovered": ["map:not-covered:needs-browser", "customs:not-covered:no-matrix"] },
+  "confidence": "中",
+  "layers": {
+    "company": { "credibility": "medium" },
+    "person_company_link": { "strength": "medium" },
+    "person_authenticity": { "level": "unknown" },
+    "contact": { "phone_matches": true, "business_email": true, "domain_aged": true },
+    "compliance": { "sanctions": "clear", "negative": "clear" },
+    "scale": { "map": "matched", "customs": "consistent" }
+  },
+  "display": {
+    "customer_label": "Meridian Trade Imports（印度 / 班加罗尔）",
+    "inquiry_type": "一般询盘",
+    "verdict": "可以直接付款，风险很低",
+    "evidence_ids": ["E1"],
+    "flip_hint": "税号在官方库核验有效后，核实度可升为高",
+    "dim_notes": {
+      "company": "官网和注册资料都自称进口商",
+      "link": "联系人邮箱与官网一致",
+      "contact": "电话和邮箱能对上",
+      "behavior": "没有异常付款要求",
+      "compliance": "制裁清单无匹配",
+      "scale": "地图商家页吻合"
+    },
+    "attention": [],
+    "verified": [{ "text": "注册处条目状态存续", "evidence_ids": ["E1"] }],
+    "missing": [],
+    "open_questions": [],
+    "scripts": []
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "id": "A75",
+  "title": "Z8 邻近误判：GSTIN 州代码与自称州不一致只提示 state-mismatch，不改变格式/校验结论",
+  "type": "idcheck",
+  "input": {
+    "cases": [
+      { "name": "state-mismatch", "country": "IN", "type": "gstin", "value": "27AAACA0000A1ZY", "company": "Acme Pvt Ltd", "claimed_state": "Karnataka", "expect": { "status": "ok", "format_ok": true, "checksum_ok": true, "notes_include": ["state-mismatch"] } },
+      { "name": "branch-office-gstin", "country": "IN", "type": "gstin", "value": "29AAACB0000A1ZT", "company": "Acme Pvt Ltd", "claimed_state": "Maharashtra", "expect": { "status": "ok", "format_ok": true, "checksum_ok": true, "notes_include": ["state-mismatch"] } }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

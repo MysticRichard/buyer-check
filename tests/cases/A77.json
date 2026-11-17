@@ -1,0 +1,12 @@
+{
+  "id": "A77",
+  "title": "Z28 能力行：offline 显示“本次运行能力：离线”",
+  "type": "render_card",
+  "input": { "fixture": "card_cap_offline.json" },
+  "expect": {
+    "status": "ok",
+    "card_includes": ["本次运行能力：离线"],
+    "line_count_max": 50,
+    "first_screen_max": 14
+  }
+}

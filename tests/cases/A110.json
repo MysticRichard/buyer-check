@@ -1,0 +1,13 @@
+{
+  "id": "A110",
+  "title": "Z31 快查模式：quick_check 卡片 ≤30 行、标注未查地图/海关/社媒、不输出足迹/证件/条款",
+  "type": "render_card",
+  "input": { "fixture": "card_quick.json" },
+  "expect": {
+    "status": "ok",
+    "card_includes": ["快查模式：未查地图、海关、社媒"],
+    "card_excludes": ["本次运行能力", "**公司公开足迹**", "**证件与文件自检**", "**条款建议**"],
+    "line_count_max": 30,
+    "first_screen_max": 14
+  }
+}

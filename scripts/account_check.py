@@ -192,21 +192,89 @@ def analyse(iban: Optional[str], bic: Optional[str], claimed: Optional[str]) -> 
     }
 
 
+def name_tokens(value):
+    return {token for token in re.findall(r"[a-z0-9]+", (value or "").lower()) if token not in {"co", "ltd", "llc", "inc", "plc", "pvt", "limited", "company", "trading"}}
+
+
+def analyse_payment(profile, iban=None, bic=None, claimed=None) -> dict:
+    base = analyse(iban, bic, claimed)
+    profile = profile if isinstance(profile, dict) else {}
+    company = name_tokens(profile.get("company_name"))
+    payee = name_tokens(profile.get("payee_name"))
+    union = company | payee
+    similarity = (len(company & payee) / len(union)) if union else None
+    third_party = profile.get("payee_type") == "personal" or (similarity is not None and similarity < 0.5)
+    account_mismatch = any(item.startswith("account_vs_claimed") for item in base.get("mismatches") or [])
+    method = (profile.get("method") or "").lower()
+    try:
+        deposit = float(profile.get("deposit_pct") or 0)
+    except (TypeError, ValueError):
+        deposit = 0
+    change = profile.get("requested_account_change") is True
+    urgency = profile.get("urgency_pressure") is True
+    candidates = []
+    hints = []
+    if method == "tt" and deposit >= 100:
+        candidates.append("RF-PAY-001")
+    if third_party:
+        candidates.append("RF-PAY-002")
+    if change and urgency:
+        candidates.append("RF-ACC-001")
+    if account_mismatch:
+        hints.append("account_country_mismatch")
+        if third_party:
+            candidates.append("RF-PAY-002")
+    if urgency:
+        hints.append("urgency_pressure")
+    if change:
+        hints.append("requested_account_change")
+    candidates = list(dict.fromkeys(candidates))
+    return {
+        **base,
+        "status": "ok",
+        "payment_profile": {
+            "payee_name": profile.get("payee_name"),
+            "company_name": profile.get("company_name"),
+            "method": method or None,
+            "deposit_pct": deposit,
+            "requested_account_change": change,
+            "urgency_pressure": urgency,
+            "payee_type": profile.get("payee_type"),
+        },
+        "third_party_payee": third_party,
+        "payee_similarity": round(similarity, 2) if similarity is not None else None,
+        "account_country_mismatch": account_mismatch,
+        "payment_hints": list(dict.fromkeys(hints)),
+        "flag_candidates": candidates,
+        "note": "付款画像只映射已有 RF-PAY/RF-ACC 红旗；账户号不落盘",
+    }
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Receiving account sanity check for buyer-check.")
     parser.add_argument("--iban", help="IBAN (spaces allowed; never stored)")
     parser.add_argument("--bic", help="BIC/SWIFT code")
     parser.add_argument("--country", help="buyer's claimed country ISO2, e.g. AE")
+    parser.add_argument("--profile-json", help="payment profile JSON file (offline)")
     return parser
 
 
 def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
-    if not args.iban and not args.bic:
-        print(json.dumps({"status": "error", "error": "pass --iban and/or --bic"}, ensure_ascii=False))
+    if not args.iban and not args.bic and not args.profile_json:
+        print(json.dumps({"status": "error", "error": "pass --iban and/or --bic and/or --profile-json"}, ensure_ascii=False))
         return 2
-    result = analyse(args.iban, args.bic, args.country)
-    result["status"] = "ok"
+    if args.profile_json:
+        try:
+            with open(args.profile_json, "r", encoding="utf-8") as handle:
+                profile = json.load(handle)
+        except (OSError, ValueError):
+            print(json.dumps({"status": "error", "error": "invalid profile"}, ensure_ascii=False))
+            return 2
+        result = analyse_payment(profile, args.iban, args.bic, args.country)
+    else:
+        result = analyse(args.iban, args.bic, args.country)
+        result["status"] = "ok"
     print(json.dumps(result, ensure_ascii=False))
     return 0
 

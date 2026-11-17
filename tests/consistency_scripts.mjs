@@ -160,8 +160,9 @@ let checked = 0;
   console.log(`✓ domain_similarity: ${domainChecked}/${domainCases.length} cases identical`);
 
   // ---------- render_card ----------
-  const cardFixtures = ['card_harbor.json', 'card_nordic.json', 'card_manual.json', 'legacy_card.json', 'score_mismatch.json', 'card_incomplete.json', 'card_incomplete_base.json', 'card_evidence.json', 'card_user_input.json', 'card_grades.json', 'card_independence.json', 'card_data.json', 'card_conflict.json', 'card_grey_next.json', 'card_benign.json', 'card_flip.json', 'card_bypass.json', 'card_grade_override.json', 'card_many_conflicts.json', 'card_multi_suffix.json', 'card_attention_bypass.json', 'card_explicit_blocked.json', 'card_attention_fake.json', 'card_new_domain.json'];
+  const cardFixtures = ['card_harbor.json', 'card_nordic.json', 'card_manual.json', 'legacy_card.json', 'score_mismatch.json', 'card_incomplete.json', 'card_incomplete_base.json', 'card_evidence.json', 'card_user_input.json', 'card_grades.json', 'card_independence.json', 'card_data.json', 'card_conflict.json', 'card_grey_next.json', 'card_benign.json', 'card_flip.json', 'card_bypass.json', 'card_grade_override.json', 'card_many_conflicts.json', 'card_multi_suffix.json', 'card_attention_bypass.json', 'card_explicit_blocked.json', 'card_attention_fake.json', 'card_new_domain.json', 'card_localized.json', 'card_v010_full.json', 'card_v010_invalid_verdict.json', 'card_new_flags_positive.json', 'card_footprint_search_only.json', 'card_footprint_offline.json', 'card_footprint_positive.json', 'card_footprint_negative.json', 'card_footprint_spoof.json', 'card_inject_flag.json', 'card_spoof_grade.json', 'card_gate_bypass.json', 'card_search_only_scale.json', 'card_plaintext_id.json', 'card_overflow_verdict.json', 'card_media_group.json', 'card_quick.json', 'card_text_leak.json', 'card_same_domain_group.json', 'card_user_input_no_url.json', 'card_local_flags.json', 'card_numeric_id.json', 'card_taildot_domain.json', 'card_quick_footprint.json', 'card_match_subset.json', 'card_numeric_false_positive.json', 'card_time_window.json', 'card_masked_alnum.json', 'card_standard_budget.json', 'card_no_match_keys.json', 'card_doc_office_mismatch.json', 'card_note_humanize.json', 'card_no_asof_timestamp.json', 'card_masked_dash.json', 'card_first_screen_combo.json', 'card_low_confidence_footprint.json', 'card_verdict_synonym.json', 'card_text_leak_verdict.json', 'card_deep_budget.json', 'card_notes_pan.json'];
   let cardChecked = 0;
+  const cardFailuresBefore = failures;
   for (const fixture of cardFixtures) {
     const [py, js] = runScript(python, 'render_card', [join(ROOT, 'tests', 'fixtures', fixture), '--json']);
     compare(`render_card ${fixture}`, py, js);
@@ -169,7 +170,8 @@ let checked = 0;
   }
   const [pyLadder, jsLadder] = runScript(python, 'render_card', ['--ladder']);
   compare('render_card --ladder', pyLadder, jsLadder);
-  console.log(`✓ render_card: ${cardChecked}/${cardFixtures.length} card cases + 768 ladder combinations identical`);
+  const cardOk = failures === cardFailuresBefore;
+  console.log(`${cardOk ? '✓' : '✗'} render_card: ${cardChecked}/${cardFixtures.length} card cases + 768 ladder combinations ${cardOk ? 'identical' : 'differ'}`);
 
   // ---------- ip_check ----------
   const ipCases = [

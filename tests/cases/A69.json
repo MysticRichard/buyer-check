@@ -1,0 +1,7 @@
+{
+  "id": "A69",
+  "title": "Z2 同一证据在 IN/SG/未收录国家渲染：风险分、等级、动作阶梯完全相同",
+  "type": "country_consistency",
+  "input": { "fixture": "card_harbor.json" },
+  "expect": { "all_pass": true }
+}

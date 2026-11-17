@@ -1,0 +1,7 @@
+{
+  "id": "A112",
+  "title": "Z15 反绕过：同域两个页面即使填不同 media_group 也不算独立来源",
+  "type": "render_card",
+  "input": { "fixture": "card_same_domain_group.json" },
+  "expect": { "status": "ok", "risk_score": 0, "level": "低", "derived_flags": [] }
+}

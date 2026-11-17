@@ -1,0 +1,7 @@
+{
+  "id": "A127",
+  "title": "B41 时间窗：无 as_of 但 retrieved_at 为 ISO 时间戳时，2025 记录仍应计分",
+  "type": "render_card",
+  "input": { "fixture": "card_no_asof_timestamp.json" },
+  "expect": { "status": "ok", "risk_score": 27, "level": "低", "derived_flags": ["RF-FOOT-001"] }
+}

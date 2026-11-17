@@ -1,0 +1,15 @@
+{
+  "id": "A99",
+  "title": "Z29 offline：不渲染足迹、不派生官方来源红旗，卡片标注离线",
+  "type": "render_card",
+  "input": { "fixture": "card_footprint_offline.json" },
+  "expect": {
+    "status": "ok",
+    "risk_score": 0,
+    "level": "低",
+    "card_includes": ["本次运行能力：离线"],
+    "card_excludes": ["官方认定的欺诈类记录", "**公司公开足迹**", "官方欺诈类处罚"],
+    "line_count_max": 50,
+    "first_screen_max": 14
+  }
+}

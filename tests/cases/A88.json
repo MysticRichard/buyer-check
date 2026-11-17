@@ -1,0 +1,10 @@
+{
+  "id": "A88",
+  "title": "Z26 检索日志附录：报告列出 query/tool/ts/result_count/used/note、跳过原因，卡片只给总数",
+  "type": "doc_contains",
+  "input": {
+    "files": ["report_template.md"],
+    "needles": ["附录 D 检索日志", "query", "tool", "ts", "result_count", "used", "跳过", "打码", "复现"]
+  },
+  "expect": { "all_pass": true }
+}

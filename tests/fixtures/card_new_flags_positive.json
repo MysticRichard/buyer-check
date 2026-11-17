@@ -1,0 +1,285 @@
+{
+  "subject": {
+    "company": "ACME TRADING LTD",
+    "country": "IN"
+  },
+  "stage": "inquiry",
+  "checks": [],
+  "flags": [],
+  "anchors": {
+    "closure": "single"
+  },
+  "coverage": {
+    "checked": 7,
+    "total": 8,
+    "uncovered": []
+  },
+  "confidence": "中",
+  "layers": {
+    "company": {
+      "credibility": "medium"
+    },
+    "person_company_link": {
+      "strength": "medium"
+    },
+    "person_authenticity": {
+      "level": "unknown"
+    },
+    "contact": {
+      "phone_matches": true,
+      "business_email": true,
+      "domain_aged": true
+    },
+    "compliance": {
+      "sanctions": "clear",
+      "negative": "clear"
+    },
+    "scale": {
+      "map": "unknown",
+      "customs": "unknown"
+    }
+  },
+  "as_of": "2026-11-16",
+  "evidence": [
+    {
+      "id": "E1",
+      "url": "https://registry.example/company/1",
+      "retrieved_at": "2026-11-16T00:00:00Z",
+      "source_type": "registry",
+      "source_grade": "official"
+    },
+    {
+      "id": "E2",
+      "url": "https://news.example/a",
+      "retrieved_at": "2026-11-16T00:00:00Z",
+      "source_type": "search",
+      "source_grade": "third_party",
+      "media_group": "group-a"
+    },
+    {
+      "id": "E3",
+      "url": "https://other-news.example/b",
+      "retrieved_at": "2026-11-16T00:00:00Z",
+      "source_type": "search",
+      "source_grade": "third_party",
+      "media_group": "group-b"
+    }
+  ],
+  "footprint": [
+    {
+      "probe": "enforcement",
+      "result": "hit",
+      "subject": "company",
+      "role": "accused",
+      "source_grade": "official",
+      "matched_keys": [
+        "legal_name",
+        "address"
+      ],
+      "category": "fraud",
+      "data_as_of": "2025-01-01",
+      "evidence_ids": [
+        "E1"
+      ],
+      "summary": "官方欺诈类处罚"
+    },
+    {
+      "probe": "enforcement",
+      "result": "hit",
+      "subject": "company",
+      "role": "regulator_action",
+      "source_grade": "official",
+      "matched_keys": [
+        "legal_name",
+        "address"
+      ],
+      "category": "fraud",
+      "data_as_of": "2025-01-01",
+      "evidence_ids": [
+        "E1"
+      ],
+      "summary": "监管机构处罚"
+    },
+    {
+      "probe": "debarment",
+      "result": "hit",
+      "subject": "company",
+      "role": "accused",
+      "source_grade": "official",
+      "matched_keys": [
+        "legal_name",
+        "address"
+      ],
+      "data_as_of": "2024-01-01",
+      "evidence_ids": [
+        "E1"
+      ],
+      "summary": "多边机构禁入名单"
+    },
+    {
+      "probe": "tender",
+      "result": "hit",
+      "subject": "company",
+      "role": "accused",
+      "source_grade": "official",
+      "matched_keys": [
+        "legal_name",
+        "address"
+      ],
+      "category": "fraud",
+      "data_as_of": "2025-01-01",
+      "evidence_ids": [
+        "E1"
+      ],
+      "summary": "招标材料造假公告"
+    },
+    {
+      "probe": "news",
+      "result": "hit",
+      "subject": "company",
+      "role": "accused",
+      "source_grade": "third_party",
+      "matched_keys": [
+        "legal_name",
+        "address"
+      ],
+      "data_as_of": "2025-01-01",
+      "evidence_ids": [
+        "E2",
+        "E3"
+      ],
+      "summary": "两个独立第三方来源指控同类欺诈"
+    },
+    {
+      "probe": "scale",
+      "result": "hit",
+      "subject": "company",
+      "role": "accused",
+      "source_grade": "official",
+      "matched_keys": [
+        "legal_name",
+        "address"
+      ],
+      "scale_ratio": 12,
+      "data_as_of": "2025-01-01",
+      "evidence_ids": [
+        "E1"
+      ],
+      "summary": "自称规模与官方披露相差 12 倍"
+    },
+    {
+      "probe": "enforcement",
+      "result": "hit",
+      "subject": "person",
+      "role": "accused",
+      "source_grade": "official",
+      "matched_keys": [
+        "legal_name",
+        "address"
+      ],
+      "category": "fraud",
+      "data_as_of": "2025-01-01",
+      "evidence_ids": [
+        "E1"
+      ],
+      "summary": "个人被指控，不触发公司红旗"
+    },
+    {
+      "probe": "news",
+      "result": "hit",
+      "subject": "unknown",
+      "role": "unknown",
+      "source_grade": "third_party",
+      "matched_keys": [
+        "legal_name",
+        "address"
+      ],
+      "data_as_of": "2025-01-01",
+      "evidence_ids": [
+        "E2"
+      ],
+      "summary": "主体与角色无法判断"
+    },
+    {
+      "probe": "enforcement",
+      "result": "hit",
+      "subject": "company",
+      "role": "victim",
+      "source_grade": "official",
+      "matched_keys": [
+        "legal_name",
+        "address"
+      ],
+      "category": "fraud",
+      "data_as_of": "2025-01-01",
+      "evidence_ids": [
+        "E1"
+      ],
+      "summary": "公司是受害者"
+    }
+  ],
+  "id_checks": [
+    {
+      "type": "gstin",
+      "country": "IN",
+      "masked": "27•••••••••••Z0",
+      "format_ok": true,
+      "checksum_ok": false,
+      "notes": [],
+      "mode": "offline"
+    },
+    {
+      "type": "pan",
+      "country": "IN",
+      "masked": "AA••••••0A",
+      "format_ok": true,
+      "checksum_ok": null,
+      "entity_type": "individual",
+      "name_suffix_consistent": false,
+      "notes": [],
+      "mode": "offline"
+    }
+  ],
+  "doc_checks": [
+    {
+      "file_label": "注册证书.pdf",
+      "creator_class": "design",
+      "dates_consistent": false,
+      "pages": 1,
+      "mode": "offline"
+    }
+  ],
+  "display": {
+    "customer_label": "ACME TRADING LTD",
+    "inquiry_type": "一般询盘",
+    "dim_notes": {
+      "company": "官网与公开资料一致",
+      "link": "邮箱与官网一致",
+      "contact": "电话与邮箱一致",
+      "behavior": "没有询盘原文",
+      "compliance": "存在官方处罚记录",
+      "scale": "自称规模与官方披露不符"
+    },
+    "attention": [],
+    "verified": [],
+    "missing": [
+      {
+        "text": "注册记录没有免费公开入口"
+      }
+    ],
+    "open_questions": [],
+    "scripts": []
+  },
+  "match_keys": [
+    {
+      "key": "legal_name",
+      "value": "ACME TRADING LTD",
+      "source_id": "E1"
+    },
+    {
+      "key": "address",
+      "value": "Beirut",
+      "source_id": "E1"
+    }
+  ]
+}

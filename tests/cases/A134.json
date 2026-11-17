@@ -1,0 +1,7 @@
+{
+  "id": "A134",
+  "title": "Z11 深查档：mode=deep 时 10/5 不应提示超预算",
+  "type": "render_card",
+  "input": { "fixture": "card_deep_budget.json" },
+  "expect": { "status": "ok", "card_excludes": ["本次未完成：检索预算已用尽"] }
+}

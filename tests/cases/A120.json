@@ -1,0 +1,7 @@
+{
+  "id": "A120",
+  "title": "B42 误伤回归：电话号码与时间戳形态的 10+ 位数字不当作证件号拒收",
+  "type": "render_card",
+  "input": { "fixture": "card_numeric_false_positive.json" },
+  "expect": { "status": "ok", "risk_score": 0, "level": "低" }
+}

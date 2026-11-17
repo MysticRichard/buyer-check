@@ -1,0 +1,14 @@
+{
+  "id": "A108",
+  "title": "F-08/F-09 反绕过：满组合卡片裁剪到 ≤50 行，verdict/flip_hint 矛盾回退且不渲染矛盾话术",
+  "type": "render_card",
+  "input": { "fixture": "card_overflow_verdict.json" },
+  "expect": {
+    "status": "ok",
+    "verdict_warning": "invalid-display",
+    "card_includes": ["判断：当前风险", "本次未完成：检索预算已用尽"],
+    "card_excludes": ["可以先寄样", "可以直接付款"],
+    "line_count_max": 50,
+    "first_screen_max": 14
+  }
+}

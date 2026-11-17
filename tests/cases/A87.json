@@ -1,0 +1,14 @@
+{
+  "id": "A87",
+  "title": "Z22 付款画像：全款预付、第三方收款、个人账户、换账户+催促映射到现有 RF-PAY/RF-ACC",
+  "type": "payment_profile",
+  "input": {
+    "cases": [
+      { "name": "full-prepay", "profile": { "company_name": "Acme Trading", "payee_name": "Acme Trading", "method": "tt", "deposit_pct": 100, "requested_account_change": false, "urgency_pressure": false }, "expect": { "candidates": ["RF-PAY-001"], "third_party": false } },
+      { "name": "third-party", "profile": { "company_name": "Acme Trading", "payee_name": "Other Logistics", "method": "tt", "deposit_pct": 30 }, "expect": { "candidates": ["RF-PAY-002"], "third_party": true } },
+      { "name": "personal-account", "profile": { "company_name": "Acme Trading", "payee_name": "Acme Trading", "method": "tt", "deposit_pct": 30, "payee_type": "personal" }, "expect": { "candidates": ["RF-PAY-002"], "third_party": true } },
+      { "name": "account-change-urgency", "profile": { "company_name": "Acme Trading", "payee_name": "Acme Trading", "method": "tt", "deposit_pct": 30, "requested_account_change": true, "urgency_pressure": true }, "expect": { "candidates": ["RF-ACC-001"], "hints": ["requested_account_change", "urgency_pressure"] } }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

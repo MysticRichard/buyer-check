@@ -1,0 +1,13 @@
+{
+  "id": "A81",
+  "title": "Z16 正例：官方匹配门通过的欺诈类处罚触发 RF-FOOT-001，卡片显示名称/官方/可能无害",
+  "type": "render_card",
+  "input": { "fixture": "card_footprint_positive.json" },
+  "expect": {
+    "status": "ok",
+    "risk_score": 27,
+    "level": "低",
+    "card_includes": ["官方认定的欺诈类记录（RF-FOOT-001）", "[官方]", "可能无害"],
+    "line_count_max": 50
+  }
+}

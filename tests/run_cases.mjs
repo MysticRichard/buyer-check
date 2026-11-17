@@ -25,11 +25,13 @@ import { analyse as whoisAnalyse } from '../scripts/whois_lookup.mjs';
 let renderCard = null;
 let ladderCombinations = null;
 let containsFullPhone = null;
+let tradeTerms = null;
 try {
   const module = await import('../scripts/render_card.mjs');
   renderCard = module.renderCard;
   ladderCombinations = module.ladderCombinations;
   containsFullPhone = module.containsFullPhone;
+  tradeTerms = module.tradeTerms;
 } catch {
   // The lean submission bundle ships only render_card.py.
 }
@@ -530,6 +532,8 @@ const runners = {
     if (expect.line_count_max !== undefined) checks.push(result.line_count <= expect.line_count_max);
     if (expect.first_screen_max !== undefined) checks.push(result.first_screen_lines <= expect.first_screen_max);
     if (expect.evidence_missing !== undefined) checks.push(result.evidence_missing === expect.evidence_missing);
+    if (expect.verdict_warning !== undefined) checks.push((result.verdict_warning ?? null) === expect.verdict_warning);
+    if (expect.derived_flags !== undefined) checks.push(isDeepStrictEqual(result.derived_flags, expect.derived_flags));
     if (expect.declaration_count !== undefined) {
       const hits = (String(result.card || '').match(/仅基于公开信息的风险信号筛查，不构成对客户的定性。/g) || []).length;
       checks.push(hits === expect.declaration_count);
@@ -803,6 +807,398 @@ async phone_pii(testCase) {
     const checks = [matches(pythonResults)];
     if (containsFullPhone) checks.push(matches(nodeResults));
     return { ok: checks.every(Boolean), actual: { expected, node: nodeResults, python: pythonResults } };
+  },
+
+  country_capabilities(testCase) {
+    const caps = JSON.parse(readFileSync(join(ROOT, 'scripts', 'country_capabilities.json'), 'utf8'));
+    const allowedVerification = new Set(['official-page', 'secondary-source', 'unverified', 'discovered']);
+    const allowedChecksums = new Set(['none', 'gstin-mod36', 'pan-structure']);
+    const validate = (data) => {
+      const errors = [];
+      if (data.schema_version !== '0.6.0') errors.push('schema_version');
+      if (!data.countries || typeof data.countries !== 'object') errors.push('countries');
+      if (!Array.isArray(data.global_sources) || !['gleif-lei', 'worldbank-debarment', 'sanctions-lists'].every((item) => data.global_sources.includes(item))) errors.push('global_sources');
+      for (const [code, country] of Object.entries(data.countries || {})) {
+        if (typeof country.name !== 'undefined' && typeof country.name !== 'string') errors.push(`${code}.name`);
+        if (typeof country.sources !== 'undefined' && !Array.isArray(country.sources)) errors.push(`${code}.sources`);
+        if (!allowedVerification.has(country.verification)) errors.push(`${code}.verification`);
+        if (!country.registry || typeof country.registry !== 'object') errors.push(`${code}.registry`);
+        for (const key of ['registry', 'tax_verification', 'procurement', 'insolvency']) {
+          if (country[key] === undefined) continue;
+          if (!country[key] || typeof country[key] !== 'object') errors.push(`${code}.${key}`);
+          else if (country[key].verification !== undefined && !allowedVerification.has(country[key].verification)) errors.push(`${code}.${key}.verification`);
+        }
+        const registry = country.registry || {};
+        if (registry.automation_allowed === true && (registry.verification || country.verification) !== 'official-page') errors.push(`${code}.automation`);
+        if (country.discovery !== undefined && typeof country.discovery !== 'boolean') errors.push(`${code}.discovery`);
+        for (const format of country.id_formats || []) {
+          if (!format.id_type || !format.label || !Number.isInteger(format.length)) errors.push(`${code}.id_formats.fields`);
+          try { new RegExp(format.regex); } catch { errors.push(`${code}.id_formats.regex`); }
+          if (!allowedChecksums.has(format.checksum || 'none')) errors.push(`${code}.id_formats.checksum`);
+          if (format.verification !== undefined && !allowedVerification.has(format.verification)) errors.push(`${code}.id_formats.verification`);
+        }
+      }
+      return errors;
+    };
+    const errors = validate(caps);
+    const bad = cloneJson(caps);
+    bad.countries.__bad = { verification: 'made-up' };
+    const badCaught = validate(bad).length > 0;
+    const badRegex = cloneJson(caps);
+    const firstFormat = badRegex.countries.in && badRegex.countries.in.id_formats && badRegex.countries.in.id_formats[0];
+    if (firstFormat) firstFormat.regex = '([';
+    const badRegexCaught = validate(badRegex).length > 0;
+    const python = findPython();
+    const [pyCmd, ...pyRest] = (python || '').split(' ');
+    const cli = (code) => {
+      const py = spawnSync(pyCmd, [...pyRest, join(ROOT, 'scripts', 'identity_check.py'), 'country', '--code', code], { cwd: ROOT, encoding: 'utf8', timeout: 30000 });
+      const out = { python: py.stdout ? JSON.parse(py.stdout) : null };
+      const jsScript = join(ROOT, 'scripts', 'identity_check.mjs');
+      if (existsSync(jsScript)) {
+        const js = spawnSync('node', [jsScript, 'country', '--code', code], { cwd: ROOT, encoding: 'utf8', timeout: 30000 });
+        out.node = js.stdout ? JSON.parse(js.stdout) : null;
+        if (out.python && out.node) out.parity = isDeepStrictEqual(out.python, out.node);
+      }
+      return out;
+    };
+    const inResult = cli('IN');
+    const unknownResult = cli('ZZ');
+    const validateCli = () => {
+      const py = spawnSync(pyCmd, [...pyRest, join(ROOT, 'scripts', 'identity_check.py'), 'country', '--validate'], { cwd: ROOT, encoding: 'utf8', timeout: 30000 });
+      const out = { python: py.stdout ? JSON.parse(py.stdout) : null };
+      const jsScript = join(ROOT, 'scripts', 'identity_check.mjs');
+      if (existsSync(jsScript)) {
+        const js = spawnSync('node', [jsScript, 'country', '--validate'], { cwd: ROOT, encoding: 'utf8', timeout: 30000 });
+        out.node = js.stdout ? JSON.parse(js.stdout) : null;
+        if (out.python && out.node) out.parity = isDeepStrictEqual(out.python, out.node);
+      }
+      return out;
+    };
+    const validateResult = validateCli();
+    const ok = errors.length === 0
+      && badCaught
+      && badRegexCaught
+      && inResult.python?.status === 'ok'
+      && unknownResult.python?.status === 'not-in-matrix'
+      && inResult.parity !== false
+      && unknownResult.parity !== false
+      && validateResult.python?.status === 'ok'
+      && (validateResult.python?.errors || []).length === 0
+      && validateResult.parity !== false;
+    return { ok, actual: { errors, badCaught, badRegexCaught, in: inResult, unknown: unknownResult, validate: validateResult } };
+  },
+
+  country_consistency(testCase) {
+    const base = cloneJson(testCase.input.fixture_data || loadFixture(testCase.input.fixture));
+    const results = ['IN', 'SG', 'ZZ'].map((code) => {
+      const evidence = cloneJson(base);
+      evidence.subject = { ...(evidence.subject || {}), country: code };
+      const result = renderCard ? renderCard(evidence, loadRules()) : pyRenderEvidence(findPython(), evidence);
+      return { code, risk_score: result.risk_score, level: result.level, actions: result.actions };
+    });
+    const first = results[0];
+    const ok = results.every((item) => item.risk_score === first.risk_score && item.level === first.level && isDeepStrictEqual(item.actions, first.actions));
+    return { ok, actual: results };
+  },
+
+  doc_contains(testCase) {
+    const files = testCase.input.files || [];
+    const missingFile = files.find((file) => !existsSync(join(ROOT, file)));
+    if (missingFile) return { skipped: true, actual: `${missingFile} not shipped in lean bundle` };
+    const combined = files.map((file) => readFileSync(join(ROOT, file), 'utf8')).join('\n');
+    const missing = (testCase.input.needles || []).filter((needle) => !combined.includes(needle));
+    return { ok: missing.length === 0, actual: { missing } };
+  },
+
+  idcheck(testCase) {
+    const python = findPython();
+    const [pyCmd, ...pyRest] = (python || '').split(' ');
+    const calls = [];
+    const runOne = (country, type, value, company, claimedState) => {
+      const args = ['idcheck', '--country', country, '--type', type, '--value', value];
+      if (company) args.push('--company-name', company);
+      if (claimedState) args.push('--claimed-state', claimedState);
+      const py = spawnSync(pyCmd, [...pyRest, join(ROOT, 'scripts', 'identity_check.py'), ...args], { cwd: ROOT, encoding: 'utf8', timeout: 30000 });
+      const jsScript = join(ROOT, 'scripts', 'identity_check.mjs');
+      const js = existsSync(jsScript) ? spawnSync('node', [jsScript, ...args], { cwd: ROOT, encoding: 'utf8', timeout: 30000 }) : null;
+      return { py: py.stdout ? JSON.parse(py.stdout) : null, js: js && js.stdout ? JSON.parse(js.stdout) : null };
+    };
+    const checkResult = (result, expect) => {
+      if (!result) return false;
+      if (expect.status && result.status !== expect.status) return false;
+      if (expect.format_ok !== undefined && result.format_ok !== expect.format_ok) return false;
+      if (expect.checksum_ok !== undefined && result.checksum_ok !== expect.checksum_ok) return false;
+      if (expect.entity_type && result.entity_type !== expect.entity_type) return false;
+      if (expect.name_suffix_consistent !== undefined && result.name_suffix_consistent !== expect.name_suffix_consistent) return false;
+      for (const note of expect.notes_include || []) if (!(result.notes || []).includes(note)) return false;
+      if (expect.masked_prefix && !String(result.masked || '').startsWith(expect.masked_prefix)) return false;
+      return true;
+    };
+    if (testCase.input.type === 'gstin_matrix') {
+      const chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+      const check = (base) => {
+        let total = 0;
+        for (let i = 0; i < 14; i += 1) {
+          const value = chars.indexOf(base[i]);
+          const product = value * (i % 2 === 0 ? 1 : 2);
+          total += Math.floor(product / 36) + (product % 36);
+        }
+        return chars[(36 - (total % 36)) % 36];
+      };
+      for (const base of testCase.input.bases || []) {
+        const good = base + check(base);
+        const bad = base + (check(base) === '0' ? '1' : '0');
+        const valid = runOne('IN', 'gstin', good, 'Acme Pvt Ltd', null);
+        const invalid = runOne('IN', 'gstin', bad, 'Acme Pvt Ltd', null);
+        calls.push({ name: `valid-${good}`, ok: checkResult(valid.py, { status: 'ok', format_ok: true, checksum_ok: true }) && (!valid.js || checkResult(valid.js, { status: 'ok', format_ok: true, checksum_ok: true })) });
+        calls.push({ name: `invalid-${bad}`, ok: checkResult(invalid.py, { status: 'ok', format_ok: true, checksum_ok: false }) && (!invalid.js || checkResult(invalid.js, { status: 'ok', format_ok: true, checksum_ok: false })) });
+      }
+    } else {
+      for (const item of testCase.input.cases || []) {
+        const result = runOne(item.country, item.type, item.value, item.company, item.claimed_state);
+        const ok = checkResult(result.py, item.expect || {}) && (!result.js || checkResult(result.js, item.expect || {}));
+        calls.push({ name: item.name, ok, py: result.py, js: result.js });
+      }
+    }
+    return { ok: calls.every((item) => item.ok), actual: calls };
+  },
+
+  match(testCase) {
+    const python = findPython();
+    const [pyCmd, ...pyRest] = (python || '').split(' ');
+    const jsScript = join(ROOT, 'scripts', 'identity_check.mjs');
+    const outcomes = (testCase.input.cases || []).map((entry) => {
+      const dir = mkdtempSync(join(tmpdir(), 'buyer-check-match-'));
+      const buyer = join(dir, 'buyer.json');
+      const candidate = join(dir, 'candidate.json');
+      writeFileSync(buyer, JSON.stringify(entry.buyer), 'utf8');
+      writeFileSync(candidate, JSON.stringify(entry.candidate), 'utf8');
+      const args = ['match', '--buyer-json', buyer, '--candidate-json', candidate];
+      const py = spawnSync(pyCmd, [...pyRest, join(ROOT, 'scripts', 'identity_check.py'), ...args], { cwd: ROOT, encoding: 'utf8', timeout: 30000 });
+      const js = existsSync(jsScript) ? spawnSync('node', [jsScript, ...args], { cwd: ROOT, encoding: 'utf8', timeout: 30000 }) : null;
+      const pyResult = py.stdout ? JSON.parse(py.stdout) : null;
+      const jsResult = js && js.stdout ? JSON.parse(js.stdout) : null;
+      const expect = entry.expect || {};
+      const ok = pyResult && pyResult.status === 'ok'
+        && pyResult.matched === expect.matched
+        && (!expect.strength || pyResult.strength === expect.strength)
+        && (!expect.keys || isDeepStrictEqual(pyResult.keys_matched, expect.keys))
+        && (!jsResult || (jsResult.matched === pyResult.matched && isDeepStrictEqual(jsResult.keys_matched, pyResult.keys_matched) && jsResult.strength === pyResult.strength));
+      return { name: entry.name, ok, py: pyResult, js: jsResult };
+    });
+    return { ok: outcomes.every((item) => item.ok), actual: outcomes };
+  },
+
+  flag_pack(testCase) {
+    const rules = JSON.parse(readFileSync(join(ROOT, 'scripts', 'red_flags.json'), 'utf8'));
+    const byId = new Map((rules.flags || []).map((flag) => [flag.id, flag]));
+    const ids = testCase.input.ids || [];
+    const weights = testCase.input.weights || [];
+    const checks = [];
+    checks.push(ids.length === 8);
+    checks.push(new Set((rules.flags || []).map((flag) => flag.id)).size === (rules.flags || []).length);
+    ids.forEach((id, index) => {
+      const flag = byId.get(id);
+      checks.push(Boolean(flag) && flag.weight === weights[index]);
+      checks.push(Boolean(flag) && Boolean(flag.why) && Boolean(flag.benign) && Boolean(flag.flip_hint));
+    });
+    return { ok: checks.every(Boolean), actual: { total: (rules.flags || []).length, checks: checks.length } };
+  },
+
+  keywords(testCase) {
+    const python = findPython();
+    const [pyCmd, ...pyRest] = (python || '').split(' ');
+    const jsScript = join(ROOT, 'scripts', 'identity_check.mjs');
+    const outcomes = (testCase.input.cases || []).map((entry) => {
+      const args = ['keywords', '--text', entry.text, '--languages', entry.languages];
+      const py = spawnSync(pyCmd, [...pyRest, join(ROOT, 'scripts', 'identity_check.py'), ...args], { cwd: ROOT, encoding: 'utf8', timeout: 30000 });
+      const js = existsSync(jsScript) ? spawnSync('node', [jsScript, ...args], { cwd: ROOT, encoding: 'utf8', timeout: 30000 }) : null;
+      const pyResult = py.stdout ? JSON.parse(py.stdout) : null;
+      const jsResult = js && js.stdout ? JSON.parse(js.stdout) : null;
+      const probes = (pyResult?.matches || []).map((item) => item.probe);
+      const ok = pyResult?.status === 'ok'
+        && (entry.expect_probes || []).every((probe) => probes.includes(probe))
+        && (entry.expect_empty ? probes.length === 0 : true)
+        && (!jsResult || isDeepStrictEqual(jsResult.matches, pyResult.matches));
+      return { name: entry.name, ok, py: pyResult, js: jsResult };
+    });
+    return { ok: outcomes.every((item) => item.ok), actual: outcomes };
+  },
+
+  docmeta(testCase) {
+    const python = findPython();
+    const [pyCmd, ...pyRest] = (python || '').split(' ');
+    const outcomes = (testCase.input.cases || []).map((entry) => {
+      const dir = mkdtempSync(join(tmpdir(), 'buyer-check-docmeta-'));
+      const file = join(dir, `${entry.name}.pdf`);
+      writeFileSync(file, entry.pdf, 'latin1');
+      const args = ['docmeta', '--file', file];
+      if (entry.claimed_date) args.push('--claimed-date', entry.claimed_date);
+      const run = spawnSync(pyCmd, [...pyRest, join(ROOT, 'scripts', 'identity_check.py'), ...args], { cwd: ROOT, encoding: 'utf8', timeout: 30000 });
+      const result = run.stdout ? JSON.parse(run.stdout) : null;
+      const check = (result?.doc_checks || [])[0] || {};
+      const expect = entry.expect || {};
+      const ok = result?.status === 'ok'
+        && (expect.creator_class === undefined || check.creator_class === expect.creator_class)
+        && (expect.dates_consistent === undefined || check.dates_consistent === expect.dates_consistent)
+        && (expect.incremental_updates === undefined || check.incremental_updates === expect.incremental_updates)
+        && (expect.notes_include || []).every((note) => (check.notes || []).some((item) => item.includes(note)))
+        && !JSON.stringify(result).toLowerCase().includes('author')
+        && !JSON.stringify(result).includes('伪造')
+        && !JSON.stringify(result).includes('假证书');
+      return { name: entry.name, ok, result };
+    });
+    return { ok: outcomes.every((item) => item.ok), actual: outcomes };
+  },
+
+  trade_terms(testCase) {
+    if (!tradeTerms) return { skipped: true, actual: 'Node render_card.mjs not shipped' };
+    const levels = ['低', '中', '高', '需人工核实'];
+    const tiers = ['高', '中', '低'];
+    const types = ['tender', 'sample', 'large_first_order', 'account_change', 'pre_order', 'general'];
+    const failures = [];
+    for (const level of levels) {
+      for (const tier of tiers) {
+        for (const inquiryType of types) {
+          const lines = tradeTerms(level, tier, inquiryType);
+          const joined = lines.join(' ');
+          if (!lines.length || lines.length > 2) failures.push(`${level}/${tier}/${inquiryType}:count`);
+
+          if (level === '高' && (joined.includes('可以预付') || joined.includes('直接付款'))) failures.push(`${level}/${tier}/${inquiryType}:contradiction`);
+        }
+      }
+    }
+    return { ok: failures.length === 0, actual: { combos: levels.length * tiers.length * types.length, failures } };
+  },
+
+  payment_profile(testCase) {
+    const python = findPython();
+    const [pyCmd, ...pyRest] = (python || '').split(' ');
+    const outcomes = (testCase.input.cases || []).map((entry) => {
+      const dir = mkdtempSync(join(tmpdir(), 'buyer-check-payment-'));
+      const file = join(dir, 'profile.json');
+      writeFileSync(file, JSON.stringify(entry.profile), 'utf8');
+      const args = ['--profile-json', file];
+      if (entry.iban) args.push('--iban', entry.iban);
+      if (entry.country) args.push('--country', entry.country);
+      const run = spawnSync(pyCmd, [...pyRest, join(ROOT, 'scripts', 'account_check.py'), ...args], { cwd: ROOT, encoding: 'utf8', timeout: 30000 });
+      const result = run.stdout ? JSON.parse(run.stdout) : null;
+      const candidates = result?.flag_candidates || [];
+      const hints = result?.payment_hints || [];
+      const expect = entry.expect || {};
+      const ok = result?.status === 'ok'
+        && (expect.candidates || []).every((id) => candidates.includes(id))
+        && (expect.hints || []).every((hint) => hints.includes(hint))
+        && (expect.third_party === undefined || result.third_party_payee === expect.third_party);
+      return { name: entry.name, ok, result };
+    });
+    return { ok: outcomes.every((item) => item.ok), actual: outcomes };
+  },
+
+  diff(testCase) {
+    const python = findPython();
+    const [pyCmd, ...pyRest] = (python || '').split(' ');
+    const outcomes = (testCase.input.cases || []).map((entry) => {
+      const dir = mkdtempSync(join(tmpdir(), 'buyer-check-diff-'));
+      const packPath = (data, fallbackName, fileName) => {
+        if (data) {
+          const path = join(dir, fileName);
+          writeFileSync(path, JSON.stringify(data), 'utf8');
+          return path;
+        }
+        return fallbackName ? join(FIXTURES_DIR, fallbackName) : null;
+      };
+      const args = ['--diff'];
+      const oldPath = packPath(entry.old_data, entry.old, 'old.json');
+      if (oldPath) args.push(oldPath);
+      args.push(packPath(entry.new_data, entry.new, 'new.json'), '--json');
+      const hasNodeRenderer = existsSync(join(ROOT, 'scripts', 'render_card.mjs'));
+      const pyRun = spawnSync(pyCmd, [...pyRest, join(ROOT, 'scripts', 'render_card.py'), ...args], { cwd: ROOT, encoding: 'utf8', timeout: 30000 });
+      const jsRun = hasNodeRenderer ? spawnSync('node', [join(ROOT, 'scripts', 'render_card.mjs'), ...args], { cwd: ROOT, encoding: 'utf8', timeout: 30000 }) : null;
+      let py = null;
+      let js = null;
+      try { py = JSON.parse(pyRun.stdout); } catch { py = null; }
+      if (jsRun) {
+        try { js = JSON.parse(jsRun.stdout); } catch { js = null; }
+      }
+      const expect = entry.expect || {};
+      const checks = [hasNodeRenderer ? isDeepStrictEqual(py, js) : true];
+      if (expect.status !== undefined) checks.push(py?.status === expect.status);
+      if (expect.risk) checks.push(isDeepStrictEqual(py?.risk, expect.risk));
+      if (expect.verification) checks.push(isDeepStrictEqual(py?.verification, expect.verification));
+      for (const key of ['added_flags', 'removed_flags', 'footprint_added', 'footprint_removed', 'incomplete_added', 'incomplete_removed', 'changes']) {
+        if (expect[key] !== undefined) checks.push(isDeepStrictEqual(py?.[key], expect[key]));
+      }
+      if (expect.changes_max !== undefined) {
+        checks.push((py?.changes || []).length <= expect.changes_max);
+        checks.push(String(py?.text || '').split('\n').length <= 6);
+      }
+      return { name: entry.name, ok: checks.every(Boolean), py, js, exit: pyRun.status };
+    });
+    return { ok: outcomes.every((item) => item.ok), actual: outcomes };
+  },
+
+  batch(testCase) {
+    const python = findPython();
+    const [pyCmd, ...pyRest] = (python || '').split(' ');
+    const rank = { 优先跟进: 0, 先核验: 1, 暂缓: 2 };
+    const outcomes = (testCase.input.cases || []).map((entry) => {
+      const dir = mkdtempSync(join(tmpdir(), 'buyer-check-batch-'));
+      const file = join(dir, 'packs.json');
+      const packs = entry.packs_data || (entry.packs || []).map((name) => loadFixture(name));
+      writeFileSync(file, JSON.stringify(packs), 'utf8');
+      const args = ['--batch', file, '--json'];
+      const hasNodeRenderer = existsSync(join(ROOT, 'scripts', 'render_card.mjs'));
+      const pyRun = spawnSync(pyCmd, [...pyRest, join(ROOT, 'scripts', 'render_card.py'), ...args], { cwd: ROOT, encoding: 'utf8', timeout: 30000 });
+      const jsRun = hasNodeRenderer ? spawnSync('node', [join(ROOT, 'scripts', 'render_card.mjs'), ...args], { cwd: ROOT, encoding: 'utf8', timeout: 30000 }) : null;
+      let py = null;
+      let js = null;
+      try { py = JSON.parse(pyRun.stdout); } catch { py = null; }
+      if (jsRun) {
+        try { js = JSON.parse(jsRun.stdout); } catch { js = null; }
+      }
+      const expect = entry.expect || {};
+      const checks = [hasNodeRenderer ? isDeepStrictEqual(py, js) : true];
+      if (expect.status !== undefined) checks.push(py?.status === expect.status);
+      if (py?.status === 'ok' && expect.status === 'ok') {
+        if (expect.row_count !== undefined) checks.push(py.row_count === expect.row_count && (py.rows || []).length === expect.row_count);
+        if (expect.max_table_lines !== undefined) checks.push((py.rows || []).length + 2 <= expect.max_table_lines);
+        const ranks = (py.rows || []).map((row) => rank[row.next]);
+        checks.push(ranks.every((value, index) => index === 0 || ranks[index - 1] <= value));
+        if (expect.footer) checks.push(String(py.text || '').includes('回复序号可对该封做完整查询'));
+        for (const needle of expect.hints_include || []) checks.push((py.hints || []).some((hint) => hint.includes(needle)));
+      }
+      return { name: entry.name, ok: checks.every(Boolean), py, js };
+    });
+    return { ok: outcomes.every((item) => item.ok), actual: outcomes };
+  },
+
+  report(testCase) {
+    const python = findPython();
+    if (!python) return { skipped: true, actual: 'python not found' };
+    const [pyCmd, ...pyRest] = python.split(' ');
+    let fixturePath = testCase.input.fixture ? join(FIXTURES_DIR, testCase.input.fixture) : null;
+    if (testCase.input.fixture_data) {
+      const dir = mkdtempSync(join(tmpdir(), 'buyer-check-report-'));
+      fixturePath = join(dir, 'fixture.json');
+      writeFileSync(fixturePath, JSON.stringify(testCase.input.fixture_data), 'utf8');
+    }
+    const run = spawnSync(pyCmd, [...pyRest, join(ROOT, 'scripts', 'render_card.py'), '--report', fixturePath, '--json'], { cwd: ROOT, encoding: 'utf8', timeout: 30000 });
+    let result = null;
+    try { result = JSON.parse(run.stdout); } catch { result = null; }
+    let nodeResult = null;
+    if (existsSync(join(ROOT, 'scripts', 'render_card.mjs'))) {
+      const jsRun = spawnSync('node', [join(ROOT, 'scripts', 'render_card.mjs'), '--report', fixturePath, '--json'], { cwd: ROOT, encoding: 'utf8', timeout: 30000 });
+      try { nodeResult = JSON.parse(jsRun.stdout); } catch { nodeResult = null; }
+    }
+    const expect = testCase.expect || {};
+    const checks = [result?.status === 'ok'];
+    if (nodeResult) checks.push(isDeepStrictEqual(result, nodeResult));
+    if (expect.entries !== undefined) checks.push(result?.entries === expect.entries);
+    if (expect.skipped !== undefined) checks.push(result?.skipped === expect.skipped);
+    for (const needle of expect.text_includes || []) checks.push(String(result?.text || '').includes(needle));
+    for (const needle of expect.text_excludes || []) checks.push(!String(result?.text || '').includes(needle));
+    return { ok: checks.every(Boolean), actual: { status: result?.status, entries: result?.entries, skipped: result?.skipped, text: result?.text, node: nodeResult?.status } };
   },
 
   manual() {

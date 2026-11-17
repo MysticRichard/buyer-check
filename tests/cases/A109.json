@@ -1,0 +1,7 @@
+{
+  "id": "A109",
+  "title": "F-13 反绕过：同媒体集团的两个域名不算独立来源，不派生 RF-FOOT-004",
+  "type": "render_card",
+  "input": { "fixture": "card_media_group.json" },
+  "expect": { "status": "ok", "risk_score": 0, "level": "低", "derived_flags": [] }
+}

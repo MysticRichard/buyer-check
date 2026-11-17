@@ -1,0 +1,387 @@
+{
+  "subject": {
+    "company": "ACME TRADING LTD",
+    "country": "IN"
+  },
+  "stage": "inquiry",
+  "checks": [],
+  "flags": [],
+  "anchors": {
+    "closure": "single"
+  },
+  "coverage": {
+    "checked": 7,
+    "total": 8,
+    "uncovered": []
+  },
+  "confidence": "中",
+  "layers": {
+    "company": {
+      "credibility": "medium"
+    },
+    "person_company_link": {
+      "strength": "medium"
+    },
+    "person_authenticity": {
+      "level": "unknown"
+    },
+    "contact": {
+      "phone_matches": true,
+      "business_email": true,
+      "domain_aged": true
+    },
+    "compliance": {
+      "sanctions": "clear",
+      "negative": "clear"
+    },
+    "scale": {
+      "map": "unknown",
+      "customs": "unknown"
+    }
+  },
+  "as_of": "2026-11-16",
+  "evidence": [
+    {
+      "id": "E1",
+      "url": "https://registry.example/company/1",
+      "retrieved_at": "2026-11-16T00:00:00Z",
+      "source_type": "registry",
+      "source_grade": "official"
+    },
+    {
+      "id": "E2",
+      "url": "https://news.example/a",
+      "retrieved_at": "2026-11-16T00:00:00Z",
+      "source_type": "search",
+      "source_grade": "third_party"
+    }
+  ],
+  "footprint": [
+    {
+      "probe": "enforcement",
+      "subject": "company",
+      "role": "victim",
+      "source_grade": "official",
+      "matched_keys": [
+        "legal_name",
+        "address"
+      ],
+      "category": "fraud",
+      "data_as_of": "2025-01-01",
+      "evidence_ids": [
+        "E1"
+      ],
+      "summary": "公司是受害者"
+    },
+    {
+      "probe": "enforcement",
+      "subject": "other_company",
+      "role": "accused",
+      "source_grade": "official",
+      "matched_keys": [
+        "legal_name",
+        "address"
+      ],
+      "category": "fraud",
+      "data_as_of": "2025-01-01",
+      "evidence_ids": [
+        "E1"
+      ],
+      "summary": "同名其他公司"
+    },
+    {
+      "probe": "news",
+      "subject": "company",
+      "role": "accused",
+      "source_grade": "third_party",
+      "matched_keys": [
+        "legal_name",
+        "address"
+      ],
+      "data_as_of": "2025-01-01",
+      "evidence_ids": [
+        "E2"
+      ],
+      "summary": "单一第三方来源"
+    },
+    {
+      "probe": "enforcement",
+      "subject": "company",
+      "role": "accused",
+      "source_grade": "official",
+      "matched_keys": [
+        "legal_name"
+      ],
+      "category": "fraud",
+      "data_as_of": "2015-01-01",
+      "evidence_ids": [
+        "E1"
+      ],
+      "summary": "仅名称且窗外"
+    },
+    {
+      "probe": "enforcement",
+      "subject": "company",
+      "role": "regulator_action",
+      "source_grade": "official",
+      "matched_keys": [
+        "legal_name",
+        "address"
+      ],
+      "category": "safety",
+      "data_as_of": "2025-01-01",
+      "evidence_ids": [
+        "E1"
+      ],
+      "summary": "安全检查处罚"
+    },
+    {
+      "probe": "enforcement",
+      "result": "hit",
+      "subject": "company",
+      "role": "victim",
+      "source_grade": "official",
+      "matched_keys": [
+        "legal_name",
+        "address"
+      ],
+      "category": "fraud",
+      "data_as_of": "2024-01-01",
+      "evidence_ids": [
+        "E1"
+      ],
+      "summary": "受害者样例"
+    },
+    {
+      "probe": "enforcement",
+      "result": "hit",
+      "subject": "other_company",
+      "role": "accused",
+      "source_grade": "official",
+      "matched_keys": [
+        "legal_name",
+        "address"
+      ],
+      "category": "fraud",
+      "data_as_of": "2024-01-01",
+      "evidence_ids": [
+        "E1"
+      ],
+      "summary": "同名其他公司样例"
+    },
+    {
+      "probe": "news",
+      "result": "hit",
+      "subject": "company",
+      "role": "accused",
+      "source_grade": "third_party",
+      "matched_keys": [
+        "legal_name",
+        "address"
+      ],
+      "data_as_of": "2024-01-01",
+      "evidence_ids": [
+        "E2"
+      ],
+      "summary": "单一第三方样例"
+    },
+    {
+      "probe": "enforcement",
+      "result": "hit",
+      "subject": "company",
+      "role": "accused",
+      "source_grade": "official",
+      "matched_keys": [
+        "legal_name"
+      ],
+      "category": "fraud",
+      "data_as_of": "2014-01-01",
+      "evidence_ids": [
+        "E1"
+      ],
+      "summary": "仅名称且窗外样例"
+    },
+    {
+      "probe": "enforcement",
+      "result": "hit",
+      "subject": "company",
+      "role": "regulator_action",
+      "source_grade": "official",
+      "matched_keys": [
+        "legal_name",
+        "address"
+      ],
+      "category": "safety",
+      "data_as_of": "2024-01-01",
+      "evidence_ids": [
+        "E1"
+      ],
+      "summary": "安全检查样例"
+    },
+    {
+      "probe": "enforcement",
+      "result": "hit",
+      "subject": "company",
+      "role": "victim",
+      "source_grade": "official",
+      "matched_keys": [
+        "legal_name",
+        "address"
+      ],
+      "category": "fraud",
+      "data_as_of": "2025-01-01",
+      "evidence_ids": [
+        "E1"
+      ],
+      "summary": "受害者样例"
+    },
+    {
+      "probe": "enforcement",
+      "result": "hit",
+      "subject": "other_company",
+      "role": "accused",
+      "source_grade": "official",
+      "matched_keys": [
+        "legal_name",
+        "address"
+      ],
+      "category": "fraud",
+      "data_as_of": "2025-01-01",
+      "evidence_ids": [
+        "E1"
+      ],
+      "summary": "同名其他公司样例"
+    },
+    {
+      "probe": "news",
+      "result": "hit",
+      "subject": "company",
+      "role": "accused",
+      "source_grade": "third_party",
+      "matched_keys": [
+        "legal_name",
+        "address"
+      ],
+      "data_as_of": "2025-01-01",
+      "evidence_ids": [
+        "E2"
+      ],
+      "summary": "单一第三方样例"
+    },
+    {
+      "probe": "enforcement",
+      "result": "hit",
+      "subject": "company",
+      "role": "accused",
+      "source_grade": "official",
+      "matched_keys": [
+        "legal_name"
+      ],
+      "category": "fraud",
+      "data_as_of": "2015-01-01",
+      "evidence_ids": [
+        "E1"
+      ],
+      "summary": "仅名称且窗外样例"
+    },
+    {
+      "probe": "enforcement",
+      "result": "hit",
+      "subject": "company",
+      "role": "regulator_action",
+      "source_grade": "official",
+      "matched_keys": [
+        "legal_name",
+        "address"
+      ],
+      "category": "safety",
+      "data_as_of": "2025-01-01",
+      "evidence_ids": [
+        "E1"
+      ],
+      "summary": "安全检查样例"
+    },
+    {
+      "probe": "enforcement",
+      "result": "hit",
+      "subject": "company",
+      "role": "accused",
+      "source_grade": "official",
+      "matched_keys": [
+        "legal_name",
+        "address"
+      ],
+      "category": "fraud",
+      "data_as_of": "2031-01-01",
+      "evidence_ids": [
+        "E1"
+      ],
+      "summary": "两键但窗外"
+    },
+    {
+      "probe": "enforcement",
+      "result": "hit",
+      "subject": "company",
+      "role": "accused",
+      "source_grade": "official",
+      "matched_keys": [
+        "legal_name",
+        "address"
+      ],
+      "category": "fraud",
+      "data_as_of": "2016-01-01",
+      "evidence_ids": [
+        "E1"
+      ],
+      "summary": "两键但窗外"
+    },
+    {
+      "probe": "enforcement",
+      "result": "hit",
+      "subject": "company",
+      "role": "accused",
+      "source_grade": "official",
+      "matched_keys": [
+        "legal_name",
+        "address"
+      ],
+      "category": "fraud",
+      "data_as_of": "2015-01-01",
+      "evidence_ids": [
+        "E1"
+      ],
+      "summary": "两键但窗外"
+    }
+  ],
+  "display": {
+    "customer_label": "ACME TRADING LTD",
+    "inquiry_type": "一般询盘",
+    "dim_notes": {
+      "company": "官网与公开资料一致",
+      "link": "邮箱与官网一致",
+      "contact": "电话与邮箱一致",
+      "behavior": "没有询盘原文",
+      "compliance": "制裁无匹配",
+      "scale": "地图和海关都没查到"
+    },
+    "attention": [],
+    "verified": [],
+    "missing": [
+      {
+        "text": "注册记录没有免费公开入口"
+      }
+    ],
+    "open_questions": [],
+    "scripts": []
+  },
+  "match_keys": [
+    {
+      "key": "legal_name",
+      "value": "ACME TRADING LTD"
+    },
+    {
+      "key": "address",
+      "value": "Beirut"
+    }
+  ]
+}

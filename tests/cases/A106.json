@@ -1,0 +1,7 @@
+{
+  "id": "A106",
+  "title": "Z29 反绕过：search-only 下官方 scale 足迹不得派生 RF-FOOT-005",
+  "type": "render_card",
+  "input": { "fixture": "card_search_only_scale.json" },
+  "expect": { "status": "ok", "risk_score": 0, "level": "低", "derived_flags": [], "card_includes": ["本次运行能力：仅搜索"] }
+}

@@ -1,0 +1,7 @@
+{
+  "id": "A124",
+  "title": "Z15 反绕过：缺少 match_keys 时 footprint 自报两键不得派生",
+  "type": "render_card",
+  "input": { "fixture": "card_no_match_keys.json" },
+  "expect": { "status": "ok", "risk_score": 0, "level": "低", "derived_flags": [] }
+}

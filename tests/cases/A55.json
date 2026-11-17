@@ -1,6 +1,6 @@
 {
   "id": "A55",
-  "title": "Y14 红旗 why/benign：23 条齐全；卡片只给最高权重触发行追加“可能无害”",
+  "title": "Y14 红旗 why/benign：31 条齐全；卡片只给最高权重触发行追加“可能无害”",
   "type": "render_card",
   "input": { "fixture": "card_benign.json" },
   "expect": {

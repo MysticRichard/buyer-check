@@ -1,0 +1,10 @@
+{
+  "id": "A95",
+  "title": "Z24 批量分诊说明：2–10 封、≤12 行、排序、重复提示、11 封报 invalid-input",
+  "type": "doc_contains",
+  "input": {
+    "files": ["SKILL.md"],
+    "needles": ["批量快筛", "2–10 封", "≤12 行", "优先跟进", "先核验", "暂缓", "invalid-input", "回复序号可对该封做完整查询"]
+  },
+  "expect": { "all_pass": true }
+}

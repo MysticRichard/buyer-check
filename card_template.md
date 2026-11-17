@@ -68,6 +68,13 @@
   - `result`：`not-covered`（该国/该维度无覆盖）/ `unverifiable`（工具或检索受限）/ `skipped-login`（未登录跳过）。
   - `reason`：`needs-browser`（地图需浏览器/JS）/ `no-matrix`（该国不在能力矩阵）/ `no-free-data`（无免费公司级数据）/ `login-required`（社媒需登录）/ `not-provided`（用户未提供，如邮件头/电话）/ `search-blocked`（检索被验证码或限流拦截）/ `no-public-record`（已实际查询但公开无记录）/ `login-wall`（公共页被登录墙拦截）/ `no-company-level-data`（该国无公开公司级数据）/ `no-double-match`（社媒名称+电话/域名未双匹配）/ `name-only-match`（仅同名，不能算真实）。
   - 没有未覆盖项时为空数组 `[]`；**不得省略字段**。
+- 可选 `search_log`（v0.10）：`{searches, fetches, pages, budget{searches,fetches,pages}, mode?:"deep"|"standard", entries[]}`；`mode` 缺省按标准档 8 次检索/4 页，`deep` 为 12/6，`budget` 只能收紧不能放宽；`entries[]` 每项 `{query, tool, ts, result_count, used, note}`，`used` 取 `yes`/`no`，`note` 写命中摘要或跳过原因；卡片只输出总数「检索：N 次，打开 M 个页面」（超预算加一行提示），明细只进完整报告附录 D；`query`/`note` 中的个人手机号、邮箱、证件号必须打码。
+- 可选 `quick_check`（v0.10）：`true` 时按快查卡片渲染——覆盖行下显示「快查模式：未查地图、海关、社媒」，不输出公司公开足迹、证件与文件自检、条款建议，总行数裁剪到 ≤30；缺省或 `false` 时按深查 ≤50 行处理，旧包字节不变。
+- 可选 `id_checks[]` / `doc_checks[]`（v0.10）：`id_checks` 只存 `{type, country, masked, format_ok, checksum_ok, entity_type, name_suffix_consistent, notes, mode:"offline"}`，不存完整证件号；`doc_checks` 只存 `{file_label, creator_class, dates_consistent, pages, mode:"offline"}`，不存 Author 与正文。卡片在六维表下方输出「**证件与文件自检**」，最多 3 行；缺字段时整块省略，旧包输出不变。
+- 号码与文件类红旗 `RF-ID-004`/`RF-ID-005`/`RF-DOC-001` 属本地离线判定，没有 `evidence_ids` 时不得降级为「缺证据」，在「需要注意」显示并标 `[离线]`。`id_checks.masked` 去掉 `•/*` 后若仍含 10 位以上连续数字/大写字母、或 `match_keys.tax_id_masked` 为明文，整包 `invalid-input`；最终卡片也会扫一遍明文证件号。
+- 可选 `footprint[]`（v0.10）：每项 `{probe, result, subject, role, source_grade, matched_keys[], evidence_ids[], summary, data_as_of, category?, scale_ratio?}`；`category` 用于 `enforcement`/`tender` 的欺诈类判定（`fraud` 才触发 FOOT-001/003，`safety`/`labor`/`environment` 只提示），`scale_ratio` 用于 `scale` 探针（≥10 且官方来源才触发 FOOT-005）。`matched_keys` 去重后必须 ≥2、必须来自 `match_keys` 声明且不能只有名称类键。卡片在「需要注意」上方输出「**公司公开足迹**」（标题 + 最多 3 行），只展示 `result:"hit"`。官方来源、主体为公司、角色为 accused/regulator_action/registered_entity 且匹配键 ≥2 时写「对上：名称 + 地址」；否则降级为「线索：…，未计分」只提示。`result:"miss"/"skipped"` 不展示，缺失整块省略。`evidence[]` 可选 `media_group`：同一集团的不同域名填相同值；FOOT-004 要求主域不同，若填了 `media_group` 则集团还必须不同，未填时按主域判断。
+- 可选 `display.verdict`（v0.10）：≤60 字，且 `display.evidence_ids` 至少引用 1 个真实 `evidence[]` 编号；与动作阶梯矛盾（如⛔时写“可以直接付款”）、超长或引用不存在编号时回退确定性模板句，并在 `verdict_warning` 记 `invalid-display`，卡片仍正常输出。有 verdict 时 `flip_hint` 合并到同一行，后续不再单独输出「什么会改变结论」。
+- 可选 `previous`（v0.10）：仅用于 `--diff`，`{date, score, verification, red_flags[], footprint_keys[]}`；缺失时对比块整块省略且不报错。两张表的 `match_keys` 不一致时返回 `different-subject`，不输出对比。对比块只进报告 6.4（≤6 行），不改变结论卡版式与行数。
 - 可选 `checks_incomplete`（v0.9.1）：任何应跑但没跑完的检查写入 `{check, reason, next_step}`；`check` 取 `sanctions` / `registry` / `search` / `map` / `other`，`reason` 取 `no-network` / `download-failed` / `invalid-content` / `all-urls-failed` / `login-wall` / `timeout` / `stale`；`next_step` 必填且 ≤40 字。卡片覆盖行下方输出一行「⚠ 本次未完成：…」，覆盖分子减去对应检查、分母仍为 8；标题追加「· 有 N 项未完成」。旧证据包不带该字段时渲染结果与 v0.9.0 完全一致。
 - 证据强制（v0.9.1）：证据包一旦带 `evidence`，`display.attention[]` 与 `display.verified[]` 每条必须带 `evidence_ids`，每个编号必须真实存在且带 `url` + `retrieved_at`；缺编号、假编号、重复编号自动移入「没查到」并加「（缺证据）」，返回 `evidence_missing` 计数。`source_type: user_input` 可无 URL，但只能留在「需要注意」，不能进「已核实」。旧证据包不带 `evidence` 时不做强制。
 - 来源等级（v0.9.1）：`source_type` 缺省映射 `registry/sanctions_list → official`、`search/map → third_party`、`website/user_input/other → self_declared`；可用 `source_grade` 显式覆盖。条目末尾显示 `[官方]/[第三方]/[自述]`。进入「已核实」至少 1 条 `official`，或 2 条主域（eTLD+1）不同的 `third_party`；同主域多页只算一条；只有自述的移入「没查到」并写「客户自述，未证实」。
@@ -88,6 +95,8 @@
 **`intake`（模型抽取）**：`company`、`person`、`email`、`domain`、`phone`、`country`、`city`、`product`、`quantity`、`amount`、`inquiry_text`、`inquiry_type`、`best_next`。`inquiry_type` 取 `tender` / `sample` / `large_first_order` / `account_change` / `pre_order` / `general`；缺失写 `null`。不追问规则见 `SKILL.md` 第 0 步（只要公司名/域名/邮箱/电话/社媒任一存在就开始）。
 
 **`display`（模型填文字，脚本渲染）**：`customer_label`、`inquiry_type`、`dim_notes{company, link, contact, behavior, compliance, scale}`、`attention[]`、`verified[]`、`missing[]`、`open_questions[]`、`scripts[]`。
+
+**`display.scripts[]`（v0.10 本地化话术）**：每项 `{en, zh, localized?}`；`localized` 可选，只接受 `ar`/`fr`/`es`/`pt`/`ru`/`tr`/`id`/`th`/`vi`/`hi`/`zh` 为键、字符串为值。结论卡只渲染 `en` + `zh` 两行，不渲染 `localized`，旧包无此字段时输出与 v0.9.x 字节一致；`localized` 只进完整报告 6.1，且每条必须带「机器翻译，发出前请核对」。`localized` 内出现禁用词（核实/背调/怀疑/诈骗）时返回 `invalid-display`。
 
 **校验规则**：`customer_label`/`inquiry_type` ≤40 字；`dim_notes.*` 已查项必填、每项 ≤28 个汉字；`attention`/`verified`/`missing` ≤3/3/2，每条 `text` ≤30 个汉字；`attention[].kind` 取 `flag`/`clue`，`flag` 必须给 `flag_id` 且能在 `flags` 找到；`missing[].action` 四个字段齐全，`url` 为 http/https 或 `null`；`scripts` ≤3；`open_questions` 每条 ≤12 个汉字、≤3 条；所有文字不含技术词、禁用词、完整手机号和完整邮箱。
 
@@ -111,7 +120,7 @@
 
 | 规则 | 取值 |
 | --- | --- |
-| 整卡行数 | ≤45 行（含表格行）；第一屏 [1]–[4] 含未完成行 ≤14 行 |
+| 整卡行数 | 深查 ≤50 行（含表格行）；快查 ≤30 行（不进入足迹层，不输出公司公开足迹、证件与文件自检、条款建议）；第一屏 [1]–[4] 含未完成行 ≤14 行 |
 | 未完成行 | `checks_incomplete` 非空时输出一行，位于覆盖行下方；覆盖分子减去对应检查，分母仍为 8 |
 | 标题 | 二级标题；🟢 低（0–29）/ 🟡 中（30–59）/ 🔴 高（60–100）/ ⚪ 需人工核实（v0.9.1 新字段模式显示「风险 待核实」，不显示数字与分数条） |
 | 分数条 | 10 格，填充数 `floor(风险分 / 10 + 0.5)`；`■` 已填、`□` 未填；需人工核实全部 `□` |

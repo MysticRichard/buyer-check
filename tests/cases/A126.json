@@ -1,0 +1,11 @@
+{
+  "id": "A126",
+  "title": "Z8 人话化：state-mismatch 在卡片显示中文，不出现内部 code",
+  "type": "render_card",
+  "input": { "fixture": "card_note_humanize.json" },
+  "expect": {
+    "status": "ok",
+    "card_includes": ["州代码与自称州不一致"],
+    "card_excludes": ["state-mismatch"]
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "id": "A105",
+  "title": "F4 反绕过：重复键、受害者角色、缺少 data_as_of 均不派生红旗",
+  "type": "render_card",
+  "input": { "fixture": "card_gate_bypass.json" },
+  "expect": { "status": "ok", "risk_score": 0, "level": "低", "derived_flags": [] }
+}

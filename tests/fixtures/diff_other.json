@@ -1,0 +1,18 @@
+{
+  "subject": { "company": "Other Trading LLC", "country": "IN" },
+  "stage": "pre-order",
+  "match_keys": [
+    { "key": "legal_name", "value": "Other Trading LLC", "source_id": "E1" },
+    { "key": "address", "value": "Bengaluru, Karnataka", "source_id": "E1" }
+  ],
+  "checks": [],
+  "flags": [],
+  "footprint": [],
+  "anchors": { "closure": "none" },
+  "coverage": { "checked": 0, "total": 8, "uncovered": [] },
+  "confidence": "低",
+  "layers": {},
+  "score": { "total": 0, "risk_score": 0, "level": "需人工核实" },
+  "date": "2026-11-16",
+  "display": { "customer_label": "Other Trading LLC（印度）", "inquiry_type": "一般询盘", "dim_notes": {}, "attention": [], "verified": [], "missing": [], "open_questions": [], "scripts": [] }
+}

@@ -1,0 +1,7 @@
+{
+  "id": "A116",
+  "title": "Z15 反绕过：同主域尾点变体即使填不同 media_group 也不派生 FOOT-004",
+  "type": "render_card",
+  "input": { "fixture": "card_taildot_domain.json" },
+  "expect": { "status": "ok", "risk_score": 0, "level": "低", "derived_flags": [] }
+}

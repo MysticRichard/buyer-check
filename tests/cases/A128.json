@@ -1,0 +1,7 @@
+{
+  "id": "A128",
+  "title": "B42 反绕过：带连字符的完整 GSTIN 出现在 masked 时必须拒收",
+  "type": "render_card",
+  "input": { "fixture": "card_masked_dash.json" },
+  "expect": { "status": "invalid-input" }
+}

@@ -1,0 +1,7 @@
+{
+  "id": "A117",
+  "title": "Z29 反绕过：quick_check 不进入足迹层，官方 enforcement 不派生 F4 红旗",
+  "type": "render_card",
+  "input": { "fixture": "card_quick_footprint.json" },
+  "expect": { "status": "ok", "risk_score": 0, "level": "低", "derived_flags": [], "card_includes": ["快查模式：未查地图、海关、社媒"] }
+}
