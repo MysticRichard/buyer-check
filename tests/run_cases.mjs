@@ -863,14 +863,29 @@ async phone_pii(testCase) {
     };
     const inResult = cli('IN');
     const unknownResult = cli('ZZ');
+    const validateCli = () => {
+      const py = spawnSync(pyCmd, [...pyRest, join(ROOT, 'scripts', 'identity_check.py'), 'country', '--validate'], { cwd: ROOT, encoding: 'utf8', timeout: 30000 });
+      const out = { python: py.stdout ? JSON.parse(py.stdout) : null };
+      const jsScript = join(ROOT, 'scripts', 'identity_check.mjs');
+      if (existsSync(jsScript)) {
+        const js = spawnSync('node', [jsScript, 'country', '--validate'], { cwd: ROOT, encoding: 'utf8', timeout: 30000 });
+        out.node = js.stdout ? JSON.parse(js.stdout) : null;
+        if (out.python && out.node) out.parity = isDeepStrictEqual(out.python, out.node);
+      }
+      return out;
+    };
+    const validateResult = validateCli();
     const ok = errors.length === 0
       && badCaught
       && badRegexCaught
       && inResult.python?.status === 'ok'
       && unknownResult.python?.status === 'not-in-matrix'
       && inResult.parity !== false
-      && unknownResult.parity !== false;
-    return { ok, actual: { errors, badCaught, badRegexCaught, in: inResult, unknown: unknownResult } };
+      && unknownResult.parity !== false
+      && validateResult.python?.status === 'ok'
+      && (validateResult.python?.errors || []).length === 0
+      && validateResult.parity !== false;
+    return { ok, actual: { errors, badCaught, badRegexCaught, in: inResult, unknown: unknownResult, validate: validateResult } };
   },
 
   country_consistency(testCase) {

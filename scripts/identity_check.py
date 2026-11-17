@@ -639,16 +639,47 @@ DISCOVERY_TEMPLATES = [
 ]
 
 
+def validate_capabilities(data):
+    errors = []
+    allowed_verification = {"official-page", "secondary-source", "unverified", "discovered"}
+    allowed_checksum = {"none", "gstin-mod36", "pan-structure"}
+    for code, country in (data.get("countries") or {}).items():
+        if not isinstance(country, dict):
+            errors.append(f"{code}:not-object")
+            continue
+        if not isinstance(country.get("registry"), dict):
+            errors.append(f"{code}:registry")
+        if country.get("verification") not in allowed_verification:
+            errors.append(f"{code}:verification")
+        for key in ("registry", "tax_verification", "procurement", "insolvency"):
+            item = country.get(key)
+            if item is not None and (not isinstance(item, dict) or (item.get("verification") is not None and item.get("verification") not in allowed_verification)):
+                errors.append(f"{code}:{key}")
+        for fmt in country.get("id_formats") or []:
+            if not fmt.get("id_type") or not fmt.get("label") or not isinstance(fmt.get("length"), int):
+                errors.append(f"{code}:id_formats.fields")
+            try:
+                re.compile(fmt.get("regex") or "")
+            except re.error:
+                errors.append(f"{code}:id_formats.regex")
+            if (fmt.get("checksum") or "none") not in allowed_checksum:
+                errors.append(f"{code}:id_formats.checksum")
+    return errors
+
+
 def country_command(args):
-    code = (args.code or "").strip().upper()
-    if not code:
-        return {"status": "invalid-input", "error": "missing country code"}
     path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "country_capabilities.json")
     try:
         with open(path, "r", encoding="utf-8") as handle:
             data = json.load(handle)
     except (OSError, ValueError):
         return {"status": "unavailable", "error": "capabilities-unreadable"}
+    if getattr(args, "validate", False):
+        errors = validate_capabilities(data)
+        return {"status": "ok" if not errors else "invalid-input", "countries": len(data.get("countries") or {}), "errors": errors}
+    code = (args.code or "").strip().upper()
+    if not code:
+        return {"status": "invalid-input", "error": "missing country code"}
     country = (data.get("countries") or {}).get(code.lower())
     if not country:
         return {
@@ -996,6 +1027,7 @@ def build_parser():
 
     country = sub.add_parser("country", help="return a country capability profile or discovery templates")
     country.add_argument("--code")
+    country.add_argument("--validate", action="store_true")
 
     idcheck = sub.add_parser("idcheck", help="offline tax/registration ID format and checksum check")
     idcheck.add_argument("--country", required=True)

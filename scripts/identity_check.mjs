@@ -651,15 +651,40 @@ const DISCOVERY_TEMPLATES = [
   '“<country> insolvency register official”',
 ];
 
+function validateCapabilities(data) {
+  const errors = [];
+  const allowedVerification = new Set(['official-page', 'secondary-source', 'unverified', 'discovered']);
+  const allowedChecksum = new Set(['none', 'gstin-mod36', 'pan-structure']);
+  for (const [code, country] of Object.entries(data.countries || {})) {
+    if (!country || typeof country !== 'object') { errors.push(`${code}:not-object`); continue; }
+    if (!country.registry || typeof country.registry !== 'object') errors.push(`${code}:registry`);
+    if (!allowedVerification.has(country.verification)) errors.push(`${code}:verification`);
+    for (const key of ['registry', 'tax_verification', 'procurement', 'insolvency']) {
+      const item = country[key];
+      if (item !== undefined && item !== null && (typeof item !== 'object' || (item.verification !== undefined && !allowedVerification.has(item.verification)))) errors.push(`${code}:${key}`);
+    }
+    for (const fmt of country.id_formats || []) {
+      if (!fmt.id_type || !fmt.label || !Number.isInteger(fmt.length)) errors.push(`${code}:id_formats.fields`);
+      try { new RegExp(fmt.regex || ''); } catch { errors.push(`${code}:id_formats.regex`); }
+      if (!allowedChecksum.has(fmt.checksum || 'none')) errors.push(`${code}:id_formats.checksum`);
+    }
+  }
+  return errors;
+}
+
 function countryCommand(args) {
-  const code = String(args.countryCode || '').trim().toUpperCase();
-  if (!code) return { status: 'invalid-input', error: 'missing country code' };
   let data;
   try {
     data = JSON.parse(readFileSync(new URL('./country_capabilities.json', import.meta.url), 'utf8'));
   } catch {
     return { status: 'unavailable', error: 'capabilities-unreadable' };
   }
+  if (args.validate) {
+    const errors = validateCapabilities(data);
+    return { status: errors.length ? 'invalid-input' : 'ok', countries: Object.keys(data.countries || {}).length, errors };
+  }
+  const code = String(args.countryCode || '').trim().toUpperCase();
+  if (!code) return { status: 'invalid-input', error: 'missing country code' };
   const country = (data.countries || {})[code.toLowerCase()];
   if (!country) {
     return {
@@ -867,7 +892,7 @@ function usage() {
 
 function parseArgs(argv) {
   const command = argv[0];
-  const args = { command, domain: null, htmlFile: null, online: false, maxPages: 4, delay: 1, timeout: 10, text: '', paths: [], company: null, phone: null, country: null, claimedCountry: null, countryCode: null, googleKey: null, fixtureJson: null, fixtureSource: 'google_places', limit: 5, countryForId: null, idType: null, idValue: null, companyName: null, claimedState: null, buyerJson: null, candidateJson: null, languages: null };
+  const args = { command, domain: null, htmlFile: null, online: false, maxPages: 4, delay: 1, timeout: 10, text: '', paths: [], company: null, phone: null, country: null, claimedCountry: null, countryCode: null, validate: false, googleKey: null, fixtureJson: null, fixtureSource: 'google_places', limit: 5, countryForId: null, idType: null, idValue: null, companyName: null, claimedState: null, buyerJson: null, candidateJson: null, languages: null };
   for (let i = 1; i < argv.length; i += 1) {
     const token = argv[i];
     if (token === '--domain') args.domain = argv[++i];
@@ -882,6 +907,7 @@ function parseArgs(argv) {
     else if (token === '--country') { const value = argv[++i]; args.country = value; args.countryForId = value; }
     else if (token === '--claimed-country') args.claimedCountry = argv[++i];
     else if (token === '--code') args.countryCode = argv[++i];
+    else if (token === '--validate') args.validate = true;
     else if (token === '--type') args.idType = argv[++i];
     else if (token === '--value') args.idValue = argv[++i];
     else if (token === '--company-name') args.companyName = argv[++i];
