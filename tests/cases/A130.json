@@ -1,0 +1,7 @@
+{
+  "id": "A130",
+  "title": "F3 低置信度：只作线索模式，官方足迹不派生计分",
+  "type": "render_card",
+  "input": { "fixture": "card_low_confidence_footprint.json" },
+  "expect": { "status": "ok", "risk_score": 0, "level": "低", "derived_flags": [] }
+}

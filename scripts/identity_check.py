@@ -786,9 +786,15 @@ def idcheck_command(args):
     name_suffix_consistent = None
     if company and entity_type:
         corporate = any(token in normalize_company(company) for token in ("PVT", "PRIVATE", "LTD", "LIMITED", "CORP", "COMPANY"))
+        firm = any(token in normalize_company(company) for token in ("LLP", "PARTNERSHIP", "FIRM"))
+        trust = "TRUST" in normalize_company(company)
         if entity_type == "company" and not corporate:
             name_suffix_consistent = False
         elif entity_type == "individual" and corporate:
+            name_suffix_consistent = False
+        elif entity_type == "firm/LLP" and (corporate or not firm):
+            name_suffix_consistent = False
+        elif entity_type == "trust" and not trust:
             name_suffix_consistent = False
         else:
             name_suffix_consistent = True

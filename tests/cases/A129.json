@@ -1,0 +1,7 @@
+{
+  "id": "A129",
+  "title": "Z31 首屏组合：能力行+未完成+判断+检索预算并存时首屏 ≤14",
+  "type": "render_card",
+  "input": { "fixture": "card_first_screen_combo.json" },
+  "expect": { "status": "ok", "first_screen_max": 14, "line_count_max": 50 }
+}

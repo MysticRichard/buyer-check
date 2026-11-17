@@ -1,0 +1,12 @@
+{
+  "id": "A131",
+  "title": "Z5 主体类型：firm/LLP 与 trust 对 Pvt Ltd 均应判名称后缀不一致",
+  "type": "idcheck",
+  "input": {
+    "cases": [
+      { "name": "firm-vs-pvt", "country": "IN", "type": "pan", "value": "AAAFX1234F", "company": "Acme Pvt Ltd", "expect": { "status": "ok", "entity_type": "firm/LLP", "name_suffix_consistent": false } },
+      { "name": "trust-vs-pvt", "country": "IN", "type": "pan", "value": "AAATX1234T", "company": "Acme Pvt Ltd", "expect": { "status": "ok", "entity_type": "trust", "name_suffix_consistent": false } }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

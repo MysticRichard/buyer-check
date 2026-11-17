@@ -771,8 +771,12 @@ function idcheckCommand(args) {
   let nameSuffixConsistent = null;
   if (company && entityType) {
     const corporate = ['PVT', 'PRIVATE', 'LTD', 'LIMITED', 'CORP', 'COMPANY'].some((token) => normalizeCompany(company).includes(token));
+    const firm = ['LLP', 'PARTNERSHIP', 'FIRM'].some((token) => normalizeCompany(company).includes(token));
+    const trust = normalizeCompany(company).includes('TRUST');
     if (entityType === 'company' && !corporate) nameSuffixConsistent = false;
     else if (entityType === 'individual' && corporate) nameSuffixConsistent = false;
+    else if (entityType === 'firm/LLP' && (corporate || !firm)) nameSuffixConsistent = false;
+    else if (entityType === 'trust' && !trust) nameSuffixConsistent = false;
     else nameSuffixConsistent = true;
   }
   return { status: 'ok', command: 'idcheck', country, type: idType, masked: maskId(value), format_ok: formatOk, checksum_ok: checksumOk, entity_type: entityType, name_suffix_consistent: nameSuffixConsistent, state_code: stateCode, notes, mode: 'offline', rule_verification: rule.verification || 'unverified' };

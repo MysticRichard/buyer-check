@@ -1,0 +1,12 @@
+{
+  "id": "A132",
+  "title": "判断行反绕过：高风险卡写“可以先小批量试一下”必须回退模板",
+  "type": "render_card",
+  "input": { "fixture": "card_verdict_synonym.json" },
+  "expect": {
+    "status": "ok",
+    "verdict_warning": "invalid-display",
+    "card_includes": ["判断：当前风险高"],
+    "card_excludes": ["可以先小批量试一下"]
+  }
+}

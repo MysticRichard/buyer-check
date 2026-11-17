@@ -1171,11 +1171,19 @@ async phone_pii(testCase) {
     const run = spawnSync(pyCmd, [...pyRest, join(ROOT, 'scripts', 'render_card.py'), '--report', fixturePath, '--json'], { cwd: ROOT, encoding: 'utf8', timeout: 30000 });
     let result = null;
     try { result = JSON.parse(run.stdout); } catch { result = null; }
+    let nodeResult = null;
+    if (existsSync(join(ROOT, 'scripts', 'render_card.mjs'))) {
+      const jsRun = spawnSync('node', [join(ROOT, 'scripts', 'render_card.mjs'), '--report', fixturePath, '--json'], { cwd: ROOT, encoding: 'utf8', timeout: 30000 });
+      try { nodeResult = JSON.parse(jsRun.stdout); } catch { nodeResult = null; }
+    }
     const expect = testCase.expect || {};
     const checks = [result?.status === 'ok'];
+    if (nodeResult) checks.push(isDeepStrictEqual(result, nodeResult));
     if (expect.entries !== undefined) checks.push(result?.entries === expect.entries);
+    if (expect.skipped !== undefined) checks.push(result?.skipped === expect.skipped);
     for (const needle of expect.text_includes || []) checks.push(String(result?.text || '').includes(needle));
-    return { ok: checks.every(Boolean), actual: { status: result?.status, entries: result?.entries, text: result?.text } };
+    for (const needle of expect.text_excludes || []) checks.push(!String(result?.text || '').includes(needle));
+    return { ok: checks.every(Boolean), actual: { status: result?.status, entries: result?.entries, skipped: result?.skipped, text: result?.text, node: nodeResult?.status } };
   },
 
   manual() {

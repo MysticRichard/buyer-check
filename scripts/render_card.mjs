@@ -363,12 +363,12 @@ const ALLOWED_MATCH_KEYS = new Set(['legal_name', 'address', 'tax_id_masked', 'p
 const GSTIN_RE = /[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]/i;
 const PAN_RE = /[A-Z]{5}[0-9]{4}[A-Z]/i;
 const ID_NUM_RE = /(?<![A-Za-z0-9])[0-9]{10,}(?![A-Za-z0-9])/;
-const VERDICT_PESSIMISTIC = ['风险高', '暂停', '停止', '拒绝', '不要付款', '不建议'];
+const VERDICT_PESSIMISTIC = ['风险高', '暂停', '停止', '拒绝', '不要付款', '不建议', '风险偏高', '多留心', '多注意'];
 
 function idLeak(value) {
-  const raw = text(value);
-  if (GSTIN_RE.test(raw)) return true;
-  return PAN_RE.test(raw.replace(/[\s\-_./•*]/g, '')) && raw.replace(/[\s\-_./•*]/g, '').length === 10;
+  const compact = text(value).replace(/[\s\-_./•*]/g, '');
+  if (GSTIN_RE.test(compact)) return true;
+  return PAN_RE.test(compact) && compact.length === 10;
 }
 
 function numericLeak(value) {
@@ -792,7 +792,7 @@ function validateConflicts(evidence) {
 }
 
 function parseIsoDate(value) {
-  const parsed = new Date(`${text(value)}T00:00:00Z`);
+  const parsed = new Date(`${text(value).slice(0, 10)}T00:00:00Z`);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
@@ -809,6 +809,7 @@ function deriveFlags(evidence) {
   const capabilities = evidence.capabilities || {};
   const tier = capabilities.tier;
   const full = tier === undefined || tier === 'full';
+  const lowConfidence = text(evidence.confidence) === '低';
   let asOf = evidence.as_of;
   if (!asOf) {
     const dates = (evidence.evidence || [])
@@ -854,7 +855,7 @@ function deriveFlags(evidence) {
     }
     return withinYears(item.data_as_of, asOf, years);
   };
-  for (const item of ((tier === 'offline' || evidence.quick_check === true) ? [] : (evidence.footprint || []))) {
+  for (const item of ((tier === 'offline' || lowConfidence || evidence.quick_check === true) ? [] : (evidence.footprint || []))) {
     if (!item || typeof item !== 'object' || item.result !== 'hit') continue;
     let grade = item.source_grade;
     if (tier === 'search-only' && grade === 'official') grade = 'self_declared';
@@ -876,7 +877,7 @@ function deriveFlags(evidence) {
         if (domain) domains.add(domain);
         if (group) groups.add(group);
       }
-      if (domains.size >= 2 && groups.size >= 2) add('RF-FOOT-004', item.evidence_ids);
+      if (domains.size >= 2 && (groups.size === 0 || groups.size >= 2)) add('RF-FOOT-004', item.evidence_ids);
     } else if (item.probe === 'scale' && ['accused', 'regulator_action'].includes(item.role) && grade === 'official' && eligible(item, false, 5) && Number(item.scale_ratio || 0) >= 10) {
       add('RF-FOOT-005', item.evidence_ids);
     }
@@ -906,7 +907,7 @@ export function tradeTerms(level, tier, inquiryType) {
   return lines.slice(0, 2);
 }
 
-const VERDICT_CONTRA = ['可以付款', '可以预付', '直接付款', '倾向继续', '建议继续', '放心下单', '立即付款', '可以寄样', '可以先寄样', '可以发货', '可以生产', '放心发货', '推进', '试单', '下单', '合作', '风险可控', '可控', '试试', '发一批', '安排生产', '付款后就能发货'];
+const VERDICT_CONTRA = ['可以付款', '可以预付', '直接付款', '倾向继续', '建议继续', '放心下单', '立即付款', '可以寄样', '可以先寄样', '可以发货', '可以生产', '放心发货', '推进', '试单', '下单', '合作', '风险可控', '可控', '试试', '试一下', '小批量', '发一批', '安排生产', '付款后就能发货'];
 const DOC_CLASS_LABELS = { office: '办公软件', design: '图像编辑/设计软件', scan: '扫描件', other: '其他软件', unknown: '未知软件' };
 const FOOTPRINT_LABELS = {
   registry: '注册处条目',
@@ -961,6 +962,7 @@ function checkLines(evidence) {
     'position-14-not-z': '第 14 位不是 Z',
     'checksum-failed': '校验位不通过',
     'name-suffix-mismatch': '主体类型与名称后缀不符',
+    'state-code-unknown': '州代码未收录',
   };
   const lines = [];
   for (const item of evidence.id_checks || []) {
@@ -1052,7 +1054,7 @@ function validateEvidenceContract(evidence) {
   for (const item of evidence.id_checks || []) {
     if (!item || typeof item !== 'object') continue;
     const masked = text(item.masked);
-    if (masked && (idLeak(masked) || numericLeak(masked) || /[0-9A-Z]{10,}/i.test(masked.replace(/[•*]/g, '')))) add('plaintext-id', 'id_checks.masked');
+    if (masked && (idLeak(masked) || numericLeak(masked) || /[0-9A-Z]{10,}/i.test(masked.replace(/[\s\-_./•*]/g, '')))) add('plaintext-id', 'id_checks.masked');
     for (const note of item.notes || []) {
       if (idLeak(note) || numericLeak(note)) add('plaintext-id', 'id_checks.notes');
     }
@@ -1317,6 +1319,7 @@ export function renderCard(evidence, rules) {
   }
   if (quick) lines.push(`快查模式：未查地图、海关、社媒${quickOver ? ' · ⚠ 本次未完成：检索预算已用尽' : ''}`);
   else if (v010Signal && countryCode && !countryKnown(countryCode)) lines.push('该国暂无内置入口，已按通用流程查询');
+  const searchLines = [];
   if ((Array.isArray(evidence.search_log) || (evidence.search_log && typeof evidence.search_log === 'object')) && !quick) {
     let searches;
     let pages;
@@ -1338,8 +1341,8 @@ export function renderCard(evidence, rules) {
       maxSearches = Math.min(maxSearches, Number(budget.searches || maxSearches));
       maxPages = Math.min(maxPages, Number(budget.pages ?? budget.page_reads ?? maxPages));
     }
-    lines.push(`检索：${searches} 次，打开 ${pages} 个页面`);
-    if (searches > maxSearches || pages > maxPages) lines.push('⚠ 本次未完成：检索预算已用尽');
+    searchLines.push(`检索：${searches} 次，打开 ${pages} 个页面`);
+    if (searches > maxSearches || pages > maxPages) searchLines.push('⚠ 本次未完成：检索预算已用尽');
   }
   if (incomplete.items.length > 0) {
     const details = incomplete.items
@@ -1354,6 +1357,7 @@ export function renderCard(evidence, rules) {
   lines.push('| --- | --- | --- |');
   for (const action of actions) lines.push(`| ${action.label} | ${action.status} ${action.status_text} |${action.condition ? ` ${action.condition}` : ''} |`);
   const firstScreenLines = lines.length;
+  lines.push(...searchLines);
   lines.push('');
   lines.push('| 维度 | 状态 | 依据 |');
   lines.push('| --- | --- | --- |');
@@ -1720,7 +1724,7 @@ export function batchTriage(packs, rules) {
     if (!evidence || typeof evidence !== 'object' || Array.isArray(evidence)) {
       return { status: 'invalid-input', error: `pack ${position + 1} must be an object` };
     }
-    const result = renderCard(evidence, rules);
+const result = renderCard({ ...evidence, quick_check: true }, rules);
     if (result.status !== 'ok') return { status: 'invalid-input', error: `pack ${position + 1}: ${result.status}` };
     const level = result.level || '需人工核实';
     const credit = (result.credit || {}).score || 0;
@@ -1784,12 +1788,53 @@ function readInput(source) {
   return JSON.parse(raw);
 }
 
+function maskLogText(value) {
+  let raw = text(value);
+  raw = raw.replace(/([A-Za-z0-9._%+-])[A-Za-z0-9._%+-]*(@[A-Za-z0-9.-]+\.[A-Za-z]{2,})/g, '$1***$2');
+  raw = raw.replace(/\+\d[\d\s().-]{6,}\d/g, (match) => `${match.slice(0, 3)}***${match.slice(-2)}`);
+  if (idLeak(raw) || numericLeak(raw)) raw = `${raw.slice(0, 2)}***${raw.slice(-2)}`;
+  return raw;
+}
+
+export function reportAppendix(evidence) {
+  const searchLog = evidence.search_log;
+  let entries;
+  let skipped;
+  if (Array.isArray(searchLog)) {
+    entries = searchLog;
+    skipped = [];
+  } else if (searchLog && typeof searchLog === 'object') {
+    entries = Array.isArray(searchLog.entries) ? searchLog.entries : [];
+    skipped = Array.isArray(searchLog.skipped) ? searchLog.skipped : [];
+  } else {
+    entries = [];
+    skipped = [];
+  }
+  entries = entries.filter((item) => item && typeof item === 'object');
+  skipped = skipped.filter((item) => item && typeof item === 'object');
+  const cell = (value) => maskLogText(value).replace(/\|/g, '\\|').replace(/[\r\n]/g, ' ');
+  const lines = [
+    '## 附录 D 检索日志与复现路径',
+    '',
+    '| # | query | tool | ts | result_count | used | note |',
+    '| --- | --- | --- | --- | --- | --- | --- |',
+  ];
+  entries.slice(0, 50).forEach((item, index) => {
+    lines.push(`| ${index + 1} | ${cell(item.query)} | ${cell(item.tool)} | ${cell(item.ts)} | ${cell(item.result_count)} | ${cell(item.used)} | ${cell(item.note)} |`);
+  });
+  lines.push('');
+  lines.push(`- 检索 ${entries.length} 条；跳过 ${skipped.length} 项`);
+  for (const item of skipped) lines.push(`- 跳过：${maskLogText(item.probe)}（${maskLogText(item.reason)}）`);
+  return { status: 'ok', entries: entries.length, skipped: skipped.length, text: lines.join('\n') };
+}
+
 function parseArgs(argv) {
-  const args = { source: null, json: false, ladder: false, diff: [], batch: [], rules: RULES_FILE };
+  const args = { source: null, json: false, ladder: false, diff: [], batch: [], report: false, rules: RULES_FILE };
   for (let i = 0; i < argv.length; i += 1) {
     const token = argv[i];
     if (token === '--json') args.json = true;
     else if (token === '--ladder') args.ladder = true;
+    else if (token === '--report') args.report = true;
     else if (token === '--rules') args.rules = argv[++i];
     else if (token === '--diff') {
       args.diff = [];
@@ -1810,6 +1855,20 @@ function main() {
   } catch (error) {
     console.log(JSON.stringify({ status: 'invalid-input', error: String(error) }));
     return 1;
+  }
+  if (args.report) {
+    if (!args.source) {
+      console.log(JSON.stringify({ status: 'invalid-input', error: 'missing evidence pack path' }));
+      return 1;
+    }
+    const evidence = readInput(args.source);
+    if (!evidence || typeof evidence !== 'object' || Array.isArray(evidence)) {
+      console.log(JSON.stringify({ status: 'invalid-input', error: 'evidence pack must be an object' }));
+      return 1;
+    }
+    const result = reportAppendix(evidence);
+    console.log(args.json ? JSON.stringify(result) : result.text);
+    return 0;
   }
   if (args.ladder) {
     console.log(JSON.stringify({ status: 'ok', combos: ladderCombinations(0) }));
