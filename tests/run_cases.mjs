@@ -1162,7 +1162,7 @@ async phone_pii(testCase) {
     const python = findPython();
     if (!python) return { skipped: true, actual: 'python not found' };
     const [pyCmd, ...pyRest] = python.split(' ');
-    let fixturePath = join(FIXTURES_DIR, testCase.input.fixture);
+    let fixturePath = testCase.input.fixture ? join(FIXTURES_DIR, testCase.input.fixture) : null;
     if (testCase.input.fixture_data) {
       const dir = mkdtempSync(join(tmpdir(), 'buyer-check-report-'));
       fixturePath = join(dir, 'fixture.json');
