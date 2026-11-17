@@ -1,0 +1,15 @@
+{
+  "subject": { "company": "ACME TRADING LTD", "country": "IN" },
+  "stage": "inquiry",
+  "checks": [],
+  "flags": [],
+  "anchors": { "closure": "single" },
+  "coverage": { "checked": 7, "total": 8, "uncovered": [] },
+  "confidence": "中",
+  "layers": { "company": { "credibility": "medium" } },
+  "search_log": [
+    { "query": "ACME TRADING LTD registry", "tool": "search", "ts": "2026-11-16 09:00", "result_count": 3, "used": "yes", "note": "命中注册处摘要" },
+    { "query": "https://maps.google.com/?q=ACME", "tool": "map", "ts": "2026-11-16 09:05", "result_count": 0, "used": "no", "note": "跳过：需浏览器/JS" }
+  ],
+  "display": { "customer_label": "ACME TRADING LTD", "inquiry_type": "一般询盘", "dim_notes": {}, "attention": [], "verified": [], "missing": [], "open_questions": [], "scripts": [] }
+}

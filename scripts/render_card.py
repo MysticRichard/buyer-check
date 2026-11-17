@@ -1945,6 +1945,7 @@ def build_parser():
     parser.add_argument("--ladder", action="store_true", help="print the full 768-combination action ladder")
     parser.add_argument("--diff", nargs="+", metavar="PACK", help="compare old/new evidence packs, or one pack with previous")
     parser.add_argument("--batch", nargs="+", metavar="PACK", help="triage 2-10 quick-check evidence packs, or one JSON array file")
+    parser.add_argument("--report", action="store_true", help="render the search-log appendix from the evidence pack")
     parser.add_argument("--rules", default=RULES_FILE, help="path to red_flags.json")
     return parser
 
@@ -2012,6 +2013,44 @@ def main(argv=None) -> int:
         else:
             print(result["text"])
         return 0 if result["status"] == "ok" else 1
+    if args.report:
+        if not args.source:
+            print(json.dumps({"status": "invalid-input", "error": "missing evidence pack path"}, ensure_ascii=False))
+            return 1
+        try:
+            if args.source == "-":
+                evidence = json.load(sys.stdin)
+            else:
+                with open(args.source, "r", encoding="utf-8") as handle:
+                    evidence = json.load(handle)
+        except (OSError, json.JSONDecodeError) as exc:
+            print(json.dumps({"status": "invalid-input", "error": str(exc)}, ensure_ascii=False))
+            return 1
+        if not isinstance(evidence, dict):
+            print(json.dumps({"status": "invalid-input", "error": "evidence pack must be an object"}, ensure_ascii=False))
+            return 1
+        search_log = evidence.get("search_log")
+        if isinstance(search_log, dict):
+            entries = search_log.get("entries") or []
+        elif isinstance(search_log, list):
+            entries = search_log
+        else:
+            entries = []
+        entries = [item for item in entries if isinstance(item, dict)]
+        lines = [
+            "## 附录 D 检索日志与复现路径",
+            "",
+            "| # | query | tool | ts | result_count | used | note |",
+            "| --- | --- | --- | --- | --- | --- | --- |",
+        ]
+        for index, item in enumerate(entries[:50], 1):
+            lines.append(
+                f"| {index} | {text(item.get('query'))} | {text(item.get('tool'))} | {text(item.get('ts'))} | "
+                f"{text(item.get('result_count'))} | {text(item.get('used'))} | {text(item.get('note'))} |"
+            )
+        result = {"status": "ok", "entries": len(entries), "text": "\n".join(lines)}
+        print(json.dumps(result, ensure_ascii=False) if args.json else result["text"])
+        return 0
     if not args.source:
         print(json.dumps({"status": "invalid-input", "error": "missing evidence pack path"}, ensure_ascii=False))
         return 1

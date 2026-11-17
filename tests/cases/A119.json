@@ -1,0 +1,10 @@
+{
+  "id": "A119",
+  "title": "Z26 可执行报告附录 D：--report 从 search_log.entries 输出 query/tool/ts/result_count/used/note",
+  "type": "report",
+  "input": { "fixture": "card_searchlog_entries.json" },
+  "expect": {
+    "entries": 2,
+    "text_includes": ["附录 D 检索日志与复现路径", "| # | query | tool | ts | result_count | used | note |", "ACME TRADING LTD registry", "跳过：需浏览器/JS"]
+  }
+}

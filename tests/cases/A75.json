@@ -4,7 +4,8 @@
   "type": "idcheck",
   "input": {
     "cases": [
-      { "name": "state-mismatch", "country": "IN", "type": "gstin", "value": "27AAACA0000A1ZY", "company": "Acme Pvt Ltd", "claimed_state": "Karnataka", "expect": { "status": "ok", "format_ok": true, "checksum_ok": true, "notes_include": ["state-mismatch"] } }
+      { "name": "state-mismatch", "country": "IN", "type": "gstin", "value": "27AAACA0000A1ZY", "company": "Acme Pvt Ltd", "claimed_state": "Karnataka", "expect": { "status": "ok", "format_ok": true, "checksum_ok": true, "notes_include": ["state-mismatch"] } },
+      { "name": "branch-office-gstin", "country": "IN", "type": "gstin", "value": "29AAACB0000A1ZT", "company": "Acme Pvt Ltd", "claimed_state": "Maharashtra", "expect": { "status": "ok", "format_ok": true, "checksum_ok": true, "notes_include": ["state-mismatch"] } }
     ]
   },
   "expect": { "all_pass": true }

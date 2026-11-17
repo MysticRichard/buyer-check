@@ -1158,6 +1158,20 @@ async phone_pii(testCase) {
     return { ok: outcomes.every((item) => item.ok), actual: outcomes };
   },
 
+  report(testCase) {
+    const python = findPython();
+    if (!python) return { skipped: true, actual: 'python not found' };
+    const [pyCmd, ...pyRest] = python.split(' ');
+    const run = spawnSync(pyCmd, [...pyRest, join(ROOT, 'scripts', 'render_card.py'), '--report', join(FIXTURES_DIR, testCase.input.fixture), '--json'], { cwd: ROOT, encoding: 'utf8', timeout: 30000 });
+    let result = null;
+    try { result = JSON.parse(run.stdout); } catch { result = null; }
+    const expect = testCase.expect || {};
+    const checks = [result?.status === 'ok'];
+    if (expect.entries !== undefined) checks.push(result?.entries === expect.entries);
+    for (const needle of expect.text_includes || []) checks.push(String(result?.text || '').includes(needle));
+    return { ok: checks.every(Boolean), actual: { status: result?.status, entries: result?.entries, text: result?.text } };
+  },
+
   manual() {
     return { ok: true, skipped: true, actual: 'requires live network / model behaviour' };
   },
