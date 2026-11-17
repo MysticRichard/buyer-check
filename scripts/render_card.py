@@ -28,7 +28,13 @@ from risk_score import load_rules, score as risk_score
 RULES_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "red_flags.json")
 COUNTRY_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "country_capabilities.json")
 _COUNTRY_CODES = None
+ID_LEAK_RE = re.compile(r"[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]|[A-Z]{5}[0-9]{4}[A-Z]", re.I)
 V010_KEYS = ("capabilities", "footprint", "id_checks", "doc_checks", "search_log", "match_keys", "previous", "country_discovery", "terms_advice")
+
+
+def id_leak(value):
+    compact = re.sub(r"[\s\-_./•*]", "", text(value))
+    return bool(ID_LEAK_RE.search(compact))
 
 
 def country_known(code):
@@ -927,12 +933,15 @@ def derive_flags(evidence):
         declared = text(item.get("source_grade"))
         if tier == "search-only" and declared == "official":
             return "self_declared"
-        if declared == "official":
-            ids = [text(eid) for eid in (item.get("evidence_ids") or []) if text(eid)]
-            grades = [grade_of(evidence_index.get(eid) or {}) for eid in ids]
-            if not any(grade == "official" for grade in grades):
-                return "third_party" if any(grade == "third_party" for grade in grades) else "self_declared"
-        return declared
+        ids = [text(eid) for eid in (item.get("evidence_ids") or []) if text(eid)]
+        base_grades = [SOURCE_GRADE_DEFAULT.get(text((evidence_index.get(eid) or {}).get("source_type")), "self_declared") for eid in ids]
+        if declared == "official" and "official" in base_grades:
+            return "official"
+        if declared in ("third_party", "self_declared"):
+            return declared
+        if "third_party" in base_grades:
+            return "third_party"
+        return "self_declared"
 
     def eligible(item, official_required, years):
         if not isinstance(item, dict) or item.get("subject") != "company":
@@ -945,6 +954,10 @@ def derive_flags(evidence):
         ids = [text(eid) for eid in (item.get("evidence_ids") or []) if text(eid)]
         if not ids or any(eid not in evidence_index for eid in ids):
             return False
+        for eid in ids:
+            entry = evidence_index.get(eid) or {}
+            if text(entry.get("source_type")) != "user_input" and (not text(entry.get("url")) or not text(entry.get("retrieved_at"))):
+                return False
         return within_years(item.get("data_as_of"), as_of, years)
 
     for item in ([] if tier == "offline" else (evidence.get("footprint") or [])):
@@ -970,7 +983,7 @@ def derive_flags(evidence):
                     domains.add(domain)
                 if group:
                     groups.add(group)
-            if len(domains) >= 2 and (not groups or len(groups) >= 2):
+            if len(domains) >= 2 and len(groups) >= 2:
                 add("RF-FOOT-004", item.get("evidence_ids"))
         elif probe == "scale" and role in ("accused", "regulator_action", "registered_entity") and grade == "official" and eligible(item, False, 5):
             try:
@@ -1266,6 +1279,7 @@ def batch_triage(packs, rules):
 
 
 VERDICT_CONTRA = ["可以付款", "可以预付", "直接付款", "倾向继续", "建议继续", "放心下单", "立即付款", "可以寄样", "可以先寄样", "可以发货", "可以生产", "放心发货", "推进", "试单", "下单", "合作", "风险可控"]
+VERDICT_PESSIMISTIC = ["风险高", "暂停", "停止", "拒绝", "不要付款", "不建议"]
 DOC_CLASS_LABELS = {"office": "办公软件", "design": "图像编辑/设计软件", "scan": "扫描件", "other": "其他软件", "unknown": "未知软件"}
 FOOTPRINT_LABELS = {
     "registry": "注册处条目",
@@ -1302,6 +1316,8 @@ def verdict_line(display, evidence, level, actions):
         invalid = True
     blocked = any(action.get("status_text") == "不建议" for action in actions)
     if blocked and any(word in verdict or word in hint for word in VERDICT_CONTRA):
+        invalid = True
+    if level in ("低", "中") and any(word in verdict or word in hint for word in VERDICT_PESSIMISTIC):
         invalid = True
     if invalid:
         warning = "invalid-display"
@@ -1408,8 +1424,7 @@ def validate_evidence_contract(evidence):
         if not isinstance(item, dict):
             continue
         masked = text(item.get("masked"))
-        stripped = re.sub(r"[•*]", "", masked)
-        if masked and re.search(r"[0-9A-Z]{10,}", stripped):
+        if masked and id_leak(masked):
             add("plaintext-id", "id_checks.masked")
     for item in evidence.get("doc_checks") or []:
         if isinstance(item, dict) and any(text(key).lower() == "author" for key in item):
@@ -1443,6 +1458,9 @@ def render_card(evidence, rules):
     if search_log is not None and not isinstance(search_log, dict):
         return {"status": "invalid-input", "errors": [{"code": "invalid-input", "field": "search_log"}]}
     quick = evidence.get("quick_check") is True
+    quick_over = False
+    if quick and isinstance(search_log, dict):
+        quick_over = int(search_log.get("searches") or 0) > 0 or int(search_log.get("pages", search_log.get("page_reads")) or 0) > 0
     conflicts, conflict_errors = validate_conflicts(evidence)
     if conflict_errors:
         return {"status": "invalid-input", "errors": conflict_errors}
@@ -1631,18 +1649,18 @@ def render_card(evidence, rules):
     else:
         lines.append(f"## {color} {level_label} · 风险 {score}/100 {bar} ｜ 核实度 {credit['score']}/100（{credit['tier']}）{incomplete_suffix}")
     lines.append(f"置信度：{confidence}（锚点 {anchors}/3）｜覆盖：{0 if effective_covered is None else effective_covered}/{total}｜未覆盖：{uncovered_text}")
-    if capabilities and capabilities.get("tier") != "full":
+    if capabilities and capabilities.get("tier") != "full" and not quick:
         lines.append("本次运行能力：" + ("仅搜索" if capabilities.get("tier") == "search-only" else "离线"))
     if quick:
-        lines.append("快查模式：未查地图、海关、社媒")
-    if isinstance(search_log, dict):
+        lines.append("快查模式：未查地图、海关、社媒" + (" · ⚠ 本次未完成：检索预算已用尽" if quick_over else ""))
+    if isinstance(search_log, dict) and not quick:
         searches = int(search_log.get("searches") or 0)
         pages = int(search_log.get("pages", search_log.get("page_reads")) or 0)
         budget = search_log.get("budget") or {}
-        budget_searches = int(budget.get("searches") or 0)
-        budget_pages = int(budget.get("pages", budget.get("page_reads")) or 0)
+        max_searches = 0 if quick else 12
+        max_pages = 0 if quick else 6
         lines.append(f"检索：{searches} 次，打开 {pages} 个页面")
-        if budget and (searches > budget_searches or pages > budget_pages):
+        if searches > max_searches or pages > max_pages:
             lines.append("⚠ 本次未完成：检索预算已用尽")
     if incomplete:
         details = "；".join(
@@ -1774,7 +1792,18 @@ def render_card(evidence, rules):
                 break
             if lines[index] == "":
                 del lines[index]
-    if re.search(r"[0-9A-Z]{10,}", re.sub(r"https?://\S+", " ", "\n".join(lines))):
+    if quick and len(lines) > line_limit:
+        for title, stop in (("**已核实**", "**没查到（没查到不代表没问题）**"), ("**一次动作**", "**建议这样回复（任选）**")):
+            if len(lines) <= line_limit:
+                break
+            start = next((index for index, line in enumerate(lines) if line == title), None)
+            if start is None:
+                continue
+            end = next((index for index in range(start + 1, len(lines)) if lines[index] == stop), len(lines))
+            del lines[start:end]
+        while len(lines) > line_limit and lines and lines[-1] == "":
+            lines.pop()
+    if any(id_leak(line) for line in lines):
         return {"status": "invalid-input", "errors": [{"code": "plaintext-id", "field": "card"}]}
 
     return {

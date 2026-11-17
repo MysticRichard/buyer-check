@@ -4,7 +4,7 @@
   "checks": [],
   "flags": [],
   "capabilities": { "tier": "search-only", "web_search": true, "web_fetch": false, "shell": false, "image_view": false },
-  "search_log": { "searches": 5, "page_reads": 2, "budget": { "searches": 8, "page_reads": 4 } },
+  "search_log": { "searches": 0, "page_reads": 0, "budget": { "searches": 0, "page_reads": 0 } },
   "quick_check": true,
   "anchors": { "closure": "single" },
   "coverage": { "checked": 7, "total": 8, "uncovered": [] },

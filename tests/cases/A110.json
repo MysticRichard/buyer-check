@@ -5,8 +5,8 @@
   "input": { "fixture": "card_quick.json" },
   "expect": {
     "status": "ok",
-    "card_includes": ["快查模式：未查地图、海关、社媒", "本次运行能力：仅搜索"],
-    "card_excludes": ["**公司公开足迹**", "**证件与文件自检**", "**条款建议**"],
+    "card_includes": ["快查模式：未查地图、海关、社媒"],
+    "card_excludes": ["本次运行能力", "**公司公开足迹**", "**证件与文件自检**", "**条款建议**"],
     "line_count_max": 30,
     "first_screen_max": 14
   }

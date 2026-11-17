@@ -360,6 +360,12 @@ const LOCALIZED_LANGS = new Set(['ar', 'fr', 'es', 'pt', 'ru', 'tr', 'id', 'th',
 const NEW_FLAG_IDS = new Set(['RF-FOOT-001', 'RF-FOOT-002', 'RF-FOOT-003', 'RF-FOOT-004', 'RF-FOOT-005', 'RF-ID-004', 'RF-ID-005', 'RF-DOC-001']);
 const LOCAL_FLAG_IDS = new Set(['RF-ID-004', 'RF-ID-005', 'RF-DOC-001']);
 const ALLOWED_MATCH_KEYS = new Set(['legal_name', 'address', 'tax_id_masked', 'phone', 'domain', 'person_name', 'registration_no']);
+const ID_LEAK_RE = /[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]|[A-Z]{5}[0-9]{4}[A-Z]/i;
+const VERDICT_PESSIMISTIC = ['风险高', '暂停', '停止', '拒绝', '不要付款', '不建议'];
+
+function idLeak(value) {
+  return ID_LEAK_RE.test(text(value).replace(/[\s\-_./•*]/g, ''));
+}
 const V010_KEYS = ['capabilities', 'footprint', 'id_checks', 'doc_checks', 'search_log', 'match_keys', 'previous', 'country_discovery', 'terms_advice'];
 const EMAIL_RE = /[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}/;
 const PHONE_NON_NUMBER_PATTERNS = [
@@ -800,12 +806,12 @@ function deriveFlags(evidence) {
   const effectiveGrade = (item) => {
     const declared = text(item.source_grade);
     if (tier === 'search-only' && declared === 'official') return 'self_declared';
-    if (declared === 'official') {
-      const ids = (item.evidence_ids || []).map((id) => text(id)).filter(Boolean);
-      const grades = ids.map((id) => gradeOf(evidenceIndex.get(id) || {}));
-      if (!grades.includes('official')) return grades.includes('third_party') ? 'third_party' : 'self_declared';
-    }
-    return declared;
+    const ids = (item.evidence_ids || []).map((id) => text(id)).filter(Boolean);
+    const baseGrades = ids.map((id) => SOURCE_GRADE_DEFAULT[text((evidenceIndex.get(id) || {}).source_type)] || 'self_declared');
+    if (declared === 'official' && baseGrades.includes('official')) return 'official';
+    if (declared === 'third_party' || declared === 'self_declared') return declared;
+    if (baseGrades.includes('third_party')) return 'third_party';
+    return 'self_declared';
   };
   const eligible = (item, officialRequired, years) => {
     if (!item || typeof item !== 'object' || item.subject !== 'company') return false;
@@ -814,6 +820,10 @@ function deriveFlags(evidence) {
     if (officialRequired && (effectiveGrade(item) !== 'official' || !full)) return false;
     const ids = (item.evidence_ids || []).map((id) => text(id)).filter(Boolean);
     if (ids.length === 0 || ids.some((id) => !evidenceIndex.has(id))) return false;
+    for (const id of ids) {
+      const entry = evidenceIndex.get(id) || {};
+      if (text(entry.source_type) !== 'user_input' && (!text(entry.url) || !text(entry.retrieved_at))) return false;
+    }
     return withinYears(item.data_as_of, asOf, years);
   };
   for (const item of (tier === 'offline' ? [] : (evidence.footprint || []))) {
@@ -838,7 +848,7 @@ function deriveFlags(evidence) {
         if (domain) domains.add(domain);
         if (group) groups.add(group);
       }
-      if (domains.size >= 2 && (groups.size === 0 || groups.size >= 2)) add('RF-FOOT-004', item.evidence_ids);
+      if (domains.size >= 2 && groups.size >= 2) add('RF-FOOT-004', item.evidence_ids);
     } else if (item.probe === 'scale' && ['accused', 'regulator_action', 'registered_entity'].includes(item.role) && grade === 'official' && eligible(item, false, 5) && Number(item.scale_ratio || 0) >= 10) {
       add('RF-FOOT-005', item.evidence_ids);
     }
@@ -902,6 +912,7 @@ function verdictLine(display, evidence, level, actions) {
   if (!Array.isArray(evidenceIds) || !evidenceIds.length || evidenceIds.some((item) => !available.has(text(item)))) invalid = true;
   const blocked = actions.some((action) => action.status_text === '不建议');
   if (blocked && VERDICT_CONTRA.some((word) => verdict.includes(word) || hint.includes(word))) invalid = true;
+  if ((level === '低' || level === '中') && VERDICT_PESSIMISTIC.some((word) => verdict.includes(word) || hint.includes(word))) invalid = true;
   if (invalid) {
     warning = 'invalid-display';
     hint = '';
@@ -989,7 +1000,7 @@ function validateEvidenceContract(evidence) {
   for (const item of evidence.id_checks || []) {
     if (!item || typeof item !== 'object') continue;
     const masked = text(item.masked);
-    if (masked && /[0-9A-Z]{10,}/.test(masked.replace(/[•*]/g, ''))) add('plaintext-id', 'id_checks.masked');
+    if (masked && idLeak(masked)) add('plaintext-id', 'id_checks.masked');
   }
   for (const item of evidence.doc_checks || []) {
     if (item && typeof item === 'object' && Object.keys(item).some((key) => text(key).toLowerCase() === 'author')) add('author-not-allowed', 'doc_checks.author');
@@ -1020,6 +1031,9 @@ export function renderCard(evidence, rules) {
   const conflicts = validateConflicts(evidence);
   if (conflicts.errors.length > 0) return { status: 'invalid-input', errors: conflicts.errors };
   const quick = evidence.quick_check === true;
+  const quickOver = quick && evidence.search_log && typeof evidence.search_log === 'object'
+    ? (Number(evidence.search_log.searches || 0) > 0 || Number(evidence.search_log.pages ?? evidence.search_log.page_reads ?? 0) > 0)
+    : false;
 
   const baseIds = flagIdsOf(evidence);
   const derivedFlags = deriveFlags(evidence);
@@ -1202,18 +1216,18 @@ export function renderCard(evidence, rules) {
     lines.push(`## ${color} ${levelLabel} · 风险 ${score}/100 ${bar} ｜ 核实度 ${credit.score}/100（${credit.tier}）${incompleteSuffix}`);
   }
   lines.push(`置信度：${confidence}（锚点 ${anchors}/3）｜覆盖：${effectiveCovered === null ? 0 : effectiveCovered}/${total}｜未覆盖：${uncoveredText}`);
-  if (capabilities && capabilities.tier !== 'full') {
+  if (capabilities && capabilities.tier !== 'full' && !quick) {
     lines.push(`本次运行能力：${capabilities.tier === 'search-only' ? '仅搜索' : '离线'}`);
   }
-  if (quick) lines.push('快查模式：未查地图、海关、社媒');
-  if (evidence.search_log && typeof evidence.search_log === 'object') {
+  if (quick) lines.push(`快查模式：未查地图、海关、社媒${quickOver ? ' · ⚠ 本次未完成：检索预算已用尽' : ''}`);
+  if (evidence.search_log && typeof evidence.search_log === 'object' && !quick) {
     const searches = Number(evidence.search_log.searches || 0);
     const pages = Number(evidence.search_log.pages ?? evidence.search_log.page_reads ?? 0);
     const budget = evidence.search_log.budget || {};
-    const budgetSearches = Number(budget.searches || 0);
-    const budgetPages = Number(budget.pages ?? budget.page_reads ?? 0);
+    const maxSearches = quick ? 0 : 12;
+    const maxPages = quick ? 0 : 6;
     lines.push(`检索：${searches} 次，打开 ${pages} 个页面`);
-    if (budget && (searches > budgetSearches || pages > budgetPages)) lines.push('⚠ 本次未完成：检索预算已用尽');
+    if (searches > maxSearches || pages > maxPages) lines.push('⚠ 本次未完成：检索预算已用尽');
   }
   if (incomplete.items.length > 0) {
     const details = incomplete.items
@@ -1340,7 +1354,20 @@ export function renderCard(evidence, rules) {
       if (lines[index] === '') lines.splice(index, 1);
     }
   }
-  if (/[0-9A-Z]{10,}/.test(lines.join('\n').replace(/https?:\/\/\S+/g, ' '))) {
+  if (quick && lines.length > lineLimit) {
+    for (const [title, stop] of [['**已核实**', '**没查到（没查到不代表没问题）**'], ['**一次动作**', '**建议这样回复（任选）**']]) {
+      if (lines.length <= lineLimit) break;
+      const start = lines.indexOf(title);
+      if (start < 0) continue;
+      let end = lines.length;
+      for (let index = start + 1; index < lines.length; index += 1) {
+        if (lines[index] === stop) { end = index; break; }
+      }
+      lines.splice(start, end - start);
+    }
+    while (lines.length > lineLimit && lines[lines.length - 1] === '') lines.pop();
+  }
+  if (lines.some((line) => idLeak(line))) {
     return { status: 'invalid-input', errors: [{ code: 'plaintext-id', field: 'card' }] };
   }
 
