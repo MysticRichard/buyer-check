@@ -222,6 +222,10 @@
     ],
     "README.md": [
       {
+        "from": "![buyer-check 结论卡示例：低风险、核实度 95/100](docs/images/sample-card.png)",
+        "to": "（结论卡截图见公开仓库 README；精简包不随附图片）"
+      },
+      {
         "from": "```text\nbuyer-check/\n├── SKILL.md              # Skill 主文件：触发条件、流程、硬性约束、输出要求\n├── red_flags.md          # 红旗清单与评分规则（唯一评分依据）\n├── card_template.md      # 结论卡版式、证据包 Schema、追问话术规则\n├── data-sources/         # global.md 全球通用入口 + countries/<iso2>.md 国家资料 + 采集清单\n├── report_template.md    # 报告固定结构与措辞模板\n├── scripts/              # 域名查询、相似度、画像/回链/头像比对、评分、隐私扫描（Python + Node 双实现）\n│   ├── whois_lookup.py / .mjs\n│   ├── domain_similarity.py / .mjs\n│   ├── risk_score.py / .mjs\n│   ├── privacy_scan.mjs  # 提交前隐私扫描\n│   ├── account_check.py / .mjs  # 订单前 IBAN/BIC 校验（mod-97 自实现）\n│   ├── check_sources.mjs # 数据源可达性保鲜\n│   ├── phone_check.py / .mjs + phone_check_data.json\n│   ├── email_header_check.py / .mjs\n│   ├── sanctions_check.py / .mjs + update_sanctions\n│   ├── red_flags.json    # 机器可读红旗表\n│   ├── identity_check.py / .mjs  # 官网画像、社媒回链、头像比对、地图 POI、注册库（v0.9）\n│   ├── render_card.py / .mjs  # 结论卡渲染：核实度、六维表、动作阶梯、结论句（v0.9）\n│   └── brands.json       # 知名公司域名清单\n├── tests/                # 验收用例 A1–A140、一致性测试、行为评测集\n├── examples/             # 脱敏样例报告\n├── reports/              # 生成的报告（本地保留，不入仓库）\n└── docs/                 # development.md 开发文档、iteration_plan.md 迭代方案\n```",
         "to": "```text\nbuyer-check/\n├── SKILL.md              # Skill 主文件\n├── red_flags.md          # 红旗清单与评分规则\n├── card_template.md      # 结论卡版式、证据包 Schema、追问话术\n├── report_template.md    # 报告固定结构与措辞模板\n├── data_sources.md       # 合并版数据源与采集清单（16 国）\n├── scripts/              # Python 实现 + Node 对照 + identity_check/render_card\n├── tests/                # cases.json（A1–A140）、run_cases.mjs、评测集\n├── examples/             # 脱敏样例报告\n├── README.md\n├── LICENSE\n└── CHANGELOG.md\n```"
       },
