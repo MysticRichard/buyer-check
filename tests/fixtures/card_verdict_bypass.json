@@ -1,0 +1,12 @@
+{
+  "subject": { "company": "ACME TRADING LTD", "country": "IN" },
+  "stage": "inquiry",
+  "checks": [],
+  "flags": [{ "id": "RF-PAY-001", "weight": 5, "evidence_ids": ["E1"] }],
+  "anchors": { "closure": "single" },
+  "coverage": { "checked": 7, "total": 8, "uncovered": [] },
+  "confidence": "中",
+  "layers": { "company": { "credibility": "medium" }, "person_company_link": { "strength": "medium" }, "person_authenticity": { "level": "unknown" }, "contact": { "phone_matches": true, "business_email": true, "domain_aged": true }, "compliance": { "sanctions": "clear", "negative": "clear" }, "scale": { "map": "unknown", "customs": "unknown" } },
+  "evidence": [{ "id": "E1", "url": "https://registry.example/company/1", "retrieved_at": "2026-11-17T00:00:00Z", "source_type": "registry", "source_grade": "official" }],
+  "display": { "customer_label": "ACME TRADING LTD", "inquiry_type": "一般询盘", "verdict": "可以走下一步", "evidence_ids": ["E1"], "dim_notes": { "company": "公开资料一致", "link": "邮箱与官网一致", "contact": "电话与公开资料一致", "behavior": "要求先付定金", "compliance": "制裁无匹配", "scale": "地图和海关都没查到" }, "attention": [{ "kind": "flag", "flag_id": "RF-PAY-001", "text": "要求先付定金", "evidence_ids": ["E1"] }], "verified": [], "missing": [], "open_questions": [], "scripts": [] }
+}

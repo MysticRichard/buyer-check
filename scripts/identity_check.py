@@ -653,14 +653,21 @@ def validate_capabilities(data):
             continue
         if not isinstance(country.get("registry"), dict):
             errors.append(f"{code}:registry")
+        registry = country.get("registry") or {}
+        if registry.get("automation_allowed") is True and (registry.get("verification") or country.get("verification")) != "official-page":
+            errors.append(f"{code}:automation")
         if country.get("verification") not in allowed_verification:
             errors.append(f"{code}:verification")
         for key in ("registry", "tax_verification", "procurement", "insolvency"):
             item = country.get(key)
             if item is not None and (not isinstance(item, dict) or (item.get("verification") is not None and item.get("verification") not in allowed_verification)):
                 errors.append(f"{code}:{key}")
+            if isinstance(item, dict) and item.get("automation_allowed") is True and (item.get("verification") or country.get("verification")) != "official-page":
+                errors.append(f"{code}:{key}.automation")
         for fmt in country.get("id_formats") or []:
             if not fmt.get("id_type") or not fmt.get("label") or not isinstance(fmt.get("length"), int):
+                errors.append(f"{code}:id_formats.fields")
+            if "source_url" not in fmt or "embedded" not in fmt:
                 errors.append(f"{code}:id_formats.fields")
             regex_value = fmt.get("regex") or fmt.get("pattern")
             if not str(regex_value or "").strip():
@@ -672,6 +679,8 @@ def validate_capabilities(data):
                     errors.append(f"{code}:id_formats.regex")
             if (fmt.get("checksum") or "none") not in allowed_checksum:
                 errors.append(f"{code}:id_formats.checksum")
+            if fmt.get("verification") is not None and fmt.get("verification") not in allowed_verification:
+                errors.append(f"{code}:id_formats.verification")
     return errors
 
 
@@ -810,8 +819,11 @@ def idcheck_command(args):
         if len(value) != 15 or value[13] != "Z":
             checksum_ok = False
             notes.append("position-14-not-z")
-        else:
+        elif rule.get("checksum") == "gstin-mod36":
             checksum_ok = gstin_checksum(value) == value[-1]
+        else:
+            checksum_ok = None
+            notes.append("checksum-not-implemented")
         entity_type = pan_entity_type(value[2:12])
         state_code = value[:2]
         state_name = GST_STATE_CODES.get(state_code)
@@ -854,7 +866,7 @@ def idcheck_command(args):
     }
 
 
-MATCH_KEY_TYPES = ("legal_name", "address", "tax_id_masked", "phone", "domain", "person_name", "registration_no")
+MATCH_KEY_TYPES = ("legal_name", "alias", "address", "tax_id_masked", "phone", "domain", "person_name", "registration_no")
 
 
 def normalize_match_value(key, value):
@@ -870,9 +882,9 @@ def normalize_match_value(key, value):
 
 def load_match_keys(payload):
     if isinstance(payload, dict):
-        return [(key, payload[key]) for key in MATCH_KEY_TYPES if key in payload]
+        return [(key, payload[key], payload.get("alias_source") if key == "alias" else None) for key in MATCH_KEY_TYPES if key in payload]
     if isinstance(payload, list):
-        return [(item.get("key"), item.get("value")) for item in payload if isinstance(item, dict) and item.get("key") in MATCH_KEY_TYPES]
+        return [(item.get("key"), item.get("value"), item.get("alias_source") if item.get("key") == "alias" else None) for item in payload if isinstance(item, dict) and item.get("key") in MATCH_KEY_TYPES]
     return []
 
 
@@ -884,18 +896,34 @@ def match_command(args):
             candidate = load_match_keys(json.load(handle))
     except (OSError, ValueError, TypeError):
         return {"status": "invalid-input", "error": "invalid match input"}
-    buyer_map = {key: normalize_match_value(key, value) for key, value in buyer if value is not None}
-    candidate_map = {key: normalize_match_value(key, value) for key, value in candidate if value is not None}
+    buyer_map = {key: normalize_match_value(key, value) for key, value, _ in buyer if value is not None}
+    candidate_map = {key: normalize_match_value(key, value) for key, value, _ in candidate if value is not None}
+    buyer_alias = next((source for key, _, source in buyer if key == "alias"), None)
+    candidate_alias = next((source for key, _, source in candidate if key == "alias"), None)
     keys = sorted(key for key in buyer_map if key in candidate_map and buyer_map[key] and buyer_map[key] == candidate_map[key])
-    matched = ("legal_name" in keys and len(keys) >= 2) or ("domain" in keys and "phone" in keys)
-    if not matched:
-        reason = "only-name" if keys == ["legal_name"] else "fewer-than-two-independent-keys"
+    if "alias" in keys and not (buyer_alias == "official" and candidate_alias == "official"):
+        keys = [key for key in keys if key != "alias"]
+    conflict = any(
+        key in ("tax_id_masked", "registration_no")
+        and buyer_map.get(key)
+        and candidate_map.get(key)
+        and buyer_map[key] != candidate_map[key]
+        for key in ("tax_id_masked", "registration_no")
+    )
+    name_keys = {"legal_name", "alias", "person_name"}
+    strong_keys = {"address", "tax_id_masked", "phone", "domain", "registration_no"}
+    matched = not conflict and ((bool(name_keys & set(keys)) and bool(strong_keys & set(keys))) or ("domain" in keys and "phone" in keys))
+    if conflict:
+        reason = "conflicting-strong-key"
         strength = "weak"
-    elif len(keys) >= 3 or ("legal_name" in keys and any(key in keys for key in ("registration_no", "tax_id_masked"))):
-        reason = "name-plus-strong-key" if "legal_name" in keys else "domain-plus-phone"
+    elif not matched:
+        reason = "only-name" if set(keys) <= name_keys else "fewer-than-two-independent-keys"
+        strength = "weak"
+    elif len(keys) >= 3 or (bool(name_keys & set(keys)) and any(key in keys for key in ("registration_no", "tax_id_masked"))):
+        reason = "name-plus-strong-key" if name_keys & set(keys) else "domain-plus-phone"
         strength = "strong"
     else:
-        reason = "name-plus-other" if "legal_name" in keys else "domain-plus-phone"
+        reason = "name-plus-other" if name_keys & set(keys) else "domain-plus-phone"
         strength = "medium"
     return {"status": "ok", "matched": matched, "keys_matched": keys, "strength": strength, "reason": reason}
 

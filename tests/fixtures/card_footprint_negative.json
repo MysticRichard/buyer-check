@@ -71,7 +71,8 @@
       "evidence_ids": [
         "E1"
       ],
-      "summary": "公司是受害者"
+      "summary": "公司是受害者",
+      "result": "hit"
     },
     {
       "probe": "enforcement",
@@ -87,7 +88,8 @@
       "evidence_ids": [
         "E1"
       ],
-      "summary": "同名其他公司"
+      "summary": "同名其他公司",
+      "result": "hit"
     },
     {
       "probe": "news",
@@ -102,7 +104,8 @@
       "evidence_ids": [
         "E2"
       ],
-      "summary": "单一第三方来源"
+      "summary": "单一第三方来源",
+      "result": "hit"
     },
     {
       "probe": "enforcement",
@@ -117,7 +120,8 @@
       "evidence_ids": [
         "E1"
       ],
-      "summary": "仅名称且窗外"
+      "summary": "仅名称且窗外",
+      "result": "hit"
     },
     {
       "probe": "enforcement",
@@ -133,7 +137,8 @@
       "evidence_ids": [
         "E1"
       ],
-      "summary": "安全检查处罚"
+      "summary": "安全检查处罚",
+      "result": "hit"
     },
     {
       "probe": "enforcement",

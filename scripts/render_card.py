@@ -444,7 +444,7 @@ SCRIPT_FORBIDDEN = ["核实", "背调", "怀疑", "诈骗"]
 LOCALIZED_LANGS = {"ar", "fr", "es", "pt", "ru", "tr", "id", "th", "vi", "hi", "zh"}
 NEW_FLAG_IDS = {"RF-FOOT-001", "RF-FOOT-002", "RF-FOOT-003", "RF-FOOT-004", "RF-FOOT-005", "RF-ID-004", "RF-ID-005", "RF-DOC-001"}
 LOCAL_FLAG_IDS = {"RF-ID-004", "RF-ID-005", "RF-DOC-001"}
-ALLOWED_MATCH_KEYS = {"legal_name", "address", "tax_id_masked", "phone", "domain", "person_name", "registration_no"}
+ALLOWED_MATCH_KEYS = {"legal_name", "alias", "address", "tax_id_masked", "phone", "domain", "person_name", "registration_no"}
 EMAIL_RE = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}")
 PHONE_CANDIDATE_RE = re.compile(r"(?:\+|00)\d[\d\s().\-]{4,20}\d|\d[\d\s().\-]{4,20}\d")
 MASKED_PHONE_RE = re.compile(r"(?:\+|00)?\d[\d\s()\-*]*\*[\d\s()\-*]*")
@@ -960,6 +960,10 @@ def derive_flags(evidence):
         retrieved = [value for value in retrieved if value is not None]
         as_of = max(retrieved).isoformat() if retrieved else "9999-12-31"
     declared_keys = {text(item.get("key")) for item in (evidence.get("match_keys") or []) if isinstance(item, dict) and text(item.get("key"))}
+    declared_alias_official = any(
+        isinstance(item, dict) and text(item.get("key")) == "alias" and text(item.get("alias_source")) == "official"
+        for item in (evidence.get("match_keys") or [])
+    )
     evidence_index = {}
     duplicates = set()
     for item in evidence.get("evidence") or []:
@@ -993,7 +997,9 @@ def derive_flags(evidence):
         if not isinstance(item, dict) or item.get("subject") != "company":
             return False
         keys = {text(key) for key in (item.get("matched_keys") or []) if text(key)}
-        if len(keys) < 2 or not keys <= ALLOWED_MATCH_KEYS or keys <= {"legal_name", "person_name", "alias_name"}:
+        if "alias" in keys and not declared_alias_official:
+            keys.discard("alias")
+        if len(keys) < 2 or not keys <= ALLOWED_MATCH_KEYS or keys <= {"legal_name", "alias", "person_name"}:
             return False
         if not declared_keys:
             return False
@@ -1066,7 +1072,7 @@ def trade_terms(level, tier, inquiry_type):
     elif level == "需人工核实":
         lines = ["先核验文件再谈大额报价；样品费由买家承担。"]
     elif tier == "高":
-        lines = ["可按常规条款；收款账户仍用已知电话或邮箱双通道确认一次。"]
+        lines = ["可按常规条款；付款前仍做订单前复核，收款账户用已知电话或邮箱双通道确认一次。"]
     else:
         lines = ["首单小额；样品费由买家承担、买家自己的快递账号寄送；定金比例高于常规；分批发货；发货前复核收款账户。"]
     if inquiry_type == "account_change":
@@ -1330,6 +1336,7 @@ def batch_triage(packs, rules):
 
 VERDICT_CONTRA = ["可以付款", "可以预付", "直接付款", "倾向继续", "建议继续", "放心下单", "立即付款", "可以寄样", "可以先寄样", "可以发货", "可以生产", "放心发货", "推进", "试单", "下单", "合作", "风险可控", "可控", "试试", "试一下", "小批量", "发一批", "安排生产", "付款后就能发货"]
 VERDICT_PESSIMISTIC = ["风险高", "暂停", "停止", "拒绝", "不要付款", "不建议", "风险偏高", "多留心", "多注意"]
+VERDICT_CONSERVATIVE = ["不建议", "暂停", "暂缓", "先补", "先核验", "先确认", "待补", "待核", "风险高", "需人工", "不要", "不能", "停止"]
 DOC_CLASS_LABELS = {"office": "办公软件", "design": "图像编辑/设计软件", "scan": "扫描件", "other": "其他软件", "unknown": "未知软件"}
 FOOTPRINT_LABELS = {
     "registry": "注册处条目",
@@ -1343,6 +1350,7 @@ FOOTPRINT_LABELS = {
 }
 MATCH_KEY_LABELS = {
     "legal_name": "名称",
+    "alias": "别名",
     "address": "地址",
     "tax_id_masked": "税号",
     "phone": "电话",
@@ -1368,6 +1376,8 @@ def verdict_line(display, evidence, level, actions):
     if blocked and any(word in verdict or word in hint for word in VERDICT_CONTRA):
         invalid = True
     if level in ("低", "中") and any(word in verdict or word in hint for word in VERDICT_PESSIMISTIC):
+        invalid = True
+    if blocked and level == "高" and not any(word in verdict or word in hint for word in VERDICT_CONSERVATIVE):
         invalid = True
     if invalid:
         warning = "invalid-display"
@@ -1437,6 +1447,10 @@ def footprint_lines(evidence):
     if not items:
         return []
     low_confidence = text(evidence.get("confidence")) == "低"
+    declared_alias_official = any(
+        isinstance(item, dict) and text(item.get("key")) == "alias" and text(item.get("alias_source")) == "official"
+        for item in (evidence.get("match_keys") or [])
+    )
     evidence_by_id = {
         text(item.get("id")): item
         for item in evidence.get("evidence") or []
@@ -1464,6 +1478,8 @@ def footprint_lines(evidence):
         suffix = f" [{grade}]" if grade else ""
         keys = [MATCH_KEY_LABELS.get(text(key), text(key)) for key in item.get("matched_keys") or [] if text(key)]
         unique_keys = {text(key) for key in item.get("matched_keys") or [] if text(key)}
+        if "alias" in unique_keys and not declared_alias_official:
+            unique_keys.discard("alias")
         strong = (
             not low_confidence
             and text(item.get("subject")) == "company"
@@ -1548,6 +1564,8 @@ def validate_evidence_contract(evidence):
 
 
 def mask_log_text(value):
+    if isinstance(value, bool):
+        return "true" if value else "false"
     raw = text(value)
     raw = re.sub(r"([A-Za-z0-9._%+-])[A-Za-z0-9._%+-]*(@[A-Za-z0-9.-]+\.[A-Za-z]{2,})", r"\1***\2", raw)
     raw = re.sub(r"\+\d[\d\s().-]{6,}\d", lambda match: match.group()[:3] + "***" + match.group()[-2:], raw)

@@ -1,0 +1,13 @@
+{
+  "id": "A136",
+  "title": "Z9 别名：推断别名不得单独过关；官方别名 + 地址可通过；名称 + 官方别名仍不算",
+  "type": "match",
+  "input": {
+    "cases": [
+      { "name": "inferred-alias-plus-name", "buyer": { "legal_name": "Acme Trading", "alias": "Acme Group", "alias_source": "inferred" }, "candidate": { "legal_name": "Acme Trading", "alias": "Acme Group", "alias_source": "inferred" }, "expect": { "matched": false, "strength": "weak", "keys": ["legal_name"] } },
+      { "name": "official-alias-plus-address", "buyer": { "alias": "Acme Group", "alias_source": "official", "address": "Dubai" }, "candidate": { "alias": "Acme Group", "alias_source": "official", "address": "Dubai" }, "expect": { "matched": true, "strength": "medium", "keys": ["address", "alias"] } },
+      { "name": "name-plus-official-alias-only", "buyer": { "legal_name": "Acme Trading", "alias": "Acme Group", "alias_source": "official" }, "candidate": { "legal_name": "Acme Trading", "alias": "Acme Group", "alias_source": "official" }, "expect": { "matched": false, "strength": "weak" } }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

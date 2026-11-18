@@ -1068,7 +1068,17 @@ async phone_pii(testCase) {
         }
       }
     }
-    return { ok: failures.length === 0, actual: { combos: levels.length * tiers.length * types.length, failures } };
+    const ladder = ladderCombinations ? ladderCombinations() : [];
+    for (const combo of ladder) {
+      const level = combo.input?.level;
+      const tier = combo.input?.credit_tier;
+      if (!level || !tier) { failures.push('ladder:missing-input'); continue; }
+      const lines = tradeTerms(level, tier, 'general');
+      const joined = lines.join(' ');
+      if (!lines.length || lines.length > 2) failures.push(`ladder-${level}/${tier}:count`);
+      if (level === '高' && (joined.includes('可以预付') || joined.includes('直接付款'))) failures.push(`ladder-${level}/${tier}:contradiction`);
+    }
+    return { ok: failures.length === 0, actual: { combos: levels.length * tiers.length * types.length, ladder: ladder.length, failures } };
   },
 
   payment_profile(testCase) {

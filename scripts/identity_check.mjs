@@ -660,19 +660,24 @@ function validateCapabilities(data) {
   for (const [code, country] of Object.entries(data.countries || {})) {
     if (!country || typeof country !== 'object') { errors.push(`${code}:not-object`); continue; }
     if (!country.registry || typeof country.registry !== 'object') errors.push(`${code}:registry`);
+    const registry = country.registry || {};
+    if (registry.automation_allowed === true && (registry.verification || country.verification) !== 'official-page') errors.push(`${code}:automation`);
     if (!allowedVerification.has(country.verification)) errors.push(`${code}:verification`);
     for (const key of ['registry', 'tax_verification', 'procurement', 'insolvency']) {
       const item = country[key];
       if (item !== undefined && item !== null && (typeof item !== 'object' || (item.verification !== undefined && !allowedVerification.has(item.verification)))) errors.push(`${code}:${key}`);
+      if (item && typeof item === 'object' && item.automation_allowed === true && (item.verification || country.verification) !== 'official-page') errors.push(`${code}:${key}.automation`);
     }
     for (const fmt of country.id_formats || []) {
       if (!fmt.id_type || !fmt.label || !Number.isInteger(fmt.length)) errors.push(`${code}:id_formats.fields`);
+      if (!('source_url' in fmt) || !('embedded' in fmt)) errors.push(`${code}:id_formats.fields`);
       const regexValue = fmt.regex || fmt.pattern;
       if (!String(regexValue || '').trim()) errors.push(`${code}:id_formats.regex-empty`);
       else {
         try { new RegExp(regexValue); } catch { errors.push(`${code}:id_formats.regex`); }
       }
       if (!allowedChecksum.has(fmt.checksum || 'none')) errors.push(`${code}:id_formats.checksum`);
+      if (fmt.verification !== undefined && !allowedVerification.has(fmt.verification)) errors.push(`${code}:id_formats.verification`);
     }
   }
   return errors;
@@ -789,7 +794,11 @@ function idcheckCommand(args) {
     if (value.length !== 15 || value[13] !== 'Z') {
       checksumOk = false;
       notes.push('position-14-not-z');
-    } else checksumOk = gstinChecksum(value) === value.slice(-1);
+    } else if (rule.checksum === 'gstin-mod36') checksumOk = gstinChecksum(value) === value.slice(-1);
+    else {
+      checksumOk = null;
+      notes.push('checksum-not-implemented');
+    }
     entityType = panEntityType(value.slice(2, 12));
     stateCode = value.slice(0, 2);
     const stateName = GST_STATE_CODES[stateCode];
@@ -813,7 +822,7 @@ function idcheckCommand(args) {
   return { status: 'ok', command: 'idcheck', country, type: idType, masked: maskId(value), format_ok: formatOk, checksum_ok: checksumOk, entity_type: entityType, name_suffix_consistent: nameSuffixConsistent, state_code: stateCode, notes, mode: 'offline', rule_verification: rule.verification || 'unverified' };
 }
 
-const MATCH_KEY_TYPES = ['legal_name', 'address', 'tax_id_masked', 'phone', 'domain', 'person_name', 'registration_no'];
+const MATCH_KEY_TYPES = ['legal_name', 'alias', 'address', 'tax_id_masked', 'phone', 'domain', 'person_name', 'registration_no'];
 
 function normalizeMatchValue(key, value) {
   const raw = value === null || value === undefined ? '' : String(value).trim().toLowerCase();
@@ -825,10 +834,12 @@ function normalizeMatchValue(key, value) {
 
 function loadMatchKeys(payload) {
   if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
-    return MATCH_KEY_TYPES.filter((key) => key in payload).map((key) => [key, payload[key]]);
+    return MATCH_KEY_TYPES.filter((key) => key in payload).map((key) => [key, payload[key], key === 'alias' ? payload.alias_source : null]);
   }
   if (Array.isArray(payload)) {
-    return payload.filter((item) => item && typeof item === 'object' && MATCH_KEY_TYPES.includes(item.key)).map((item) => [item.key, item.value]);
+    return payload
+      .filter((item) => item && typeof item === 'object' && MATCH_KEY_TYPES.includes(item.key))
+      .map((item) => [item.key, item.value, item.key === 'alias' ? item.alias_source : null]);
   }
   return [];
 }
@@ -844,18 +855,29 @@ function matchCommand(args) {
   }
   const buyerMap = new Map(buyer.filter(([, value]) => value !== null && value !== undefined).map(([key, value]) => [key, normalizeMatchValue(key, value)]));
   const candidateMap = new Map(candidate.filter(([, value]) => value !== null && value !== undefined).map(([key, value]) => [key, normalizeMatchValue(key, value)]));
-  const keys = [...buyerMap.keys()].filter((key) => candidateMap.has(key) && buyerMap.get(key) && buyerMap.get(key) === candidateMap.get(key)).sort();
-  const matched = (keys.includes('legal_name') && keys.length >= 2) || (keys.includes('domain') && keys.includes('phone'));
+  const buyerAlias = (buyer.find(([key]) => key === 'alias') || [])[2];
+  const candidateAlias = (candidate.find(([key]) => key === 'alias') || [])[2];
+  let keys = [...buyerMap.keys()].filter((key) => candidateMap.has(key) && buyerMap.get(key) && buyerMap.get(key) === candidateMap.get(key)).sort();
+  if (keys.includes('alias') && !(buyerAlias === 'official' && candidateAlias === 'official')) keys = keys.filter((key) => key !== 'alias');
+  const nameKeys = new Set(['legal_name', 'alias', 'person_name']);
+  const strongKeys = new Set(['address', 'tax_id_masked', 'phone', 'domain', 'registration_no']);
+  const conflict = ['tax_id_masked', 'registration_no'].some((key) => buyerMap.get(key) && candidateMap.get(key) && buyerMap.get(key) !== candidateMap.get(key));
+  const hasName = keys.some((key) => nameKeys.has(key));
+  const hasStrong = keys.some((key) => strongKeys.has(key));
+  const matched = !conflict && ((hasName && hasStrong) || (keys.includes('domain') && keys.includes('phone')));
   let reason;
   let strength;
-  if (!matched) {
-    reason = keys.length === 1 && keys[0] === 'legal_name' ? 'only-name' : 'fewer-than-two-independent-keys';
+  if (conflict) {
+    reason = 'conflicting-strong-key';
     strength = 'weak';
-  } else if (keys.length >= 3 || (keys.includes('legal_name') && (keys.includes('registration_no') || keys.includes('tax_id_masked')))) {
-    reason = keys.includes('legal_name') ? 'name-plus-strong-key' : 'domain-plus-phone';
+  } else if (!matched) {
+    reason = keys.every((key) => nameKeys.has(key)) ? 'only-name' : 'fewer-than-two-independent-keys';
+    strength = 'weak';
+  } else if (keys.length >= 3 || (hasName && (keys.includes('registration_no') || keys.includes('tax_id_masked')))) {
+    reason = hasName ? 'name-plus-strong-key' : 'domain-plus-phone';
     strength = 'strong';
   } else {
-    reason = keys.includes('legal_name') ? 'name-plus-other' : 'domain-plus-phone';
+    reason = hasName ? 'name-plus-other' : 'domain-plus-phone';
     strength = 'medium';
   }
   return { status: 'ok', matched, keys_matched: keys, strength, reason };

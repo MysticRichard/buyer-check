@@ -359,13 +359,14 @@ const SCRIPT_FORBIDDEN = ['核实', '背调', '怀疑', '诈骗'];
 const LOCALIZED_LANGS = new Set(['ar', 'fr', 'es', 'pt', 'ru', 'tr', 'id', 'th', 'vi', 'hi', 'zh']);
 const NEW_FLAG_IDS = new Set(['RF-FOOT-001', 'RF-FOOT-002', 'RF-FOOT-003', 'RF-FOOT-004', 'RF-FOOT-005', 'RF-ID-004', 'RF-ID-005', 'RF-DOC-001']);
 const LOCAL_FLAG_IDS = new Set(['RF-ID-004', 'RF-ID-005', 'RF-DOC-001']);
-const ALLOWED_MATCH_KEYS = new Set(['legal_name', 'address', 'tax_id_masked', 'phone', 'domain', 'person_name', 'registration_no']);
+const ALLOWED_MATCH_KEYS = new Set(['legal_name', 'alias', 'address', 'tax_id_masked', 'phone', 'domain', 'person_name', 'registration_no']);
 const GSTIN_RE = /[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]/i;
 const PAN_RE = /[A-Z]{5}[0-9]{4}[A-Z]/i;
 const PAN_UPPER_RE = /[A-Z]{5}[0-9]{4}[A-Z]/;
 const UPPER_RUN_RE = /(?<![A-Za-z0-9])[0-9A-Z]{10,}(?![A-Za-z0-9])/;
 const ID_NUM_RE = /(?<![A-Za-z0-9])[0-9]{10,}(?![A-Za-z0-9])/;
 const VERDICT_PESSIMISTIC = ['风险高', '暂停', '停止', '拒绝', '不要付款', '不建议', '风险偏高', '多留心', '多注意'];
+const VERDICT_CONSERVATIVE = ['不建议', '暂停', '暂缓', '先补', '先核验', '先确认', '待补', '待核', '风险高', '需人工', '不要', '不能', '停止'];
 
 function idLeak(value) {
   const compact = text(value).replace(/[\s\-_./•*]/g, '');
@@ -834,6 +835,7 @@ function deriveFlags(evidence) {
     asOf = dates.length ? new Date(Math.max(...dates)).toISOString().slice(0, 10) : '9999-12-31';
   }
   const declaredKeys = new Set((evidence.match_keys || []).filter((item) => item && typeof item === 'object' && text(item.key)).map((item) => text(item.key)));
+  const declaredAliasOfficial = (evidence.match_keys || []).some((item) => item && typeof item === 'object' && text(item.key) === 'alias' && text(item.alias_source) === 'official');
   const evidenceIndex = new Map();
   const duplicates = new Set();
   for (const item of evidence.evidence || []) {
@@ -858,7 +860,8 @@ function deriveFlags(evidence) {
   const eligible = (item, officialRequired, years) => {
     if (!item || typeof item !== 'object' || item.subject !== 'company') return false;
     const keys = new Set((item.matched_keys || []).map((key) => text(key)).filter(Boolean));
-    if (keys.size < 2 || [...keys].some((key) => !ALLOWED_MATCH_KEYS.has(key)) || [...keys].every((key) => ['legal_name', 'person_name', 'alias_name'].includes(key))) return false;
+    if (keys.has('alias') && !declaredAliasOfficial) keys.delete('alias');
+    if (keys.size < 2 || [...keys].some((key) => !ALLOWED_MATCH_KEYS.has(key)) || [...keys].every((key) => ['legal_name', 'alias', 'person_name'].includes(key))) return false;
     if (declaredKeys.size === 0 || [...keys].some((key) => !declaredKeys.has(key))) return false;
     if (officialRequired && (effectiveGrade(item) !== 'official' || !full)) return false;
     const ids = (item.evidence_ids || []).map((id) => text(id)).filter(Boolean);
@@ -913,7 +916,7 @@ export function tradeTerms(level, tier, inquiryType) {
   let lines;
   if (level === '高') lines = ['不建议收款或发货；先完成订单前复核并补齐材料。'];
   else if (level === '需人工核实') lines = ['先核验文件再谈大额报价；样品费由买家承担。'];
-  else if (tier === '高') lines = ['可按常规条款；收款账户仍用已知电话或邮箱双通道确认一次。'];
+  else if (tier === '高') lines = ['可按常规条款；付款前仍做订单前复核，收款账户用已知电话或邮箱双通道确认一次。'];
   else lines = ['首单小额；样品费由买家承担、买家自己的快递账号寄送；定金比例高于常规；分批发货；发货前复核收款账户。'];
   if (inquiryType === 'account_change') lines.push('账户变更：用已知号码电话回访并书面确认，确认前不付款。');
   else if (inquiryType === 'large_first_order') lines.push('大额首单：分批交货，首批小额验证。');
@@ -935,6 +938,7 @@ const FOOTPRINT_LABELS = {
 };
 const MATCH_KEY_LABELS = {
   legal_name: '名称',
+  alias: '别名',
   address: '地址',
   tax_id_masked: '税号',
   phone: '电话',
@@ -956,6 +960,7 @@ function verdictLine(display, evidence, level, actions) {
   const blocked = actions.some((action) => action.status_text === '不建议');
   if (blocked && VERDICT_CONTRA.some((word) => verdict.includes(word) || hint.includes(word))) invalid = true;
   if ((level === '低' || level === '中') && VERDICT_PESSIMISTIC.some((word) => verdict.includes(word) || hint.includes(word))) invalid = true;
+  if (blocked && level === '高' && !VERDICT_CONSERVATIVE.some((word) => verdict.includes(word) || hint.includes(word))) invalid = true;
   if (invalid) {
     warning = 'invalid-display';
     hint = '';
@@ -1011,6 +1016,7 @@ function footprintLines(evidence) {
   const items = (evidence.footprint || []).filter((item) => item && typeof item === 'object' && item.result === 'hit');
   if (!items.length) return [];
   const lowConfidence = text(evidence.confidence) === '低';
+  const declaredAliasOfficial = (evidence.match_keys || []).some((item) => item && typeof item === 'object' && text(item.key) === 'alias' && text(item.alias_source) === 'official');
   const evidenceById = new Map((evidence.evidence || []).filter((item) => item && typeof item === 'object' && text(item.id)).map((item) => [text(item.id), item]));
   const lines = ['**公司公开足迹**'];
   items.slice(0, 3).forEach((item, position) => {
@@ -1032,6 +1038,7 @@ function footprintLines(evidence) {
     const suffix = grade ? ` [${grade}]` : '';
     const keys = (item.matched_keys || []).filter((key) => text(key)).map((key) => MATCH_KEY_LABELS[text(key)] || text(key));
     const uniqueKeys = new Set((item.matched_keys || []).map((key) => text(key)).filter(Boolean));
+    if (uniqueKeys.has('alias') && !declaredAliasOfficial) uniqueKeys.delete('alias');
     const strong = (
       !lowConfidence
       && text(item.subject) === 'company'
