@@ -1,0 +1,14 @@
+{
+  "id": "A145",
+  "title": "N-01 未知信号被忽略并计数，卡片照常渲染",
+  "type": "lead_matrix",
+  "input": {
+    "fixture": "card_harbor.json",
+    "cases": [
+      { "name": "unknown-only", "signals": ["totally_unknown_signal"], "expect_class": "unclear", "expect_ignored": 1 },
+      { "name": "unknown-plus-known", "signals": ["totally_unknown_signal", "offers_seo_web_marketing"], "expect_class": "vendor_solicitation", "expect_ignored": 1 },
+      { "name": "non-array-input", "signals": "offers_seo_web_marketing", "expect_class": "unclear", "expect_ignored": 1 }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

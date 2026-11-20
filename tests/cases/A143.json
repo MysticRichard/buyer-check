@@ -1,0 +1,15 @@
+{
+  "id": "A143",
+  "title": "N-01 弱信号边界：单个弱信号→unclear；弱信号≥2 且无具体信号→competitor_probe；问客户/供应商名单→competitor_probe",
+  "type": "lead_matrix",
+  "input": {
+    "fixture": "card_harbor.json",
+    "cases": [
+      { "name": "single-weak", "signals": ["asks_catalog_only"], "expect_class": "unclear" },
+      { "name": "two-weak-no-concrete", "signals": ["generic_no_product", "asks_full_price_list_only"], "expect_class": "competitor_probe" },
+      { "name": "asks-customer-list", "signals": ["asks_customer_or_supplier_list"], "expect_class": "competitor_probe" },
+      { "name": "two-weak-with-concrete", "signals": ["generic_no_product", "asks_catalog_only", "names_product_model"], "expect_class": "unclear" }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

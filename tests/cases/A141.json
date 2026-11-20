@@ -1,0 +1,27 @@
+{
+  "id": "A141",
+  "title": "N-01 八个类别各至少两个信号→类别映射",
+  "type": "lead_matrix",
+  "input": {
+    "fixture": "card_harbor.json",
+    "cases": [
+      { "name": "automated-honeypot", "form_meta": { "honeypot_triggered": true }, "expect_class": "automated_submission" },
+      { "name": "automated-honeypot-with-signals", "signals": ["offers_seo_web_marketing"], "form_meta": { "honeypot_triggered": true }, "expect_class": "automated_submission" },
+      { "name": "phishing-login", "signals": ["contains_login_or_download_link"], "expect_class": "phishing_like" },
+      { "name": "phishing-attachment", "signals": ["contains_attachment_risky_ext"], "expect_class": "phishing_like" },
+      { "name": "vendor-seo", "signals": ["offers_seo_web_marketing"], "expect_class": "vendor_solicitation" },
+      { "name": "vendor-inspection", "signals": ["offers_inspection_audit_service"], "expect_class": "vendor_solicitation" },
+      { "name": "competitor-list", "signals": ["asks_customer_or_supplier_list"], "expect_class": "competitor_probe" },
+      { "name": "competitor-weak2", "signals": ["generic_no_product", "asks_catalog_only"], "expect_class": "competitor_probe" },
+      { "name": "individual-student", "signals": ["student_or_research_purpose"], "expect_class": "individual_research" },
+      { "name": "individual-personal", "signals": ["personal_use_small_qty"], "expect_class": "individual_research" },
+      { "name": "target-model-qty", "signals": ["names_product_model", "states_quantity", "states_end_use_project"], "expect_class": "target_end_user" },
+      { "name": "target-model-only", "signals": ["names_product_model", "states_end_use_project"], "expect_class": "target_end_user" },
+      { "name": "reseller-model", "signals": ["names_product_model", "mentions_resale_or_distribution"], "expect_class": "reseller" },
+      { "name": "reseller-oem-qty", "signals": ["mentions_own_brand_oem", "states_quantity"], "expect_class": "reseller" },
+      { "name": "unclear-none", "signals": [], "expect_class": "unclear" },
+      { "name": "unclear-one-weak", "signals": ["generic_no_product"], "expect_class": "unclear" }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

@@ -121,12 +121,13 @@
 | `needs-browser`；地图 `no-public-record` | 地图 | `https://www.google.com/maps/search/<URL 编码后的公司名>` | 建筑规模和门口招牌：吻合 / 偏小 / 住宅 |
 | `search-blocked` | 海关 | 当次实际使用的平台链接（ImportGenius / Volza / 其他可达平台） | 过一次验证码，回传进出口品类 |
 | `login-required`、`login-wall` | 领英和 Facebook | 当次检索到的个人页或公司页链接 | 登录一次，回传现任公司与自称是否一致 |
+| `unverified-contact` | 独立确认 | 官网联系页链接 | 用官网公示的电话或邮箱（不是对方给的）联系一次，确认此人在职、询盘出自他；回传：对方是否确认 |
 | 制裁自动检查失败 | 制裁名单 | `https://sanctionssearch.ofac.treas.gov/` | 输入公司名，回传有 / 没有匹配 |
 | `no-matrix`、`no-company-level-data` | 注册库 | 按 `scripts/country_capabilities.json` 给出的该国注册库链接 | 回传公司状态（存续 / 注销 / 找不到） |
 | `not-provided` | 补一项 | 无链接 | 邮件原始头，或一个带国家区号的电话 |
 | `no-public-record` | 不列一次动作 | — | 只在「没查到」栏写一句 |
 
-**纪律**：最多 4 行；按信息增益排序（地图、注册库在前，领英/Facebook 在中）；人只需要登录一次、过一次验证码或回传一句话；链接由模型填入 `display.missing[].action`，`render_card` 不硬编码网址。
+**纪律**：最多 4 行；按信息增益排序（地图、注册库、**独立确认**、领英和 Facebook）；人只需要登录一次、过一次验证码或回传一句话；链接由模型填入 `display.missing[].action`，`render_card` 不硬编码网址。
 ## 十二、注册库自动查（v0.9，P2）
 
 目前只实现挪威 **Enhetsregisteret**（Brønnøysundregistrene）：
@@ -154,3 +155,18 @@
 **自动化许可**：只有 `registry.automation_allowed: true` 且 `verification: official-page` 时，才允许对单条记录做一次查询；`null` / `false` 一律只给链接 + 检索清单；不批量抓取、不绕验证码、不登录。
 
 **全球兜底**（任何国家都列）：① GLEIF LEI 查询（免费，只覆盖持有 LEI 的主体）；② 世界银行禁入企业名单；③ OFAC 等制裁名单。OpenCorporates 的免费额度与条款未核实前只给链接，不写成结论。上述入口的具体页面与条款由开发/维护者打开核对后填入；核对不了保持 `secondary-source` 或 `unverified`。
+## 第十四节 按来源渠道的起手核实（v0.11）
+
+来源渠道 `intake.channel` 只影响检索起手顺序和报告 1.2，**不改变风险分、等级、结论卡任何字节**。缺省 `unknown` 时按通用顺序（官网 → 注册库 → 地图 → 海关 → 社媒）。
+
+| 渠道 | 优先核实 |
+| --- | --- |
+| `alibaba` | 平台资料卡（认证、注册年限、询盘记录）与对话是否一致；是否诱导离开平台（RF-BEH-001） |
+| `facebook` | 主页创建时间、管理员所在国家、头像是否盗图、是否商业主页 |
+| `whatsapp` | 号码国别与自称是否一致；商业资料里的网站和邮箱；头像 |
+| `website_form` | 邮箱域与填写的公司名是否对应；表单元数据（提交 IP 网段、来源页、提交耗时、蜜罐/验证码结果） |
+| `email` | 邮件头（`email_header_check`）、Reply-To、发件域 DMARC/SPF；显示原始邮件的方法因邮箱而异，不写死菜单路径 |
+| `linkedin` | 对方主页现任职公司与自称是否一致、主页创建时间、是否模板化群发私信；不登录、不绕验证码 |
+| `trade_show` | 参展商名录里是否有该公司；名片上的公司名、域名、电话是否一致 |
+
+**纪律**：渠道只决定先查什么，不作为可信度证据；不打开对方发来的链接和附件，只比对链接域名与附件扩展名；完整 IP 只保留网段（IPv4 /24、IPv6 /48）。

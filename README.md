@@ -2,13 +2,27 @@
 
 > 收到陌生询盘、准备寄样或接单前，用一份有来源依据的风险报告，帮外贸业务员判断"这个客户值不值得往下走"。
 
-> 当前版本：v0.10.1。
+> 当前版本：v0.11.0。
 
 `buyer-check` 是一个 Agent Skill：外贸业务员给出客户的公司名、域名、邮箱、询盘原文等有限信息，Skill 自动检索公开信息、交叉比对，输出**结构固定、每条结论都带来源链接和检索时间**的风险报告与下一步建议。
 
 **定位边界**：做的是「风险信号筛查 + 证据整理」，**不判定对方是不是骗子**。风险等级由 `red_flags.md` 的固定权重算出，同一输入多次运行结果一致、可复现。
 
 **数据不外传**：检索与报告都在使用者自己的环境完成；本 Skill 不收集、不上传用户数据，不做遥测。
+
+## 30 秒上手
+
+1. 复制下面任意一个示例；
+2. 把公司名、域名、邮箱、号码换成你自己的；
+3. 发送，直接看结论卡。
+
+```text
+帮我背调：NORDIC IMPORT AB，瑞典，邮箱 info@nordic-import.example
+客户 Anna，WhatsApp +44 7700 900123，想订 500 个接线端子
+阿里国际站的询盘：We would like to order 2000 pcs, please pay the factory audit fee first.
+```
+
+不知道给什么？说「使用指南」，会列出完整用法和更多示例（示例里的公司、域名、号码都是虚构的）。
 
 ## 一分钟了解
 
@@ -87,7 +101,7 @@ buyer-check/
 │   ├── identity_check.py / .mjs  # 官网画像、社媒回链、头像比对、地图 POI、注册库（v0.9）
 │   ├── render_card.py / .mjs  # 结论卡渲染：核实度、六维表、动作阶梯、结论句（v0.9）
 │   └── brands.json       # 知名公司域名清单
-├── tests/                # 验收用例 A1–A140、一致性测试、行为评测集
+├── tests/                # 验收用例 A1–A178、一致性测试、行为评测集
 ├── examples/             # 脱敏样例报告
 ├── reports/              # 生成的报告（本地保留，不入仓库）
 └── docs/                 # development.md 开发文档、iteration_plan.md 迭代方案
@@ -110,7 +124,7 @@ buyer-check/
 ## 验证
 
 ```bash
-node tests/run_cases.mjs        # 验收用例 A1–A140
+node tests/run_cases.mjs        # 验收用例 A1–A178
 node tests/consistency.mjs      # V5 分数区间遍历 + V6 Python/Node 一致性
 node tests/consistency_scripts.mjs  # 脚本 Python/Node 一致性（含 render_card）
 node scripts/privacy_scan.mjs   # 提交前隐私扫描

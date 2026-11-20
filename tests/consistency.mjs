@@ -13,7 +13,7 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -109,6 +109,56 @@ if (failures === beforeScoreChars) {
 }
 if (failures === beforeTemplate) {
   console.log('✓ card/report templates require confidence + coverage + uncovered items');
+}
+
+// ---------- v0.11 documentation numbers + guide/template consistency ----------
+const beforeV011 = failures;
+const readmeText = readFileSync(join(docRoot, 'README.md'), 'utf8');
+const skillText = readFileSync(join(docRoot, 'SKILL.md'), 'utf8');
+const manifest = JSON.parse(readFileSync(join(docRoot, 'submission.manifest.json'), 'utf8'));
+if (manifest.version !== '0.11.0') fail(`manifest version ${manifest.version} != 0.11.0`);
+if (!readmeText.includes('v0.11.0')) fail('README.md: missing v0.11.0');
+if (!readmeText.includes('A1–A178')) fail('README.md: missing A1–A178');
+if (!skillText.includes('A1–A178')) fail('SKILL.md: missing A1–A178');
+if (!skillText.includes('85 条合成询盘')) fail('SKILL.md: missing 85 条合成询盘');
+const caseCount = readdirSync(join(docRoot, 'tests', 'cases')).filter((name) => /^A\d+\.json$/.test(name)).length;
+if (caseCount !== 178) fail(`tests/cases: ${caseCount} cases != 178`);
+const evalLines = readFileSync(join(docRoot, 'tests', 'eval', 'inquiries.jsonl'), 'utf8')
+  .split(/\r?\n/).filter((line) => line.trim()).length;
+if (evalLines !== 85) fail(`tests/eval/inquiries.jsonl: ${evalLines} lines != 85`);
+
+const guideBlocks = [...cardText.matchAll(/```text\r?\n([\s\S]*?)```/g)]
+  .map((match) => match[1].replace(/\r\n/g, '\n').replace(/\n$/, ''));
+const fullGuide = guideBlocks.find((block) => block.startsWith('## BuyerCheck 使用指南'));
+if (!fullGuide) fail('card_template.md: full guide block missing');
+const pythonCmd = findPython();
+if (pythonCmd && fullGuide) {
+  const [cmd, ...rest] = pythonCmd.split(' ');
+  const out = execFileSync(cmd, [...rest, join(docRoot, 'scripts', 'render_card.py'), '--guide', 'full', '--lang', 'zh'], {
+    encoding: 'utf8',
+    timeout: 30000,
+  }).replace(/\r\n/g, '\n').replace(/\n$/, '');
+  if (out !== fullGuide) fail('card_template.md guide block != render_card --guide full --lang zh');
+}
+const guideExamples = [
+  '帮我背调：NORDIC IMPORT AB，瑞典，邮箱 info@nordic-import.example',
+  '客户 Anna，WhatsApp +44 7700 900123，想订 500 个接线端子',
+  '阿里国际站的询盘：We would like to order 2000 pcs, please pay the factory audit fee first.',
+];
+for (const sample of guideExamples) {
+  if (!readmeText.includes(sample)) fail(`README.md: missing guide example "${sample}"`);
+  if (fullGuide && !fullGuide.includes(sample)) fail(`card_template.md: missing guide example "${sample}"`);
+}
+const reportText = readFileSync(join(docRoot, 'report_template.md'), 'utf8');
+if (!reportText.includes('1.4 询价有效性判断')) fail('report_template.md: missing 1.4');
+if (!reportText.includes('类别由固定规则按所列信号得出')) fail('report_template.md: missing class disclaimer');
+const globalText = readFileSync(join(docRoot, 'data-sources/global.md'), 'utf8');
+if (!globalText.includes('第十四节')) fail('global.md: missing 第十四节');
+for (const channel of ['alibaba', 'facebook', 'whatsapp', 'website_form', 'email', 'linkedin', 'trade_show']) {
+  if (!globalText.includes(channel)) fail(`global.md: missing channel ${channel}`);
+}
+if (failures === beforeV011) {
+  console.log('✓ v0.11 docs numbers + guide/template consistency');
 }
 
 // ---------- V5: enumerate all combinations, assert band invariants ----------

@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import ipaddress
 import json
 import os
 import re
@@ -74,6 +75,119 @@ def country_known(code):
         return True
     return text(code).upper() in _COUNTRY_CODES
 
+
+IPV4_CANDIDATE_RE = re.compile(r"(?<![\d.])(?:\d{1,3}\.){3}\d{1,3}(?![\d.])")
+IPV6_CANDIDATE_RE = re.compile(r"(?<![0-9A-Za-z:])(?:[0-9A-Fa-f]{1,4}:){2,7}[0-9A-Fa-f]{0,4}(?![0-9A-Za-z:])")
+CIDR_SUFFIX_RE = re.compile(r"^\s*/\d{1,3}")
+
+
+def mask_ip_network(value):
+    raw = text(value).strip()
+    if not raw:
+        return ""
+    try:
+        if "/" in raw:
+            network = ipaddress.ip_network(raw, strict=False)
+        else:
+            address = ipaddress.ip_address(raw)
+            prefix = 24 if address.version == 4 else 48
+            network = ipaddress.ip_network(f"{address}/{prefix}", strict=False)
+        return str(network)
+    except ValueError:
+        return ""
+
+
+def contains_full_ip(value):
+    raw = text(value)
+    for pattern in (IPV4_CANDIDATE_RE, IPV6_CANDIDATE_RE):
+        for match in pattern.finditer(raw):
+            try:
+                ipaddress.ip_address(match.group())
+            except ValueError:
+                continue
+            if CIDR_SUFFIX_RE.match(raw[match.end():]):
+                continue
+            return True
+    return False
+
+
+def form_meta_info(evidence):
+    intake = evidence.get("intake") or {}
+    meta = intake.get("form_meta") if isinstance(intake.get("form_meta"), dict) else {}
+    anomalies = []
+    if meta.get("honeypot_triggered") is True:
+        anomalies.append("honeypot")
+    seconds = meta.get("seconds_to_submit")
+    if isinstance(seconds, int) and not isinstance(seconds, bool) and seconds < 5:
+        anomalies.append("fast-submit")
+    pages = meta.get("pages_viewed_before_submit")
+    if isinstance(pages, int) and not isinstance(pages, bool) and pages == 0 and not text(meta.get("referrer_domain")):
+        anomalies.append("direct-no-browse")
+    return {"anomalies": anomalies, "submit_ip_masked": text(meta.get("submit_ip_masked"))}
+
+
+def channel_info(evidence):
+    intake = evidence.get("intake") or {}
+    raw = text(intake.get("channel")).strip().lower()
+    if not raw:
+        return {"channel": "unknown", "channel_ignored": 0}
+    if raw in CHANNEL_SET:
+        return {"channel": raw, "channel_ignored": 0}
+    return {"channel": "unknown", "channel_ignored": 1}
+
+
+def video_script_info(evidence, level):
+    inquiry_type = text((evidence.get("intake") or {}).get("inquiry_type"))
+    if inquiry_type in ("large_first_order", "pre_order") or level in ("中", "高"):
+        return dict(VIDEO_SCRIPT)
+    return None
+
+
+_COUNTRY_DATA = None
+
+
+def country_matrix():
+    global _COUNTRY_DATA
+    if _COUNTRY_DATA is None:
+        try:
+            with open(COUNTRY_FILE, "r", encoding="utf-8") as handle:
+                _COUNTRY_DATA = json.load(handle)
+        except (OSError, json.JSONDecodeError):
+            _COUNTRY_DATA = {}
+    return _COUNTRY_DATA
+
+
+def country_entry(code):
+    data = country_matrix()
+    return ((data.get("countries") or {}).get(text(code).strip().lower()) or {})
+
+
+def ship_to_info(evidence):
+    intake = evidence.get("intake") or {}
+    ship = intake.get("ship_to") if isinstance(intake.get("ship_to"), dict) else None
+    if not ship:
+        return None
+    buyer_country = text((evidence.get("subject") or {}).get("country") or intake.get("country")).strip().upper()
+    ship_country = text(ship.get("country")).strip().upper()
+    background = None
+    raw_background = country_entry(ship_country).get("risk_background")
+    if isinstance(raw_background, dict) and raw_background.get("programs"):
+        background = {
+            "programs": [text(item) for item in raw_background.get("programs") or [] if text(item)],
+            "source_url": text(raw_background.get("source_url")) or None,
+            "verified_at": text(raw_background.get("verified_at")) or None,
+        }
+    return {
+        "country": ship_country or None,
+        "consignee_name": text(ship.get("consignee_name")) or None,
+        "forwarder_name": text(ship.get("forwarder_name")) or None,
+        "incoterm": text(ship.get("incoterm")) or None,
+        "buyer_country": buyer_country or None,
+        "country_mismatch": bool(ship_country and buyer_country and ship_country != buyer_country),
+        "risk_background": background,
+    }
+
+
 CHECKPOINT_NAMES = {
     "company": "公司名",
     "domain": "域名",
@@ -97,6 +211,7 @@ REASON_TEXT = {
     "no-double-match": "未找到同名主页",
     "name-only-match": "仅同名",
     "no-company-level-data": "该国无公开数据",
+    "unverified-contact": "官网公示的联系方式与对方提供的不一致，需独立确认",
 }
 
 COMPANY_CONTRA = ["RF-DOM-001", "RF-CORP-001", "RF-CORP-002", "RF-CORP-003", "RF-CORP-004", "RF-CORP-006", "RF-NEG-001", "RF-SAN-001"]
@@ -115,6 +230,151 @@ INQUIRY_LABELS = {
 
 ACTION_LABELS = ["回复和报价", "寄样和小额投入", "定制和大额备货", "收定金和付款"]
 
+LEAD_SIGNAL_SET = {
+    "names_product_model",
+    "states_quantity",
+    "states_end_use_project",
+    "states_target_market",
+    "asks_certifications",
+    "mentions_resale_or_distribution",
+    "mentions_own_brand_oem",
+    "generic_no_product",
+    "asks_full_price_list_only",
+    "asks_catalog_only",
+    "asks_factory_cost_structure",
+    "asks_customer_or_supplier_list",
+    "offers_seo_web_marketing",
+    "offers_inspection_audit_service",
+    "offers_freight_or_platform_service",
+    "offers_sourcing_or_supply",
+    "contains_login_or_download_link",
+    "contains_attachment_risky_ext",
+    "student_or_research_purpose",
+    "personal_use_small_qty",
+}
+LEAD_OFFER_SIGNALS = {
+    "offers_seo_web_marketing",
+    "offers_inspection_audit_service",
+    "offers_freight_or_platform_service",
+    "offers_sourcing_or_supply",
+}
+LEAD_WEAK_SIGNALS = {"generic_no_product", "asks_full_price_list_only", "asks_catalog_only", "asks_factory_cost_structure"}
+LEAD_CONCRETE_SIGNALS = {"names_product_model", "states_quantity", "states_end_use_project", "states_target_market"}
+LEAD_CLASS_LABELS = {
+    "automated_submission": "自动提交",
+    "phishing_like": "含需登录或下载内容",
+    "vendor_solicitation": "供应商推销",
+    "competitor_probe": "更像在了解行情",
+    "individual_research": "个人或调研",
+    "target_end_user": "终端用户或项目",
+    "reseller": "分销商、安装商或贸易商",
+    "unclear": "信息不足",
+}
+LEAD_CLASS_CONCLUSION = {
+    "automated_submission": "这条提交像自动程序发出的，先不回复。",
+    "phishing_like": "询盘里有需登录或下载的内容：先不要打开，用官网公示的渠道确认后再处理。",
+    "vendor_solicitation": "这更像向你推销服务，不是采购询盘：可以归档。",
+    "competitor_probe": "这条更像了解行情：只发标准目录和公开价，不发底价和客户信息。",
+    "individual_research": "看起来是个人或调研需求：低优先级，按标准资料回复即可。",
+}
+LEAD_NON_TARGET = {"automated_submission", "phishing_like", "vendor_solicitation", "competitor_probe", "individual_research"}
+RISKY_ATTACHMENT_EXTS = {"exe", "scr", "js", "jar", "iso", "img", "html", "htm", "hta", "lnk", "vbs", "msi", "bat", "cmd"}
+CHANNEL_SET = {"alibaba", "facebook", "whatsapp", "website_form", "email", "linkedin", "trade_show", "other", "unknown"}
+
+GUIDE_SHORT_ZH = """**BuyerCheck 使用提示**：给我下面任意一项就能开始，信息越多结果越准。
+▸ 公司名 + 国家　▸ 邮箱　▸ 带 + 国家区号的电话　▸ 官网域名　▸ 询盘原文或聊天记录
+示例：`帮我背调：NORDIC IMPORT AB，瑞典，邮箱 info@nordic-import.example`
+示例：`客户 Anna，WhatsApp +44 7700 900123，想订 500 个接线端子`
+（示例里的公司、域名、号码都是虚构的，请换成你自己的。）
+说「使用指南」可查看完整用法和更多示例。"""
+
+GUIDE_SHORT_EN = """**BuyerCheck quick guide**: give me any one of these and I can start; more details give a better result.
+▸ Company + country　▸ Email　▸ Phone with + country code　▸ Website domain　▸ Inquiry text or chat log
+Example: `Check this buyer: NORDIC IMPORT AB, Sweden, email info@nordic-import.example`
+Example: `Customer Anna, WhatsApp +44 7700 900123, wants 500 terminal blocks`
+(The company, domain and number above are fictional. Replace them with yours.)
+Say "guide" to see the full usage and more examples."""
+
+GUIDE_FULL_ZH = """## BuyerCheck 使用指南
+**一句话**：把询盘里零散的公司名、邮箱、电话和聊天记录，变成一张带来源的风险判断卡。只做风险信号筛查，不判定对方是不是骗子。
+
+**1. 给我什么信息**（任意一项就能开始，越多越准）
+| 档位 | 提供 | 能多查出什么 |
+| --- | --- | --- |
+| 最少 | 公司名、邮箱、带 + 国家区号的电话、官网域名、聊天记录，任一项 | 对方有没有公开痕迹 |
+| 推荐 | 公司名 + 国家 + 邮箱 + 询盘原文 | 邮箱和官网是否对得上、话术是否常见于骗局 |
+| 加分 | 询盘来源、官网表单里的提交信息、邮件原始头、收货地址 | 来源与发件是否一致、收货国是否对得上 |
+| 订单前 | 营业执照编号、收款账户（IBAN/BIC） | 收款账户所在国与买家国是否一致 |
+
+**2. 这些信息去哪里找**
+- 电话：写成 + 开头的完整格式，如 +44…；不带区号我不会猜国家
+- 询盘来源：阿里国际站、Facebook、WhatsApp、官网表单、邮件、领英、展会，说一个就行
+- 邮件原始头：在邮箱里找「显示原始邮件」或「查看邮件标头」，整段复制给我（菜单名称因邮箱而异）
+- 官网表单信息：表单后台那条记录里的提交 IP、来源页、提交耗时；IP 我只保留网段
+
+**3. 示例**（虚构数据，请换成你自己的）
+1. 一句话：`帮我背调：NORDIC IMPORT AB，瑞典，邮箱 info@nordic-import.example`
+2. 名称加电话：`客户 Anna，WhatsApp +44 7700 900123，想订 500 个接线端子`
+3. 贴询盘：`阿里国际站的询盘：We would like to order 2000 pcs, please pay the factory audit fee first.`
+4. 快查：`快查：ACME TRADING LTD，acme-trading.example`
+5. 批量：`批量快筛：`后面粘贴 2–10 封询盘，用空行隔开
+6. 订单前：`订单前复核：客户要求把货款汇到新账户 GB82 WEST 1234 5698 7654 32，买家自称在英国`
+
+**4. 怎么看结果**
+- 风险分（0–100）看“有没有危险信号”，核实度看“查到了多少”，两件事分开看
+- 「风险 待核实」是信息太少，不是没问题
+- “没查到”下面的一行动作：登录一次过一次验证码，把看到的回传给我，我会更新结果
+- 动作阶梯告诉你现在可以做到哪一步：报价、寄样、备货、收款
+
+**5. 隐私与边界**
+- 姓名、邮箱、电话默认打码；银行账号只用于本次分析，不写入文件
+- 只查商业身份相关的公开信息，不查住址、家庭、私人账号"""
+
+GUIDE_FULL_EN = """## BuyerCheck User Guide
+**In one sentence**: turn scattered company names, emails, phone numbers and chat logs into a sourced risk card. It screens risk signals; it does not decide whether someone is a fraudster.
+
+**1. What to give me** (any one item starts a check; more is better)
+| Level | Provide | What it adds |
+| --- | --- | --- |
+| Minimum | company name, email, phone with + country code, website domain, or chat log | public footprint |
+| Recommended | company + country + email + inquiry text | email/website consistency and common pitch patterns |
+| Bonus | inquiry channel, website form fields, raw email headers, ship-to address | source/header consistency and destination match |
+| Before order | business registration number, payment account (IBAN/BIC) | account country vs buyer country |
+
+**2. Where to find it**
+- Phone: use the full + format, e.g. +44…; without a country code I will not guess the country
+- Channel: Alibaba, Facebook, WhatsApp, website form, email, LinkedIn, trade show — one word is enough
+- Raw email header: use "Show original" or "View message headers" in your mailbox and paste the whole block (menu names differ by provider)
+- Website form data: the submission IP, referrer, and time-to-submit from the form backend; I keep the IP network only
+
+**3. Examples** (fictional data; replace with yours)
+1. One line: `Check this buyer: NORDIC IMPORT AB, Sweden, email info@nordic-import.example`
+2. Name and phone: `Customer Anna, WhatsApp +44 7700 900123, wants 500 terminal blocks`
+3. Paste the inquiry: `Alibaba inquiry: We would like to order 2000 pcs, please pay the factory audit fee first.`
+4. Quick check: `Quick check: ACME TRADING LTD, acme-trading.example`
+5. Batch: `Batch screen:` then paste 2–10 inquiries separated by blank lines
+6. Before order: `Pre-order check: the buyer asks us to remit to a new account GB82 WEST 1234 5698 7654 32, claims to be in the UK`
+
+**4. How to read the result**
+- Risk score (0–100) shows danger signals; verification shows how much was checked — read them separately
+- "Risk: to be verified" means too little information, not that it is safe
+- The action under "not found" asks you to log in or pass one captcha and paste back what you see
+- The action ladder tells you what you can do now: quote, sample, stock, payment
+
+**5. Privacy and boundaries**
+- Names, emails and phones are masked by default; bank details are used for this check only and never written to a file
+- Only public commercial-identity information; no home address, family or private accounts"""
+
+GUIDE_TEXTS = {
+    "short": {"zh": GUIDE_SHORT_ZH, "en": GUIDE_SHORT_EN},
+    "full": {"zh": GUIDE_FULL_ZH, "en": GUIDE_FULL_EN},
+}
+
+VIDEO_SCRIPT = {
+    "en": "Would a short video call with our sales team work for you? It would help us prepare the right quotation for your project.",
+    "zh": "能否安排一次简短的视频沟通？这样我们可以为您的项目准备更合适的报价。",
+}
+
 CHECK_LABELS = {"sanctions": "制裁名单", "registry": "注册处", "search": "公开搜索", "map": "地图", "other": "其他检查"}
 REASON_LABELS = {
     "no-network": "网络失败",
@@ -124,6 +384,7 @@ REASON_LABELS = {
     "login-wall": "需登录",
     "timeout": "超时",
     "stale": "数据陈旧",
+    "unverified-contact": "未独立确认",
 }
 DEFAULT_NEXT_STEPS = {
     "sanctions": "在 OFAC 官方站按公司名手动查一次",
@@ -723,6 +984,92 @@ def inquiry_text(evidence):
     intake = evidence.get("intake") or {}
     subject = evidence.get("subject") or {}
     return text(intake.get("inquiry_text") or evidence.get("inquiry_text") or subject.get("inquiry_text"))
+
+
+def risky_attachment_name(name):
+    raw = text(name).strip().lower()
+    if not raw:
+        return False
+    parts = raw.split(".")
+    return len(parts) >= 2 and any(part in RISKY_ATTACHMENT_EXTS for part in parts[1:])
+
+
+def lead_signals_of(evidence):
+    intake = evidence.get("intake") or {}
+    raw = intake.get("lead_signals")
+    signals = []
+    ignored = 0
+    if isinstance(raw, list):
+        for item in raw:
+            value = text(item).strip()
+            if not value:
+                continue
+            if value in LEAD_SIGNAL_SET:
+                if value not in signals:
+                    signals.append(value)
+            else:
+                ignored += 1
+    elif raw not in (None, ""):
+        ignored += 1
+    attachments = intake.get("attachments")
+    names = []
+    if isinstance(attachments, list):
+        for item in attachments:
+            if isinstance(item, dict):
+                names.append(text(item.get("name") or item.get("file_name")))
+            else:
+                names.append(text(item))
+    if any(risky_attachment_name(name) for name in names) and "contains_attachment_risky_ext" not in signals:
+        signals.append("contains_attachment_risky_ext")
+    return signals, ignored
+
+
+def lead_class_of(evidence):
+    intake = evidence.get("intake") or {}
+    signals, ignored = lead_signals_of(evidence)
+    signal_set = set(signals)
+    form_meta = intake.get("form_meta") if isinstance(intake.get("form_meta"), dict) else {}
+    label = "unclear"
+    basis = []
+    if form_meta.get("honeypot_triggered") is True:
+        label = "automated_submission"
+        basis = ["honeypot_triggered"]
+    elif signal_set & {"contains_login_or_download_link", "contains_attachment_risky_ext"}:
+        label = "phishing_like"
+        basis = [item for item in signals if item in ("contains_login_or_download_link", "contains_attachment_risky_ext")]
+    elif signal_set & LEAD_OFFER_SIGNALS:
+        label = "vendor_solicitation"
+        basis = [item for item in signals if item in LEAD_OFFER_SIGNALS]
+    elif "asks_customer_or_supplier_list" in signal_set or (
+        len(signal_set & LEAD_WEAK_SIGNALS) >= 2 and not (signal_set & LEAD_CONCRETE_SIGNALS)
+    ):
+        label = "competitor_probe"
+        basis = [
+            item for item in signals
+            if item == "asks_customer_or_supplier_list" or item in LEAD_WEAK_SIGNALS
+        ]
+    elif signal_set & {"student_or_research_purpose", "personal_use_small_qty"}:
+        label = "individual_research"
+        basis = [item for item in signals if item in ("student_or_research_purpose", "personal_use_small_qty")]
+    elif "states_end_use_project" in signal_set and (signal_set & {"names_product_model", "states_quantity"}):
+        label = "target_end_user"
+        basis = [item for item in signals if item in ("states_end_use_project", "names_product_model", "states_quantity")]
+    elif (signal_set & {"mentions_resale_or_distribution", "mentions_own_brand_oem"}) and (
+        signal_set & {"names_product_model", "states_quantity", "states_target_market"}
+    ):
+        label = "reseller"
+        basis = [
+            item for item in signals
+            if item in ("mentions_resale_or_distribution", "mentions_own_brand_oem", "names_product_model", "states_quantity", "states_target_market")
+        ]
+    return {
+        "lead_class": label,
+        "lead_class_label": LEAD_CLASS_LABELS[label],
+        "lead_class_basis": basis,
+        "lead_signals": signals,
+        "lead_signals_ignored": ignored,
+        "lead_class_source": "signals",
+    }
 
 
 def validate_checks_incomplete(evidence):
@@ -1560,6 +1907,18 @@ def validate_evidence_contract(evidence):
 
     if scan(evidence):
         add("plaintext-id", "evidence")
+
+    def scan_ip(value):
+        if isinstance(value, str):
+            return contains_full_ip(value)
+        if isinstance(value, dict):
+            return any(scan_ip(item) for item in value.values())
+        if isinstance(value, list):
+            return any(scan_ip(item) for item in value)
+        return False
+
+    if scan_ip(evidence):
+        add("plaintext-ip", "evidence")
     return errors
 
 
@@ -1664,6 +2023,13 @@ def render_card(evidence, rules):
     uncovered_text = "、".join(uncovered_sentence(entry) for entry in uncovered) if uncovered else "无"
     first_uncovered = CHECKPOINT_NAMES.get(parse_uncovered(uncovered[0])["checkpoint"], "公司注册记录") if uncovered else "公司注册记录"
     conclusion = compute_conclusion(level, actions, first_uncovered)
+    lead = lead_class_of(evidence)
+    form_meta = form_meta_info(evidence)
+    channel = channel_info(evidence)
+    video_script = video_script_info(evidence, level)
+    ship_to = ship_to_info(evidence)
+    lead_conclusion = conclusion if level == "高" else LEAD_CLASS_CONCLUSION.get(lead["lead_class"], conclusion)
+    lead_suffix = "" if lead["lead_class"] == "unclear" else f" · 类别：{lead['lead_class_label']}"
     verdict_text, verdict_warning = verdict_line(display, evidence, level, actions)
 
     dim_notes = display.get("dim_notes") or {}
@@ -1829,7 +2195,7 @@ def render_card(evidence, rules):
         lines.append(f"⚠ 本次未完成：{details}")
     if verdict_text:
         lines.append(verdict_text)
-    lines.append(f"**结论：{conclusion}** 客户：{customer_label(evidence, display)} · {inquiry_label(evidence, display)}")
+    lines.append(f"**结论：{lead_conclusion}** 客户：{customer_label(evidence, display)} · {inquiry_label(evidence, display)}{lead_suffix}")
     lines.append("")
     lines.append("| 动作 | 建议 | 条件 |")
     lines.append("| --- | --- | --- |")
@@ -1986,6 +2352,20 @@ def render_card(evidence, rules):
         "source_grade_warnings": source_grade_warnings,
         "verdict_warning": verdict_warning,
         "derived_flags": [item["id"] for item in derived_flags],
+        "computed": {
+            "lead_class": lead["lead_class"],
+            "lead_class_label": lead["lead_class_label"],
+            "lead_class_basis": lead["lead_class_basis"],
+            "lead_signals": lead["lead_signals"],
+            "lead_signals_ignored": lead["lead_signals_ignored"],
+            "lead_class_source": lead["lead_class_source"],
+        },
+        "form_meta_anomalies": form_meta["anomalies"],
+        "form_meta": {"submit_ip_masked": form_meta["submit_ip_masked"]},
+        "channel": channel["channel"],
+        "channel_ignored": channel["channel_ignored"],
+        "video_script": video_script,
+        "ship_to": ship_to,
         "line_count": len(lines),
         "first_screen_lines": first_screen_lines,
         "card": "\n".join(lines),
@@ -2030,12 +2410,24 @@ def build_parser():
     parser.add_argument("--diff", nargs="+", metavar="PACK", help="compare old/new evidence packs, or one pack with previous")
     parser.add_argument("--batch", nargs="+", metavar="PACK", help="triage 2-10 quick-check evidence packs, or one JSON array file")
     parser.add_argument("--report", action="store_true", help="render the search-log appendix from the evidence pack")
+    parser.add_argument("--mask-ip", metavar="IP", help="mask a full IPv4/IPv6 address to a /24 or /48 network")
+    parser.add_argument("--guide", choices=("short", "full"), help="print the fixed usage guide (no evidence pack needed)")
+    parser.add_argument("--lang", choices=("zh", "en"), default="zh", help="guide language (default zh)")
     parser.add_argument("--rules", default=RULES_FILE, help="path to red_flags.json")
     return parser
 
 
 def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
+    if args.guide:
+        sys.stdout.buffer.write((GUIDE_TEXTS[args.guide][args.lang] + "\n").encode("utf-8"))
+        sys.stdout.buffer.flush()
+        return 0
+    if args.mask_ip is not None:
+        masked = mask_ip_network(args.mask_ip)
+        payload = {"status": "ok" if masked else "invalid-input", "input": args.mask_ip, "masked": masked}
+        print(json.dumps(payload, ensure_ascii=False))
+        return 0 if masked else 1
     try:
         rules = load_rules(args.rules)
     except OSError as exc:

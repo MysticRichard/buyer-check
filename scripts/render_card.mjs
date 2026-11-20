@@ -14,6 +14,7 @@
  */
 
 import { readFileSync } from 'node:fs';
+import { isIP } from 'node:net';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -35,6 +36,169 @@ function countryKnown(code) {
   }
   if (COUNTRY_CODES.size === 0) return true;
   return COUNTRY_CODES.has(text(code).toUpperCase());
+}
+
+const IPV4_CANDIDATE_RE = /(?<![\d.])(?:\d{1,3}\.){3}\d{1,3}(?![\d.])/g;
+const IPV6_CANDIDATE_RE = /(?<![0-9A-Za-z:])(?:[0-9A-Fa-f]{1,4}:){2,7}[0-9A-Fa-f]{0,4}(?![0-9A-Za-z:])/g;
+const CIDR_SUFFIX_RE = /^\s*\/\d{1,3}/;
+
+function parseIpv4(raw) {
+  const parts = text(raw).split('.');
+  if (parts.length !== 4) return null;
+  const nums = parts.map((part) => (/^\d{1,3}$/.test(part) ? Number(part) : NaN));
+  if (nums.some((value) => !Number.isInteger(value) || value < 0 || value > 255)) return null;
+  return nums;
+}
+
+function expandIpv6(raw) {
+  let value = text(raw).toLowerCase().split('%')[0];
+  if (value.includes('.')) {
+    const idx = value.lastIndexOf(':');
+    const v4 = parseIpv4(value.slice(idx + 1));
+    if (!v4) return null;
+    value = `${value.slice(0, idx + 1)}${((v4[0] << 8) | v4[1]).toString(16)}:${((v4[2] << 8) | v4[3]).toString(16)}`;
+  }
+  const halves = value.split('::');
+  if (halves.length > 2) return null;
+  const head = halves[0] ? halves[0].split(':') : [];
+  const tail = halves.length === 2 && halves[1] ? halves[1].split(':') : [];
+  const missing = 8 - head.length - tail.length;
+  if (halves.length === 1 ? head.length !== 8 : missing < 0) return null;
+  const groups = [...head, ...Array(halves.length === 2 ? missing : 0).fill('0'), ...tail];
+  if (groups.length !== 8 || groups.some((group) => !/^[0-9a-f]{1,4}$/.test(group))) return null;
+  return groups.map((group) => parseInt(group, 16));
+}
+
+function compressIpv6(groups) {
+  let bestStart = -1;
+  let bestLength = 1;
+  for (let i = 0; i < 8;) {
+    if (groups[i] !== 0) {
+      i += 1;
+      continue;
+    }
+    let j = i;
+    while (j < 8 && groups[j] === 0) j += 1;
+    if (j - i >= 2 && j - i > bestLength) {
+      bestLength = j - i;
+      bestStart = i;
+    }
+    i = j;
+  }
+  const hex = groups.map((group) => group.toString(16));
+  if (bestStart === -1) return hex.join(':');
+  return `${hex.slice(0, bestStart).join(':')}::${hex.slice(bestStart + bestLength).join(':')}`;
+}
+
+export function maskIpNetwork(value) {
+  const raw = text(value).trim();
+  if (!raw) return '';
+  const slash = raw.lastIndexOf('/');
+  const addr = slash >= 0 ? raw.slice(0, slash).trim() : raw;
+  const version = isIP(addr);
+  if (version === 4) {
+    const nums = parseIpv4(addr);
+    if (!nums) return '';
+    const bits = slash >= 0 ? Number(raw.slice(slash + 1).trim()) : 24;
+    if (!Number.isInteger(bits) || bits < 0 || bits > 32) return '';
+    const value32 = (((nums[0] << 24) | (nums[1] << 16) | (nums[2] << 8) | nums[3]) >>> 0);
+    const mask = bits === 0 ? 0 : (0xffffffff << (32 - bits)) >>> 0;
+    const net = (value32 & mask) >>> 0;
+    return `${(net >>> 24) & 255}.${(net >>> 16) & 255}.${(net >>> 8) & 255}.${net & 255}/${bits}`;
+  }
+  if (version === 6) {
+    const groups = expandIpv6(addr);
+    if (!groups) return '';
+    const bits = slash >= 0 ? Number(raw.slice(slash + 1).trim()) : 48;
+    if (!Number.isInteger(bits) || bits < 0 || bits > 128) return '';
+    for (let i = 0; i < 8; i += 1) {
+      const groupBits = Math.max(0, Math.min(16, bits - i * 16));
+      const mask = groupBits === 0 ? 0 : (0xffff << (16 - groupBits)) & 0xffff;
+      groups[i] &= mask;
+    }
+    return `${compressIpv6(groups)}/${bits}`;
+  }
+  return '';
+}
+
+export function containsFullIp(value) {
+  const raw = text(value);
+  for (const pattern of [IPV4_CANDIDATE_RE, IPV6_CANDIDATE_RE]) {
+    pattern.lastIndex = 0;
+    let match = pattern.exec(raw);
+    while (match) {
+      if (isIP(match[0])) {
+        const rest = raw.slice(match.index + match[0].length);
+        if (!CIDR_SUFFIX_RE.test(rest)) return true;
+      }
+      match = pattern.exec(raw);
+    }
+  }
+  return false;
+}
+
+function formMetaInfo(evidence) {
+  const intake = evidence.intake || {};
+  const meta = intake.form_meta && typeof intake.form_meta === 'object' && !Array.isArray(intake.form_meta) ? intake.form_meta : {};
+  const anomalies = [];
+  if (meta.honeypot_triggered === true) anomalies.push('honeypot');
+  if (Number.isInteger(meta.seconds_to_submit) && meta.seconds_to_submit < 5) anomalies.push('fast-submit');
+  if (Number.isInteger(meta.pages_viewed_before_submit) && meta.pages_viewed_before_submit === 0 && !text(meta.referrer_domain)) anomalies.push('direct-no-browse');
+  return { anomalies, submit_ip_masked: text(meta.submit_ip_masked) };
+}
+
+function channelInfo(evidence) {
+  const intake = evidence.intake || {};
+  const raw = text(intake.channel).trim().toLowerCase();
+  if (!raw) return { channel: 'unknown', channel_ignored: 0 };
+  if (CHANNEL_SET.has(raw)) return { channel: raw, channel_ignored: 0 };
+  return { channel: 'unknown', channel_ignored: 1 };
+}
+
+function videoScriptInfo(evidence, level) {
+  const inquiryType = text((evidence.intake || {}).inquiry_type);
+  if (inquiryType === 'large_first_order' || inquiryType === 'pre_order' || level === '中' || level === '高') {
+    return { ...VIDEO_SCRIPT };
+  }
+  return null;
+}
+
+let COUNTRY_DATA = null;
+function countryEntry(code) {
+  if (COUNTRY_DATA === null) {
+    try {
+      COUNTRY_DATA = JSON.parse(readFileSync(COUNTRY_FILE, 'utf8'));
+    } catch {
+      COUNTRY_DATA = {};
+    }
+  }
+  return ((COUNTRY_DATA.countries || {})[text(code).trim().toLowerCase()]) || {};
+}
+
+function shipToInfo(evidence) {
+  const intake = evidence.intake || {};
+  const ship = intake.ship_to && typeof intake.ship_to === 'object' && !Array.isArray(intake.ship_to) ? intake.ship_to : null;
+  if (!ship) return null;
+  const buyer = text((evidence.subject && evidence.subject.country) || intake.country).trim().toUpperCase();
+  const country = text(ship.country).trim().toUpperCase();
+  let background = null;
+  const raw = countryEntry(country).risk_background;
+  if (raw && typeof raw === 'object' && Array.isArray(raw.programs) && raw.programs.length > 0) {
+    background = {
+      programs: raw.programs.map((item) => text(item)).filter(Boolean),
+      source_url: text(raw.source_url) || null,
+      verified_at: text(raw.verified_at) || null,
+    };
+  }
+  return {
+    country: country || null,
+    consignee_name: text(ship.consignee_name) || null,
+    forwarder_name: text(ship.forwarder_name) || null,
+    incoterm: text(ship.incoterm) || null,
+    buyer_country: buyer || null,
+    country_mismatch: Boolean(country && buyer && country !== buyer),
+    risk_background: background,
+  };
 }
 
 const CHECKPOINT_NAMES = {
@@ -60,6 +224,7 @@ const REASON_TEXT = {
   'no-double-match': '未找到同名主页',
   'name-only-match': '仅同名',
   'no-company-level-data': '该国无公开数据',
+  'unverified-contact': '官网公示的联系方式与对方提供的不一致，需独立确认',
 };
 
 const COMPANY_CONTRA = ['RF-DOM-001', 'RF-CORP-001', 'RF-CORP-002', 'RF-CORP-003', 'RF-CORP-004', 'RF-CORP-006', 'RF-NEG-001', 'RF-SAN-001'];
@@ -78,6 +243,154 @@ const INQUIRY_LABELS = {
 
 const ACTION_LABELS = ['回复和报价', '寄样和小额投入', '定制和大额备货', '收定金和付款'];
 
+const LEAD_SIGNAL_SET = new Set([
+  'names_product_model',
+  'states_quantity',
+  'states_end_use_project',
+  'states_target_market',
+  'asks_certifications',
+  'mentions_resale_or_distribution',
+  'mentions_own_brand_oem',
+  'generic_no_product',
+  'asks_full_price_list_only',
+  'asks_catalog_only',
+  'asks_factory_cost_structure',
+  'asks_customer_or_supplier_list',
+  'offers_seo_web_marketing',
+  'offers_inspection_audit_service',
+  'offers_freight_or_platform_service',
+  'offers_sourcing_or_supply',
+  'contains_login_or_download_link',
+  'contains_attachment_risky_ext',
+  'student_or_research_purpose',
+  'personal_use_small_qty',
+]);
+const LEAD_OFFER_SIGNALS = new Set([
+  'offers_seo_web_marketing',
+  'offers_inspection_audit_service',
+  'offers_freight_or_platform_service',
+  'offers_sourcing_or_supply',
+]);
+const LEAD_WEAK_SIGNALS = new Set(['generic_no_product', 'asks_full_price_list_only', 'asks_catalog_only', 'asks_factory_cost_structure']);
+const LEAD_CONCRETE_SIGNALS = new Set(['names_product_model', 'states_quantity', 'states_end_use_project', 'states_target_market']);
+const LEAD_CLASS_LABELS = {
+  automated_submission: '自动提交',
+  phishing_like: '含需登录或下载内容',
+  vendor_solicitation: '供应商推销',
+  competitor_probe: '更像在了解行情',
+  individual_research: '个人或调研',
+  target_end_user: '终端用户或项目',
+  reseller: '分销商、安装商或贸易商',
+  unclear: '信息不足',
+};
+const LEAD_CLASS_CONCLUSION = {
+  automated_submission: '这条提交像自动程序发出的，先不回复。',
+  phishing_like: '询盘里有需登录或下载的内容：先不要打开，用官网公示的渠道确认后再处理。',
+  vendor_solicitation: '这更像向你推销服务，不是采购询盘：可以归档。',
+  competitor_probe: '这条更像了解行情：只发标准目录和公开价，不发底价和客户信息。',
+  individual_research: '看起来是个人或调研需求：低优先级，按标准资料回复即可。',
+};
+const RISKY_ATTACHMENT_EXTS = new Set(['exe', 'scr', 'js', 'jar', 'iso', 'img', 'html', 'htm', 'hta', 'lnk', 'vbs', 'msi', 'bat', 'cmd']);
+const CHANNEL_SET = new Set(['alibaba', 'facebook', 'whatsapp', 'website_form', 'email', 'linkedin', 'trade_show', 'other', 'unknown']);
+
+const GUIDE_SHORT_ZH = [
+  '**BuyerCheck 使用提示**：给我下面任意一项就能开始，信息越多结果越准。',
+  '▸ 公司名 + 国家　▸ 邮箱　▸ 带 + 国家区号的电话　▸ 官网域名　▸ 询盘原文或聊天记录',
+  '示例：`帮我背调：NORDIC IMPORT AB，瑞典，邮箱 info@nordic-import.example`',
+  '示例：`客户 Anna，WhatsApp +44 7700 900123，想订 500 个接线端子`',
+  '（示例里的公司、域名、号码都是虚构的，请换成你自己的。）',
+  '说「使用指南」可查看完整用法和更多示例。',
+].join('\n');
+const GUIDE_SHORT_EN = [
+  '**BuyerCheck quick guide**: give me any one of these and I can start; more details give a better result.',
+  '▸ Company + country　▸ Email　▸ Phone with + country code　▸ Website domain　▸ Inquiry text or chat log',
+  'Example: `Check this buyer: NORDIC IMPORT AB, Sweden, email info@nordic-import.example`',
+  'Example: `Customer Anna, WhatsApp +44 7700 900123, wants 500 terminal blocks`',
+  '(The company, domain and number above are fictional. Replace them with yours.)',
+  'Say "guide" to see the full usage and more examples.',
+].join('\n');
+const GUIDE_FULL_ZH = [
+  '## BuyerCheck 使用指南',
+  '**一句话**：把询盘里零散的公司名、邮箱、电话和聊天记录，变成一张带来源的风险判断卡。只做风险信号筛查，不判定对方是不是骗子。',
+  '',
+  '**1. 给我什么信息**（任意一项就能开始，越多越准）',
+  '| 档位 | 提供 | 能多查出什么 |',
+  '| --- | --- | --- |',
+  '| 最少 | 公司名、邮箱、带 + 国家区号的电话、官网域名、聊天记录，任一项 | 对方有没有公开痕迹 |',
+  '| 推荐 | 公司名 + 国家 + 邮箱 + 询盘原文 | 邮箱和官网是否对得上、话术是否常见于骗局 |',
+  '| 加分 | 询盘来源、官网表单里的提交信息、邮件原始头、收货地址 | 来源与发件是否一致、收货国是否对得上 |',
+  '| 订单前 | 营业执照编号、收款账户（IBAN/BIC） | 收款账户所在国与买家国是否一致 |',
+  '',
+  '**2. 这些信息去哪里找**',
+  '- 电话：写成 + 开头的完整格式，如 +44…；不带区号我不会猜国家',
+  '- 询盘来源：阿里国际站、Facebook、WhatsApp、官网表单、邮件、领英、展会，说一个就行',
+  '- 邮件原始头：在邮箱里找「显示原始邮件」或「查看邮件标头」，整段复制给我（菜单名称因邮箱而异）',
+  '- 官网表单信息：表单后台那条记录里的提交 IP、来源页、提交耗时；IP 我只保留网段',
+  '',
+  '**3. 示例**（虚构数据，请换成你自己的）',
+  '1. 一句话：`帮我背调：NORDIC IMPORT AB，瑞典，邮箱 info@nordic-import.example`',
+  '2. 名称加电话：`客户 Anna，WhatsApp +44 7700 900123，想订 500 个接线端子`',
+  '3. 贴询盘：`阿里国际站的询盘：We would like to order 2000 pcs, please pay the factory audit fee first.`',
+  '4. 快查：`快查：ACME TRADING LTD，acme-trading.example`',
+  '5. 批量：`批量快筛：`后面粘贴 2–10 封询盘，用空行隔开',
+  '6. 订单前：`订单前复核：客户要求把货款汇到新账户 GB82 WEST 1234 5698 7654 32，买家自称在英国`',
+  '',
+  '**4. 怎么看结果**',
+  '- 风险分（0–100）看“有没有危险信号”，核实度看“查到了多少”，两件事分开看',
+  '- 「风险 待核实」是信息太少，不是没问题',
+  '- “没查到”下面的一行动作：登录一次过一次验证码，把看到的回传给我，我会更新结果',
+  '- 动作阶梯告诉你现在可以做到哪一步：报价、寄样、备货、收款',
+  '',
+  '**5. 隐私与边界**',
+  '- 姓名、邮箱、电话默认打码；银行账号只用于本次分析，不写入文件',
+  '- 只查商业身份相关的公开信息，不查住址、家庭、私人账号',
+].join('\n');
+const GUIDE_FULL_EN = [
+  '## BuyerCheck User Guide',
+  '**In one sentence**: turn scattered company names, emails, phone numbers and chat logs into a sourced risk card. It screens risk signals; it does not decide whether someone is a fraudster.',
+  '',
+  '**1. What to give me** (any one item starts a check; more is better)',
+  '| Level | Provide | What it adds |',
+  '| --- | --- | --- |',
+  '| Minimum | company name, email, phone with + country code, website domain, or chat log | public footprint |',
+  '| Recommended | company + country + email + inquiry text | email/website consistency and common pitch patterns |',
+  '| Bonus | inquiry channel, website form fields, raw email headers, ship-to address | source/header consistency and destination match |',
+  '| Before order | business registration number, payment account (IBAN/BIC) | account country vs buyer country |',
+  '',
+  '**2. Where to find it**',
+  '- Phone: use the full + format, e.g. +44…; without a country code I will not guess the country',
+  '- Channel: Alibaba, Facebook, WhatsApp, website form, email, LinkedIn, trade show — one word is enough',
+  '- Raw email header: use "Show original" or "View message headers" in your mailbox and paste the whole block (menu names differ by provider)',
+  '- Website form data: the submission IP, referrer, and time-to-submit from the form backend; I keep the IP network only',
+  '',
+  '**3. Examples** (fictional data; replace with yours)',
+  '1. One line: `Check this buyer: NORDIC IMPORT AB, Sweden, email info@nordic-import.example`',
+  '2. Name and phone: `Customer Anna, WhatsApp +44 7700 900123, wants 500 terminal blocks`',
+  '3. Paste the inquiry: `Alibaba inquiry: We would like to order 2000 pcs, please pay the factory audit fee first.`',
+  '4. Quick check: `Quick check: ACME TRADING LTD, acme-trading.example`',
+  '5. Batch: `Batch screen:` then paste 2–10 inquiries separated by blank lines',
+  '6. Before order: `Pre-order check: the buyer asks us to remit to a new account GB82 WEST 1234 5698 7654 32, claims to be in the UK`',
+  '',
+  '**4. How to read the result**',
+  '- Risk score (0–100) shows danger signals; verification shows how much was checked — read them separately',
+  '- "Risk: to be verified" means too little information, not that it is safe',
+  '- The action under "not found" asks you to log in or pass one captcha and paste back what you see',
+  '- The action ladder tells you what you can do now: quote, sample, stock, payment',
+  '',
+  '**5. Privacy and boundaries**',
+  '- Names, emails and phones are masked by default; bank details are used for this check only and never written to a file',
+  '- Only public commercial-identity information; no home address, family or private accounts',
+].join('\n');
+const GUIDE_TEXTS = {
+  short: { zh: GUIDE_SHORT_ZH, en: GUIDE_SHORT_EN },
+  full: { zh: GUIDE_FULL_ZH, en: GUIDE_FULL_EN },
+};
+
+const VIDEO_SCRIPT = {
+  en: 'Would a short video call with our sales team work for you? It would help us prepare the right quotation for your project.',
+  zh: '能否安排一次简短的视频沟通？这样我们可以为您的项目准备更合适的报价。',
+};
+
 const CHECK_LABELS = { sanctions: '制裁名单', registry: '注册处', search: '公开搜索', map: '地图', other: '其他检查' };
 const REASON_LABELS = {
   'no-network': '网络失败',
@@ -87,6 +400,7 @@ const REASON_LABELS = {
   'login-wall': '需登录',
   timeout: '超时',
   stale: '数据陈旧',
+  'unverified-contact': '未独立确认',
 };
 const DEFAULT_NEXT_STEPS = {
   sanctions: '在 OFAC 官方站按公司名手动查一次',
@@ -628,6 +942,87 @@ function inquiryText(evidence) {
   return text((evidence.intake && evidence.intake.inquiry_text) || evidence.inquiry_text || (evidence.subject && evidence.subject.inquiry_text));
 }
 
+function riskyAttachmentName(name) {
+  const raw = text(name).trim().toLowerCase();
+  if (!raw) return false;
+  const parts = raw.split('.');
+  return parts.length >= 2 && parts.slice(1).some((part) => RISKY_ATTACHMENT_EXTS.has(part));
+}
+
+function leadSignalsOf(evidence) {
+  const intake = evidence.intake || {};
+  const raw = intake.lead_signals;
+  const signals = [];
+  let ignored = 0;
+  if (Array.isArray(raw)) {
+    for (const item of raw) {
+      const value = text(item).trim();
+      if (!value) continue;
+      if (LEAD_SIGNAL_SET.has(value)) {
+        if (!signals.includes(value)) signals.push(value);
+      } else {
+        ignored += 1;
+      }
+    }
+  } else if (raw !== undefined && raw !== null && raw !== '') {
+    ignored += 1;
+  }
+  const attachments = intake.attachments;
+  const names = [];
+  if (Array.isArray(attachments)) {
+    for (const item of attachments) {
+      if (item && typeof item === 'object' && !Array.isArray(item)) names.push(text(item.name || item.file_name));
+      else names.push(text(item));
+    }
+  }
+  if (names.some(riskyAttachmentName) && !signals.includes('contains_attachment_risky_ext')) {
+    signals.push('contains_attachment_risky_ext');
+  }
+  return { signals, ignored };
+}
+
+function leadClassOf(evidence) {
+  const intake = evidence.intake || {};
+  const { signals, ignored } = leadSignalsOf(evidence);
+  const signalSet = new Set(signals);
+  const formMeta = intake.form_meta && typeof intake.form_meta === 'object' && !Array.isArray(intake.form_meta) ? intake.form_meta : {};
+  let label = 'unclear';
+  let basis = [];
+  if (formMeta.honeypot_triggered === true) {
+    label = 'automated_submission';
+    basis = ['honeypot_triggered'];
+  } else if (signalSet.has('contains_login_or_download_link') || signalSet.has('contains_attachment_risky_ext')) {
+    label = 'phishing_like';
+    basis = signals.filter((item) => item === 'contains_login_or_download_link' || item === 'contains_attachment_risky_ext');
+  } else if (signals.some((item) => LEAD_OFFER_SIGNALS.has(item))) {
+    label = 'vendor_solicitation';
+    basis = signals.filter((item) => LEAD_OFFER_SIGNALS.has(item));
+  } else if (signalSet.has('asks_customer_or_supplier_list')
+    || (signals.filter((item) => LEAD_WEAK_SIGNALS.has(item)).length >= 2 && signals.every((item) => !LEAD_CONCRETE_SIGNALS.has(item)))) {
+    label = 'competitor_probe';
+    basis = signals.filter((item) => item === 'asks_customer_or_supplier_list' || LEAD_WEAK_SIGNALS.has(item));
+  } else if (signalSet.has('student_or_research_purpose') || signalSet.has('personal_use_small_qty')) {
+    label = 'individual_research';
+    basis = signals.filter((item) => item === 'student_or_research_purpose' || item === 'personal_use_small_qty');
+  } else if (signalSet.has('states_end_use_project') && (signalSet.has('names_product_model') || signalSet.has('states_quantity'))) {
+    label = 'target_end_user';
+    basis = signals.filter((item) => item === 'states_end_use_project' || item === 'names_product_model' || item === 'states_quantity');
+  } else if ((signalSet.has('mentions_resale_or_distribution') || signalSet.has('mentions_own_brand_oem'))
+    && (signalSet.has('names_product_model') || signalSet.has('states_quantity') || signalSet.has('states_target_market'))) {
+    label = 'reseller';
+    basis = signals.filter((item) => item === 'mentions_resale_or_distribution' || item === 'mentions_own_brand_oem'
+      || item === 'names_product_model' || item === 'states_quantity' || item === 'states_target_market');
+  }
+  return {
+    lead_class: label,
+    lead_class_label: LEAD_CLASS_LABELS[label],
+    lead_class_basis: basis,
+    lead_signals: signals,
+    lead_signals_ignored: ignored,
+    lead_class_source: 'signals',
+  };
+}
+
 function validateChecksIncomplete(evidence) {
   const raw = evidence.checks_incomplete;
   if (raw === undefined || raw === null) return { items: [], errors: [] };
@@ -1106,6 +1501,13 @@ function validateEvidenceContract(evidence) {
     return false;
   };
   if (scan(evidence)) add('plaintext-id', 'evidence');
+  const scanIp = (value) => {
+    if (typeof value === 'string') return containsFullIp(value);
+    if (Array.isArray(value)) return value.some(scanIp);
+    if (value && typeof value === 'object') return Object.values(value).some(scanIp);
+    return false;
+  };
+  if (scanIp(evidence)) add('plaintext-ip', 'evidence');
   return errors;
 }
 
@@ -1199,6 +1601,13 @@ export function renderCard(evidence, rules) {
   const uncoveredText = uncovered.length > 0 ? uncovered.map(uncoveredSentence).join('、') : '无';
   const firstUncovered = uncovered.length > 0 ? (CHECKPOINT_NAMES[parseUncovered(uncovered[0]).checkpoint] || '公司注册记录') : '公司注册记录';
   const conclusion = computeConclusion(level, actions, firstUncovered);
+  const lead = leadClassOf(evidence);
+  const formMeta = formMetaInfo(evidence);
+  const channel = channelInfo(evidence);
+  const videoScript = videoScriptInfo(evidence, level);
+  const shipTo = shipToInfo(evidence);
+  const leadConclusion = level === '高' ? conclusion : (LEAD_CLASS_CONCLUSION[lead.lead_class] || conclusion);
+  const leadSuffix = lead.lead_class === 'unclear' ? '' : ` · 类别：${lead.lead_class_label}`;
   const verdict = verdictLine(display, evidence, level, actions);
 
   const dimNotes = display.dim_notes || {};
@@ -1361,7 +1770,7 @@ export function renderCard(evidence, rules) {
     lines.push(`⚠ 本次未完成：${details}`);
   }
   if (verdict.text) lines.push(verdict.text);
-  lines.push(`**结论：${conclusion}** 客户：${customerLabel(evidence, display)} · ${inquiryLabel(evidence, display)}`);
+  lines.push(`**结论：${leadConclusion}** 客户：${customerLabel(evidence, display)} · ${inquiryLabel(evidence, display)}${leadSuffix}`);
   lines.push('');
   lines.push('| 动作 | 建议 | 条件 |');
   lines.push('| --- | --- | --- |');
@@ -1517,6 +1926,20 @@ export function renderCard(evidence, rules) {
     source_grade_warnings: applied.gradeWarnings,
     verdict_warning: verdict.warning,
     derived_flags: derivedFlags.map((item) => item.id),
+    computed: {
+      lead_class: lead.lead_class,
+      lead_class_label: lead.lead_class_label,
+      lead_class_basis: lead.lead_class_basis,
+      lead_signals: lead.lead_signals,
+      lead_signals_ignored: lead.lead_signals_ignored,
+      lead_class_source: lead.lead_class_source,
+    },
+    form_meta_anomalies: formMeta.anomalies,
+    form_meta: { submit_ip_masked: formMeta.submit_ip_masked },
+    channel: channel.channel,
+    channel_ignored: channel.channel_ignored,
+    video_script: videoScript,
+    ship_to: shipTo,
     line_count: lines.length,
     first_screen_lines: firstScreenLines,
     card: lines.join('\n'),
@@ -1839,13 +2262,16 @@ export function reportAppendix(evidence) {
 }
 
 function parseArgs(argv) {
-  const args = { source: null, json: false, ladder: false, diff: [], batch: [], report: false, rules: RULES_FILE };
+  const args = { source: null, json: false, ladder: false, diff: [], batch: [], report: false, rules: RULES_FILE, maskIp: null, guide: null, lang: 'zh' };
   for (let i = 0; i < argv.length; i += 1) {
     const token = argv[i];
     if (token === '--json') args.json = true;
     else if (token === '--ladder') args.ladder = true;
     else if (token === '--report') args.report = true;
     else if (token === '--rules') args.rules = argv[++i];
+    else if (token === '--mask-ip') args.maskIp = argv[++i];
+    else if (token === '--guide') args.guide = argv[++i];
+    else if (token === '--lang') args.lang = argv[++i];
     else if (token === '--diff') {
       args.diff = [];
       while (i + 1 < argv.length && !argv[i + 1].startsWith('--')) args.diff.push(argv[++i]);
@@ -1859,6 +2285,17 @@ function parseArgs(argv) {
 
 function main() {
   const args = parseArgs(process.argv.slice(2));
+  if (args.guide) {
+    const text = GUIDE_TEXTS[args.guide] && GUIDE_TEXTS[args.guide][args.lang];
+    if (!text) return 1;
+    process.stdout.write(`${text}\n`);
+    return 0;
+  }
+  if (args.maskIp !== null && args.maskIp !== undefined) {
+    const masked = maskIpNetwork(args.maskIp);
+    console.log(JSON.stringify({ status: masked ? 'ok' : 'invalid-input', input: args.maskIp, masked }));
+    return masked ? 0 : 1;
+  }
   let rules;
   try {
     rules = loadRules(args.rules);

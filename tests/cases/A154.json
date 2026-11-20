@@ -1,0 +1,13 @@
+{
+  "id": "A154",
+  "title": "N-02 缺失 channel → 报告 1.2 显示“未提供”，卡片字节不变（报告文案由 report_template 1.2 固定）",
+  "type": "lead_matrix",
+  "input": {
+    "fixture": "card_harbor.json",
+    "cases": [
+      { "name": "missing-channel", "expect_channel": "unknown", "expect_channel_ignored": 0, "expect_card_equal_base": true },
+      { "name": "empty-channel", "intake": { "channel": "" }, "expect_channel": "unknown", "expect_channel_ignored": 0, "expect_card_equal_base": true }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

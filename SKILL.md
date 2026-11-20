@@ -1,9 +1,9 @@
 ---
 name: buyer-check
-description: 外贸客户背调与交易风险筛查（BuyerCheck）：收到陌生询盘、只有姓名/电话/邮箱/公司名/聊天记录时，快速核验客户公开身份，识别付款、账户、域名、邮箱与行为风险，给出可复现的 0–100 风险分、跟进分级与追问话术。覆盖询盘期背调与订单前复核两阶段：询盘期用公开信息锚定公司/官网/企业邮箱（不要求营业执照），订单前核验执照、税号与 IBAN/BIC 收款账户。默认输出 10 秒可读的结论卡（不落盘），按需生成带来源链接与检索时间的完整报告与证据包。只做风险信号筛查与证据整理，不判定对方是否存在欺诈，不查个人隐私、不做账号枚举或位置追踪。Use for foreign-trade buyer due diligence, inquiry screening, BEC/payment-fraud checks and pre-order verification.
+description: 外贸客户背调与交易风险筛查（BuyerCheck）：收到陌生询盘、只有姓名/电话/邮箱/公司名/聊天记录时，快速核验客户公开身份，识别付款、账户、域名、邮箱与行为风险，给出可复现的 0–100 风险分、跟进分级与追问话术。覆盖询盘期背调与订单前复核两阶段：询盘期用公开信息锚定公司/官网/企业邮箱（不要求营业执照），订单前核验执照、税号与 IBAN/BIC 收款账户。默认输出 10 秒可读的结论卡（不落盘），按需生成带来源链接与检索时间的完整报告与证据包。只做风险信号筛查与证据整理，不判定对方是否存在欺诈，不查个人隐私、不做账号枚举或位置追踪。不知道给什么信息？说「使用指南」查看示例。Use for foreign-trade buyer due diligence, inquiry screening, BEC/payment-fraud checks and pre-order verification; say "guide" for usage examples.
 license: MIT
 metadata:
-  version: 0.10.1
+  version: 0.11.0
   tags: [foreign-trade, buyer-check, due-diligence, fraud-screening, scam-detection, osint, risk-assessment]
 ---
 
@@ -98,6 +98,20 @@ metadata:
 
 报告语言默认与用户提问语言一致（中文），引用的原始信息保留原文。`reports/` 目录被 .gitignore 忽略，不入仓库。
 
+## 0.0 求助与空输入（v0.11）
+
+**求助词**（用户说出任一，就输出完整使用指南，原样贴出，不改写、不加评论）：
+- 中文：使用指南、怎么用、如何使用、帮助、示例、有什么功能、能做什么、我该给你什么信息
+- 英文：help、guide、how to use、usage、examples、what can you do
+
+执行：`python scripts/render_card.py --guide full`（默认中文）；用户用英文时加 `--lang en`。用户使用其他语言时，模型按英文版忠实翻译，示例里的虚构公司名、域名、号码保持原样。
+
+**空输入**：用户只说「背调」「帮我查个客户」「buyer-check」，或只有一个人名，没有任何可用线索时，输出短版提示并**停止，不连环追问**：`python scripts/render_card.py --guide short`（英文加 `--lang en`）。
+
+**可用线索** = 公司名、域名、邮箱、带 `+` 国家区号的电话、社媒链接、含具体内容的询盘原文（至少一句）。**只要有其中任一项，就直接开始查，不出指南。**
+
+**纪律**：指南文本由脚本固定输出，模型原样贴出；使用指南不是结论卡，不占结论卡行数预算，也不得往结论卡里加行或加字。
+
 ## 第 0 步：一句话入口（v0.9）
 
 用户给一句话或贴一段询盘就直接开始，**不先要求填表、不先连环追问**。只要公司名、域名、邮箱、电话、社媒中任一项存在，就先跑能跑的检查。
@@ -123,6 +137,10 @@ metadata:
 | `product`、`quantity`、`amount` | 询盘中的型号、数量、金额 | `null` |
 | `inquiry_text` | 原文留在内存，证据包只存摘录和脱敏引用句 | 空 |
 | `inquiry_type` | 按下表六类之一 | `general` |
+| `channel` | 用户说了渠道就填：`alibaba`/`facebook`/`whatsapp`/`website_form`/`email`/`linkedin`/`trade_show`/`other`；没说就 `unknown`，**不追问** | `unknown` |
+| `lead_signals` | 从询盘原文勾选 2.2 的枚举信号（最多 8 个），只勾可观察到的；类别由脚本算，不直接填 `lead_class` | 空数组 |
+| `form_meta` | 用户粘贴官网表单后台字段时填入；没有就 `null`，不追问 | `null` |
+| `ship_to` | 询盘里出现收货国/收货人/货代/贸易术语时填入；没有就 `null` | `null` |
 | `best_next` | 信息增益最大的一条补充 | 自动取第一项未覆盖项 |
 
 ### 询盘类型（枚举，六类）
@@ -345,6 +363,10 @@ metadata:
 
 - 对象仅限商业询盘中的对方，目的仅限识别交易风险；不得用于查个人、跟踪或人肉。
 
+**链接与附件**：
+
+- 背调过程中**不打开对方发来的链接和附件**；只比对链接域名与附件扩展名，需要查看时由用户在隔离环境自行处理。`pdf/docx/xlsx/jpg/png/zip/rar` 本身不算风险，`exe/scr/js/jar/iso/img/html/htm/hta/lnk/vbs/msi/bat/cmd` 及双扩展名（如 `.pdf.exe`）只作提示。
+
 **个人资料范围**：
 
 - 只看职业身份相关的公开资料：职位、任职公司、行业、账号是否真实。不看家庭、住址、私人照片和与生意无关的动态，不做个人画像。
@@ -465,9 +487,9 @@ metadata:
 - `scripts/ip_check.py/.mjs` — 邮件来源 IP 分类（默认离线，输出脱敏网段）
 - `scripts/identity_check.py` — 官网画像/社媒回链/头像比对/地图 POI/注册库（v0.9，精简包）
 - `scripts/render_card.py` — 结论卡确定性渲染（v0.9，精简包；Node 对照在仓库）
-- `tests/cases/` — 验收用例 A1–A140
-- `tests/eval/` — 行为评测集（45 条合成询盘 + 评分器）
+- `tests/cases/` — 验收用例 A1–A178
+- `tests/eval/` — 行为评测集（85 条合成询盘 + 评分器）
 - `examples/` — 脱敏样例报告
 - `docs/development.md` — 开发文档
 - `docs/iteration_plan.md` — 迭代方案（v0.4.1–v0.6.0）
-- `docs/iteration_plan_v0.7.md`、`docs/iteration_plan_v0.8.md`、`docs/iteration_plan_v0.9.md` — 后续迭代方案（v0.7.0 / v0.8.0 / v0.9.0）
+- `docs/iteration_plan_v0.7.md`、`docs/iteration_plan_v0.8.md`、`docs/iteration_plan_v0.9.md`、`docs/iteration_plan_v0.10.md`、`docs/iteration_plan_v0.11.md` — 后续迭代方案（v0.7.0 / v0.8.0 / v0.9.0 / v0.10.0 / v0.11.0）

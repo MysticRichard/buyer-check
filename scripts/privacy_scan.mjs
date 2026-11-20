@@ -16,6 +16,7 @@
 
 import { execFileSync } from 'node:child_process';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { isIP } from 'node:net';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -39,7 +40,7 @@ const WHITELIST = new Set([
   '+218915550100',
 ]);
 const WHITELIST_DOMAINS = ['example', 'example.com', 'example.org', 'example.net', 'test.com'];
-const FICTIONAL_PHONE_PATTERNS = [/555/, /\b7946\s*0\d{3}\b/];
+const FICTIONAL_PHONE_PATTERNS = [/555/, /\b7946\s*0\d{3}\b/, /\b7700\s*900/i];
 
 const EMAIL_RE = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
 // Masked emails (d***e@gmail.com) also match the tail of EMAIL_RE; match them
@@ -51,6 +52,32 @@ const CN_MOBILE_RE = /\b1[3-9]\d{9}\b/g;
 const CN_ID_RE = /\b\d{17}[\dXx]\b/g;
 // Dates and ISO timestamps are removed before scanning (frequent false positives).
 const TIMESTAMP_RE = /\d{4}-\d{2}-\d{2}([ T]\d{2}:\d{2}(:\d{2})?)?/g;
+// Full IP addresses are personal data. Documentation ranges (RFC 5737), the
+// IPv6 documentation prefix (RFC 3849) and private/loopback ranges used by test
+// fixtures are whitelisted; CIDR network forms are not full addresses.
+const IPV4_RE = /(?<![\d.])(?:\d{1,3}\.){3}\d{1,3}(?![\d.])/g;
+const IPV6_RE = /(?<![0-9A-Za-z:])(?:[0-9A-Fa-f]{1,4}:){2,7}[0-9A-Fa-f]{0,4}(?![0-9A-Za-z:])/g;
+const CIDR_SUFFIX_RE = /^\s*\/\d{1,3}/;
+const DOC_IPV4_PREFIXES = [
+  ['192', '0', '2'],
+  ['198', '51', '100'],
+  ['203', '0', '113'],
+  ['192', '168'],
+  ['10'],
+  ['127'],
+  ['172', '16'],
+];
+const DOC_IPV6_PREFIXES = ['2001:db8:', '::1', 'fe80:'];
+
+function allowedIpv4(match) {
+  const parts = match.split('.');
+  return DOC_IPV4_PREFIXES.some((prefix) => prefix.every((value, index) => parts[index] === value));
+}
+
+function allowedIpv6(match) {
+  const lower = match.toLowerCase().split('%')[0];
+  return DOC_IPV6_PREFIXES.some((prefix) => lower === prefix || lower.startsWith(prefix));
+}
 
 const SKIP_DIRS = new Set(['.git', 'node_modules', 'reports', '.tmp', '.arts', '.codegraph', '.cache']);
 
@@ -124,6 +151,21 @@ function scanFile(path, findings) {
     }
     for (const m of stripped.matchAll(CN_ID_RE)) {
       findings.push({ file: path, line: idx + 1, kind: 'cn-id', value: m[0] });
+    }
+    for (const pattern of [IPV4_RE, IPV6_RE]) {
+      pattern.lastIndex = 0;
+      let m = pattern.exec(stripped);
+      while (m) {
+        const version = isIP(m[0]);
+        const rest = stripped.slice(m.index + m[0].length);
+        const allowed = CIDR_SUFFIX_RE.test(rest)
+          || (version === 4 && allowedIpv4(m[0]))
+          || (version === 6 && allowedIpv6(m[0]));
+        if (version && !allowed) {
+          findings.push({ file: path, line: idx + 1, kind: 'ip', value: m[0] });
+        }
+        m = pattern.exec(stripped);
+      }
     }
   });
 }

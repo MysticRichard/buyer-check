@@ -1,0 +1,25 @@
+{
+  "id": "A148",
+  "title": "N-01 L=高时结论句仍是“先不要投入…”，类别标签仍显示",
+  "type": "lead_matrix",
+  "input": {
+    "fixture": "card_attention_bypass.json",
+    "cases": [
+      {
+        "name": "high-vendor",
+        "signals": ["offers_seo_web_marketing"],
+        "expect_class": "vendor_solicitation",
+        "expect_conclusion": "先不要投入：不寄样、不垫付、不付款。",
+        "expect_card_includes": ["类别：供应商推销"]
+      },
+      {
+        "name": "high-target",
+        "signals": ["states_end_use_project", "states_quantity"],
+        "expect_class": "target_end_user",
+        "expect_conclusion": "先不要投入：不寄样、不垫付、不付款。",
+        "expect_card_includes": ["类别：终端用户或项目"]
+      }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

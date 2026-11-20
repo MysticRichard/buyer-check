@@ -1,0 +1,18 @@
+{
+  "id": "A101",
+  "title": "Z31 快查版式：不输出公司公开足迹、证件与文件自检、条款建议，总行数 ≤30、首屏 ≤14",
+  "type": "lead_matrix",
+  "input": {
+    "fixture": "card_v010_full.json",
+    "cases": [
+      {
+        "name": "quick-v010-full",
+        "quick_check": true,
+        "expect_card_excludes": ["**证件与文件自检**", "**公司公开足迹**", "**条款建议**"],
+        "line_count_max": 30,
+        "first_screen_max": 14
+      }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

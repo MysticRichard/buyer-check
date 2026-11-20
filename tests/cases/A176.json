@@ -1,0 +1,19 @@
+{
+  "id": "A176",
+  "title": "N-08 card_template.md 的指南文本与 --guide 输出一致；README“30 秒上手”的 3 个示例与指南 1–3 号示例逐字相同",
+  "type": "doc_contains",
+  "input": {
+    "files": ["card_template.md", "README.md"],
+    "needles": [
+      "七、使用指南",
+      "30 秒上手",
+      "**BuyerCheck 使用提示**",
+      "## BuyerCheck 使用指南",
+      "帮我背调：NORDIC IMPORT AB，瑞典，邮箱 info@nordic-import.example",
+      "客户 Anna，WhatsApp +44 7700 900123，想订 500 个接线端子",
+      "阿里国际站的询盘：We would like to order 2000 pcs, please pay the factory audit fee first.",
+      "说「使用指南」"
+    ]
+  },
+  "expect": { "all_pass": true }
+}

@@ -1,6 +1,6 @@
 # 开发文档（docs/development.md）
 
-> **迭代方案以 [docs/iteration_plan.md](iteration_plan.md)（v0.4.1–v0.6.0）、[docs/iteration_plan_v0.7.md](iteration_plan_v0.7.md)（v0.7.0）、[docs/iteration_plan_v0.8.md](iteration_plan_v0.8.md)（v0.8.0）与 [docs/iteration_plan_v0.9.md](iteration_plan_v0.9.md)（v0.9.0，含 v0.8.1）为准**。本文记录开发背景与架构；两者冲突时以迭代方案为准。
+> **迭代方案以 [docs/iteration_plan.md](iteration_plan.md)（v0.4.1–v0.6.0）、[docs/iteration_plan_v0.7.md](iteration_plan_v0.7.md)（v0.7.0）、[docs/iteration_plan_v0.8.md](iteration_plan_v0.8.md)（v0.8.0）、[docs/iteration_plan_v0.9.md](iteration_plan_v0.9.md)（v0.9.0，含 v0.8.1）、[docs/iteration_plan_v0.10.md](iteration_plan_v0.10.md)（v0.10.0 / v0.10.1，事后整理）与 [docs/iteration_plan_v0.11.md](iteration_plan_v0.11.md)（v0.11.0）为准**。本文记录开发背景与架构；两者冲突时以迭代方案为准。
 
 ## 一、背景与目标
 
@@ -25,7 +25,8 @@
 | v0.9.1（可信度增强） | 制裁地址链与内容校验、`checks_incomplete`、证据强制降级、来源等级、数据日期、来源冲突、灰色卡下一步、红旗 why/benign、flip_hint、固定声明、`docs/validation.md`、A42–A58；不改评分公式/23 红旗权重/分档/覆盖分母；精简包仍 28 文件 | 已交付 |
 | v0.9.2（真实测试修复） | `RF-DOM-002` 不再清零公司/联系方式完成度（A67）；手机号 PII 改为日期/ID/掩码排除 + 6–15 位候选（A66 扩展，RNC 不误判）；精简包仍 28 文件 | 已交付 |
 | v0.10.0（通用核验与决策增强） | 国家能力表 0.6.0 + 官方入口发现；GSTIN/PAN 本地自检；实体匹配门 + 8 类足迹探针 + 8 条官方来源红旗（31 条）；PDF 元数据、交易条款、付款画像；批量分诊、复查对比、检索日志、本地化话术、能力降级；A68–A135；精简包仍 28 文件 | 已交付 |
-| v0.10.1（验收补齐） | `alias` 匹配键（inferred 不计）、768 阶梯条款复跑、GSTIN/PAN source_url 登记、A136–A140；精简包仍 28 文件 | 开发中 |
+| v0.10.1（验收补齐） | `alias` 匹配键（inferred 不计）、768 阶梯条款复跑、GSTIN/PAN source_url 登记、A136–A140；精简包仍 28 文件 | 已交付 |
+| v0.11.0（询盘有效性与来源画像） | `lead_class` 八类与固定结论句、`intake.channel`、`form_meta`（IP 网段/异常标记）、使用指南 `--guide`、`unverified-contact`、`ship_to` 与 `risk_background`、制裁源实测（仅 OFAC 可配置）、评测 85 条与类别指标；A141–A178；精简包仍 28 文件 | 已交付 |
 
 
 **明确不做**：法律意见、投资尽调、刑事侦查、个人隐私挖掘（住址、家庭、私人社交账号）。
@@ -114,7 +115,7 @@ node scripts/privacy_scan.mjs
 
 ## 八、路线图
 
-后续迭代以 [docs/iteration_plan_v0.8.md](iteration_plan_v0.8.md) 为准；v0.8.0（三层核实、RF-CORP-006、identity_check、A15–A22）已交付。
+后续迭代以 [docs/iteration_plan_v0.11.md](iteration_plan_v0.11.md) 为准；v0.11.0（询盘有效性、来源画像、表单线索、使用指南、A141–A178）已交付。v0.10 的历史记录见 [docs/iteration_plan_v0.10.md](iteration_plan_v0.10.md)（事后整理）。
 
 ## 九、赛事对齐（2026 华为开发者大赛·小红书 Skill 创新赛）
 

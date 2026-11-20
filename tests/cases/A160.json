@@ -1,0 +1,29 @@
+{
+  "id": "A160",
+  "title": "N-03 honeypot_triggered=true → automated_submission 且结论句正确；仅 fast-submit → 不触发该类别",
+  "type": "lead_matrix",
+  "input": {
+    "fixture": "card_harbor.json",
+    "cases": [
+      {
+        "name": "honeypot-triggers-automated",
+        "form_meta": { "honeypot_triggered": true },
+        "expect_class": "automated_submission",
+        "expect_conclusion": "这条提交像自动程序发出的，先不回复。"
+      },
+      {
+        "name": "fast-submit-does-not",
+        "form_meta": { "seconds_to_submit": 3 },
+        "expect_class": "unclear",
+        "expect_card_excludes": ["自动提交"]
+      },
+      {
+        "name": "direct-no-browse-does-not",
+        "form_meta": { "pages_viewed_before_submit": 0 },
+        "expect_class": "unclear",
+        "expect_card_excludes": ["自动提交"]
+      }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

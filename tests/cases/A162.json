@@ -1,0 +1,12 @@
+{
+  "id": "A162",
+  "title": "N-04 SAN 反例：同名但国家或主体明显不同，人工排除 → 不计分；脚本只输出 requires_manual_review，不自动计分",
+  "type": "score",
+  "input": {
+    "flags": []
+  },
+  "expect": {
+    "risk_score": 0,
+    "level": "低"
+  }
+}

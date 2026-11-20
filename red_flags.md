@@ -31,6 +31,14 @@
 | RF-CORP-005 | 号码国家与自称不符 | 号码国家区号与自称所在国不一致（积极矛盾；无法解析时不计分） | 中（2） |
 | RF-CORP-006 | 主营不一致 | 至少两个独立来源（官网、官方社媒、LinkedIn 公司页、公司级海关记录）显示的主营行业大类明确不同（积极矛盾；官网自称综合贸易商、多品类视为一致） | 中（2） |
 | RF-ACC-002 | 收款账户国与买家国不一致且无合理解释 | IBAN/BIC 所在国与买家自称所在国不一致，且无集团财务集中、自贸区主体等合理解释（订单前；`scripts/account_check` 报告事实，模型衡量解释后计分） | 中（3） |
+| RF-FOOT-001 | 官方认定的欺诈类记录 | 官方处罚记录、主体为公司、角色为 accused/regulator_action、类别 fraud、匹配门通过、来源官方、5 年内 | 中（3） |
+| RF-FOOT-002 | 采购或多边机构禁入 | 采购或多边机构禁入名单命中，主体为公司、角色为 accused/regulator_action、匹配门通过、来源官方、3 年内 | 中（3） |
+| RF-FOOT-003 | 招标材料造假或被取消投标资格 | 招标类官方记录、类别 fraud、主体为公司、匹配门通过、来源官方、5 年内 | 中（3） |
+| RF-FOOT-004 | 多个独立来源的欺诈指控 | 新闻/论坛类第三方指控、角色 accused、匹配门通过；至少两个主域不同（填 `media_group` 时集团也须不同）、5 年内 | 中（2） |
+| RF-FOOT-005 | 自称规模与官方记录量级严重不符 | `scale` 探针命中、来源官方、匹配门通过、`scale_ratio` ≥10、5 年内 | 中（2） |
+| RF-ID-004 | 证件号格式或校验位无效 | `id_checks.format_ok` 或 `id_checks.checksum_ok` 为 false（本地离线判定） | 中（2） |
+| RF-ID-005 | 证件号主体类型与名称后缀矛盾 | `id_checks.name_suffix_consistent` 为 false（本地离线判定） | 中（2） |
+| RF-DOC-001 | 文件元数据与自称矛盾 | `doc_checks.dates_consistent` 为 false（本地离线判定） | 低（1） |
 
 ## 二、类别代码
 
@@ -44,7 +52,9 @@
 | CORP | 公司信息 | RF-CORP-001、RF-CORP-002、RF-CORP-003、RF-CORP-004、RF-CORP-005、RF-CORP-006 |
 | NEG | 负面记录 | RF-NEG-001、RF-NEG-002 |
 | SAN | 制裁名单 | RF-SAN-001 |
-| ID | 身份（积极矛盾） | RF-ID-001、RF-ID-002、RF-ID-003 |
+| ID | 身份（积极矛盾） | RF-ID-001、RF-ID-002、RF-ID-003、RF-ID-004、RF-ID-005 |
+| FOOT | 官方/第三方足迹 | RF-FOOT-001、RF-FOOT-002、RF-FOOT-003、RF-FOOT-004、RF-FOOT-005 |
+| DOC | 文件元数据 | RF-DOC-001 |
 
 ## 三、判定细则
 
@@ -241,9 +251,49 @@
 | RF-NEG-002 询盘话术指纹命中 | 话术指纹重复常见于批量诈骗 | 模板询盘也会重复话术 |
 | RF-ACC-002 收款账户国与买家国不一致且无合理解释 | 收款国与买家国不一致需解释 | 集团可能在第三国开户 |
 
-## v0.10.0 官方来源低权重红旗（新增 8 条）
+### RF-FOOT-001 官方认定的欺诈类记录
+命中：`footprint` 中 `probe=enforcement`、`result=hit`、`subject=company`、`role=accused|regulator_action`、`category=fraud`，匹配门通过（`matched_keys` 去重 ≥2、全部在 `match_keys` 声明、不能只有名称类键），来源等级为 official，`data_as_of` 在 5 年内，且 `evidence_ids` 真实存在并带 `url` + `retrieved_at`。
+不命中：主体是个人或受害者、类别为 safety/labor/environment、同名但匹配键不足、超过 5 年、仅第三方来源、置信度为低、`search-only`/`offline`、`quick_check`。
+证据要求：官方处罚或监管行动页面；列出主体、角色、处罚类别、日期与匹配键。
 
-> 编号说明：`RF-ID-001/002/003` 已在 v0.9.x 用于头像盗用、职业资料不符、账号新建无活动；v0.10.0 授权表格中的“RF-ID-序号”按现有编号空间落地为 **RF-ID-004 / RF-ID-005**（权重均为 2），不重号、不改历史红旗编号。若发布前负责人决定与文档字面完全一致，再统一修订文档与编号表。
+### RF-FOOT-002 采购或多边机构禁入
+命中：`probe=debarment`、`result=hit`、`subject=company`、`role=accused|regulator_action`、匹配门通过、来源 official、`data_as_of` 在 3 年内。
+不命中：禁入期已过、主体不同、个人主体、仅第三方转载、匹配键不足。
+证据要求：采购或多边机构禁入名单页面与禁入起止日期。
+
+### RF-FOOT-003 招标材料造假或被取消投标资格
+命中：`probe=tender`、`category=fraud`、`subject=company`、`role=accused|regulator_action`、匹配门通过、来源 official、5 年内。
+不命中：普通招标公告、文件形式瑕疵、未被认定造假、主体不同。
+证据要求：官方招标公告或处罚决定，写明造假/取消资格事实。
+
+### RF-FOOT-004 多个独立来源的欺诈指控
+命中：`probe=news|forum`、`result=hit`、`subject=company`、`role=accused`、来源 third_party、匹配门通过，`evidence_ids` 至少来自两个不同主域；若填 `media_group`，集团也必须不同；5 年内。
+不命中：同一篇稿件转载、同一媒体集团、同名误伤、个人主体、只有单一来源。
+证据要求：两条以上独立来源链接与各自标题/日期。
+
+### RF-FOOT-005 自称规模与官方记录量级严重不符
+命中：`probe=scale`、来源 official、匹配门通过、`scale_ratio` ≥10、5 年内。
+不命中：统计口径或年份差异、ratio <10、第三方来源、主体不同。
+证据要求：官方记录数量与对方自称规模的对比及计算方式。
+
+### RF-ID-004 证件号格式或校验位无效
+命中：`id_checks.format_ok=false` 或 `id_checks.checksum_ok=false`。
+不命中：格式规则版本差异、字段缺失（未知不算无效）。
+证据要求：本地离线自检，卡片标 `[离线]`；不保存完整证件号。
+
+### RF-ID-005 证件号主体类型与名称后缀矛盾
+命中：`id_checks.name_suffix_consistent=false`。
+不命中：改名、重组、简称造成的差异；字段缺失。
+证据要求：本地离线自检，列出主体类型与名称后缀；不保存完整证件号。
+
+### RF-DOC-001 文件元数据与自称矛盾
+命中：`doc_checks.dates_consistent=false`。
+不命中：扫描、合并、重新导出造成的元数据差异；字段缺失。
+证据要求：本地离线自检，只写文件标签、创建软件类别与日期一致性；不存 Author 与正文。
+
+## v0.10.0 八条红旗的说明（why / benign / flip_hint）
+
+> 编号已并入上面的总表与判定细则；`RF-ID-004` / `RF-ID-005` 保持现编号（负责人 2026-11-18 确认），不再保留“若发布前负责人决定”的悬置句。
 
 | 编号 | 为什么是信号 | 可能的无害解释 | 复核提示 |
 | --- | --- | --- | --- |

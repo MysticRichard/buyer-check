@@ -1,0 +1,32 @@
+{
+  "id": "A144",
+  "title": "N-01 真实买家附 PDF/DOCX/ZIP 规格书且无登录链接：不触发 phishing_like",
+  "type": "lead_matrix",
+  "input": {
+    "fixture": "card_harbor.json",
+    "cases": [
+      {
+        "name": "pdf-spec-sheet",
+        "signals": ["names_product_model", "states_quantity"],
+        "attachments": ["pump-spec-sheet.pdf"],
+        "expect_class": "unclear",
+        "expect_card_excludes": ["含需登录或下载内容"]
+      },
+      {
+        "name": "docx-datasheet",
+        "signals": ["names_product_model", "states_quantity"],
+        "attachments": ["technical-datasheet.docx"],
+        "expect_class": "unclear",
+        "expect_card_excludes": ["含需登录或下载内容"]
+      },
+      {
+        "name": "zip-drawings",
+        "signals": ["names_product_model", "states_quantity"],
+        "attachments": ["drawings.zip"],
+        "expect_class": "unclear",
+        "expect_card_excludes": ["含需登录或下载内容"]
+      }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

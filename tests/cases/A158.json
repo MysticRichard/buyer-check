@@ -1,0 +1,18 @@
+{
+  "id": "A158",
+  "title": "N-03 三个异常标记各有正例与反例，阈值边界（4/5 秒）正确",
+  "type": "lead_matrix",
+  "input": {
+    "fixture": "card_harbor.json",
+    "cases": [
+      { "name": "honeypot-true", "form_meta": { "honeypot_triggered": true }, "expect_anomalies": ["honeypot"] },
+      { "name": "honeypot-false", "form_meta": { "honeypot_triggered": false }, "expect_anomalies": [] },
+      { "name": "fast-submit-4s", "form_meta": { "seconds_to_submit": 4 }, "expect_anomalies": ["fast-submit"] },
+      { "name": "fast-submit-5s", "form_meta": { "seconds_to_submit": 5 }, "expect_anomalies": [] },
+      { "name": "direct-no-browse", "form_meta": { "pages_viewed_before_submit": 0 }, "expect_anomalies": ["direct-no-browse"] },
+      { "name": "zero-pages-with-referrer", "form_meta": { "pages_viewed_before_submit": 0, "referrer_domain": "search.example" }, "expect_anomalies": [] },
+      { "name": "one-page-no-referrer", "form_meta": { "pages_viewed_before_submit": 1 }, "expect_anomalies": [] }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

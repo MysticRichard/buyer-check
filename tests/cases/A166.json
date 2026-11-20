@@ -1,0 +1,26 @@
+{
+  "id": "A166",
+  "title": "N-06 ship_to.country 命中 risk_background 时显示背景提示，写明项目名与来源",
+  "type": "lead_matrix",
+  "input": {
+    "fixture": "card_harbor.json",
+    "invariance": true,
+    "cases": [
+      {
+        "name": "libya-background",
+        "intake": { "ship_to": { "country": "LY" } },
+        "expect_ship_to": {
+          "country": "LY",
+          "country_mismatch": true,
+          "risk_background": {
+            "programs": ["OFAC Libya Sanctions", "UN Security Council Resolution 1970 (2011) concerning Libya"],
+            "source_url": "https://ofac.treasury.gov/sanctions-programs-and-country-information/libya-sanctions",
+            "verified_at": "2026-11-20"
+          }
+        },
+        "expect_card_equal_base": true
+      }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

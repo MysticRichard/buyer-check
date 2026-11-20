@@ -1,6 +1,21 @@
 # 更新日志
 
-本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与语义化版本。迭代方案见 [docs/iteration_plan.md](docs/iteration_plan.md)（v0.4.1–v0.6.0）、[docs/iteration_plan_v0.7.md](docs/iteration_plan_v0.7.md)（v0.7.0）、[docs/iteration_plan_v0.8.md](docs/iteration_plan_v0.8.md)（v0.8.0）与 [docs/iteration_plan_v0.9.md](docs/iteration_plan_v0.9.md)（v0.9.0，含 v0.8.1）。
+本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与语义化版本。迭代方案见 [docs/iteration_plan.md](docs/iteration_plan.md)（v0.4.1–v0.6.0）、[docs/iteration_plan_v0.7.md](docs/iteration_plan_v0.7.md)（v0.7.0）、[docs/iteration_plan_v0.8.md](docs/iteration_plan_v0.8.md)（v0.8.0）、[docs/iteration_plan_v0.9.md](docs/iteration_plan_v0.9.md)（v0.9.0，含 v0.8.1）、[docs/iteration_plan_v0.10.md](docs/iteration_plan_v0.10.md)（v0.10.0 / v0.10.1，事后整理）与 [docs/iteration_plan_v0.11.md](docs/iteration_plan_v0.11.md)（v0.11.0）。
+
+## [0.11.0] - 2026-11-20
+
+### 新增：询盘有效性与来源画像（N-01–N-08）
+
+- **N-01 询盘有效性 `lead_class`**：模型勾选 20 个枚举信号，脚本按固定优先级算出 8 个类别（自动提交、含需登录或下载内容、供应商推销、更像在了解行情、个人或调研、终端用户或项目、分销商/安装商/贸易商、信息不足）；非目标类使用固定结论句，目标类与 `unclear` 不改原结论句；不新增卡片行，`unclear` 不追加类别标签；未知信号忽略并计数。
+- **N-02 来源渠道 `intake.channel`**：9 个枚举；只影响检索起手顺序与报告 1.2，不改变卡片任何字节。
+- **N-03 官网表单元数据 `form_meta`**：IP 只保留 /24、/48 网段，完整 IP 整包 `invalid-input`；`honeypot` / `fast-submit` / `direct-no-browse` 只作线索，只有 `honeypot` 触发自动提交类别；`privacy_scan` 增加完整 IP 检测。
+- **N-08 使用指南**：`render_card --guide short|full [--lang zh|en]` 固定文本；短版非空行 6、完整版 29；README“30 秒上手”、`card_template.md` 第七节、`SKILL.md` 0.0 求助与空输入三处一致。
+- **N-07**：`unverified-contact` 一次动作（独立确认）；视频核验话术与报告小节，明确“只增加冒充成本，不做深度伪造检测”。
+- **N-06**：`intake.ship_to` 三类不计分判断；`country_capabilities.json` 增加 `risk_background`（仅利比亚经官方页面核对，其余 `null`）。
+- **N-05**：制裁源实测后只保留 OFAC；EU 返回 403、UN XML 直链 404、UK OFSI Consolidated List 已于 2026-01-28 关闭，三者如实标 `not_configured` 并写原因。
+- **N-04**：评测补洞（A161/A162、`RF-SAN-001`）、语料扩到 85 条（E046–E085，含阿拉伯语/越南语/印尼语/葡语等 12 条新兴市场小买家反例）、评分器增加类别级指标与混淆矩阵。
+- 文档对账：31 条红旗并入总表并补 8 条判定细则；`RF-ID-004/005` 编号固定；新增 v0.10 迭代记录；版本、用例范围 A1–A178、评测 85 条、manifest rewrites 同步。
+- 评分公式、分档、31 条红旗编号与权重、覆盖分母 8、置信度 R1–R5 **未改**；新增字段全部可选，旧证据包渲染字节与 v0.10.1 一致；精简包仍 28 文件，无新增必需第三方依赖。
 
 ## [0.10.1] - 2026-11-17
 

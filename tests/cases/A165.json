@@ -1,0 +1,24 @@
+{
+  "id": "A165",
+  "title": "N-06 收货国与买家国不同 → 线索，风险分不变",
+  "type": "lead_matrix",
+  "input": {
+    "fixture": "card_harbor.json",
+    "invariance": true,
+    "cases": [
+      {
+        "name": "ship-to-malaysia",
+        "intake": { "ship_to": { "country": "MY", "consignee_name": "Harbor Rim Engineering", "incoterm": "CIF" } },
+        "expect_ship_to": { "country": "MY", "buyer_country": "SG", "country_mismatch": true, "risk_background": null },
+        "expect_card_equal_base": true
+      },
+      {
+        "name": "ship-to-same-country",
+        "intake": { "ship_to": { "country": "SG" } },
+        "expect_ship_to": { "country": "SG", "buyer_country": "SG", "country_mismatch": false },
+        "expect_card_equal_base": true
+      }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

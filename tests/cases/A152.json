@@ -1,0 +1,20 @@
+{
+  "id": "A152",
+  "title": "N-01 report_template.md 含 1.4 小节，类别标签与卡片一致（并入 consistency.mjs 模板回归）",
+  "type": "doc_contains",
+  "input": {
+    "files": ["report_template.md", "card_template.md"],
+    "needles": [
+      "1.4 询价有效性判断",
+      "类别由固定规则按所列信号得出",
+      "自动提交",
+      "含需登录或下载内容",
+      "供应商推销",
+      "更像在了解行情",
+      "个人或调研",
+      "终端用户或项目",
+      "分销商、安装商或贸易商"
+    ]
+  },
+  "expect": { "all_pass": true }
+}

@@ -29,6 +29,22 @@ const LIST_FILES = {
   'UK OFSI Consolidated': 'uk_ofsi.csv',
 };
 
+const SOURCES = {
+  'OFAC SDN': { configured: true, reason: null, format: 'CSV' },
+  'EU Consolidated': { configured: false, reason: 'http-403-token-required', format: 'CSV/XML' },
+  'UN Security Council': { configured: false, reason: 'xml-link-404', format: 'XML' },
+  'UK OFSI Consolidated': { configured: false, reason: 'ofsi-list-closed-2026-01-28', format: 'CSV' },
+};
+
+function sourceStatus() {
+  return Object.entries(SOURCES).map(([list, info]) => ({
+    list,
+    status: info.configured ? 'configured' : 'not_configured',
+    format: info.format || null,
+    reason: info.reason || null,
+  }));
+}
+
 export function normalize(name = '') {
   const text = String(name).toLowerCase().replace(/[^\w\s]/g, ' ');
   return text.replace(/\s+/g, ' ').trim();
@@ -122,6 +138,8 @@ export async function analyse(query, cacheDir = CACHE_DIR, noUpdate = false) {
     match_count: 0,
     requires_manual_review: true,
     note: '同名需人工排除；存疑应标注「疑似命中，需人工核实」',
+    sources: sourceStatus(),
+    lists_not_configured: Object.entries(SOURCES).filter(([, info]) => !info.configured).map(([list]) => list),
   };
   const cacheError = await ensureCache(cacheDir, noUpdate);
   if (cacheError) {

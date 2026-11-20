@@ -1,0 +1,15 @@
+{
+  "id": "A157",
+  "title": "N-03 证据包含完整 IP → invalid-input，不渲染",
+  "type": "render_card",
+  "input": {
+    "fixture": "card_harbor.json",
+    "mutate_intake": {
+      "form_meta": { "submit_ip_masked": "203.0.113.25", "referrer_domain": "search.example" }
+    }
+  },
+  "expect": {
+    "status": "invalid-input",
+    "error_codes": ["plaintext-ip"]
+  }
+}

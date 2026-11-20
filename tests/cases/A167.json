@@ -1,0 +1,29 @@
+{
+  "id": "A167",
+  "title": "N-06 risk_background 为 null 或缺失 → 不输出任何提示；旧证据包字节不变",
+  "type": "lead_matrix",
+  "input": {
+    "fixture": "card_harbor.json",
+    "invariance": true,
+    "cases": [
+      {
+        "name": "no-ship-to",
+        "expect_ship_to_null": true,
+        "expect_card_equal_base": true
+      },
+      {
+        "name": "unverified-country",
+        "intake": { "ship_to": { "country": "AE" } },
+        "expect_ship_to": { "country": "AE", "risk_background": null },
+        "expect_card_equal_base": true
+      },
+      {
+        "name": "empty-country",
+        "intake": { "ship_to": { "consignee_name": "Harbor Rim Engineering" } },
+        "expect_ship_to": { "country": null, "risk_background": null, "country_mismatch": false },
+        "expect_card_equal_base": true
+      }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

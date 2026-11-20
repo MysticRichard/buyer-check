@@ -14,7 +14,8 @@
       "customs_free_company_level": null,
       "map": "google",
       "last_verified": "2026-10-23",
-      "verification": "secondary-source"
+      "verification": "secondary-source",
+      "risk_background": null
     },
     "my": {
       "registry": {
@@ -29,7 +30,8 @@
       "customs_free_company_level": null,
       "map": "google",
       "last_verified": "2026-10-23",
-      "verification": "secondary-source"
+      "verification": "secondary-source",
+      "risk_background": null
     },
     "th": {
       "registry": {
@@ -43,7 +45,8 @@
       "customs_free_company_level": null,
       "map": "google",
       "last_verified": "2026-10-23",
-      "verification": "secondary-source"
+      "verification": "secondary-source",
+      "risk_background": null
     },
     "vn": {
       "registry": {
@@ -76,7 +79,8 @@
         "verification": "unverified"
       },
       "id_formats": [],
-      "sources": []
+      "sources": [],
+      "risk_background": null
     },
     "ae": {
       "registry": {
@@ -92,7 +96,8 @@
       "customs_free_company_level": null,
       "map": "google",
       "last_verified": "2026-10-23",
-      "verification": "secondary-source"
+      "verification": "secondary-source",
+      "risk_background": null
     },
     "sa": {
       "registry": {
@@ -107,7 +112,8 @@
       "customs_free_company_level": null,
       "map": "google",
       "last_verified": "2026-10-23",
-      "verification": "secondary-source"
+      "verification": "secondary-source",
+      "risk_background": null
     },
     "us": {
       "registry": {
@@ -122,7 +128,8 @@
       "customs_note": "ImportYeti / ImportGenius / PortExaminer report US bills of lading; free tier unverified",
       "map": "google",
       "last_verified": "2026-10-23",
-      "verification": "secondary-source"
+      "verification": "secondary-source",
+      "risk_background": null
     },
     "mx": {
       "registry": {
@@ -136,7 +143,8 @@
       "customs_note": "ImportYeti reports Mexico customs data; free tier unverified",
       "map": "google",
       "last_verified": "2026-10-23",
-      "verification": "secondary-source"
+      "verification": "secondary-source",
+      "risk_background": null
     },
     "cn": {
       "registry": {
@@ -150,7 +158,8 @@
       "customs_note": "China customs statistics are aggregated only, no company-level free data",
       "map": "amap",
       "last_verified": "2026-10-23",
-      "verification": "secondary-source"
+      "verification": "secondary-source",
+      "risk_background": null
     },
     "qa": {
       "registry": {
@@ -163,7 +172,8 @@
       "customs_free_company_level": null,
       "map": "google",
       "last_verified": "2026-10-23",
-      "verification": "unverified"
+      "verification": "unverified",
+      "risk_background": null
     },
     "om": {
       "registry": {
@@ -176,7 +186,8 @@
       "customs_free_company_level": null,
       "map": "google",
       "last_verified": "2026-10-23",
-      "verification": "unverified"
+      "verification": "unverified",
+      "risk_background": null
     },
     "kw": {
       "registry": {
@@ -189,7 +200,8 @@
       "customs_free_company_level": null,
       "map": "google",
       "last_verified": "2026-10-23",
-      "verification": "unverified"
+      "verification": "unverified",
+      "risk_background": null
     },
     "bh": {
       "registry": {
@@ -202,7 +214,8 @@
       "customs_free_company_level": null,
       "map": "google",
       "last_verified": "2026-10-23",
-      "verification": "unverified"
+      "verification": "unverified",
+      "risk_background": null
     },
     "id": {
       "registry": {
@@ -215,7 +228,8 @@
       "customs_free_company_level": null,
       "map": "google",
       "last_verified": "2026-10-23",
-      "verification": "unverified"
+      "verification": "unverified",
+      "risk_background": null
     },
     "ph": {
       "registry": {
@@ -247,7 +261,8 @@
         "verification": "unverified"
       },
       "id_formats": [],
-      "sources": []
+      "sources": [],
+      "risk_background": null
     },
     "kh": {
       "registry": {
@@ -260,7 +275,8 @@
       "customs_free_company_level": null,
       "map": "google",
       "last_verified": "2026-10-23",
-      "verification": "unverified"
+      "verification": "unverified",
+      "risk_background": null
     },
     "in": {
       "name": "India",
@@ -336,7 +352,8 @@
       "verification": "unverified",
       "last_verified": null,
       "customs_free_company_level": null,
-      "map": "google"
+      "map": "google",
+      "risk_background": null
     },
     "za": {
       "name": "South Africa",
@@ -369,7 +386,8 @@
       "verification": "unverified",
       "last_verified": null,
       "customs_free_company_level": null,
-      "map": "google"
+      "map": "google",
+      "risk_background": null
     },
     "lb": {
       "name": "Lebanon",
@@ -402,7 +420,8 @@
       "verification": "unverified",
       "last_verified": null,
       "customs_free_company_level": null,
-      "map": "google"
+      "map": "google",
+      "risk_background": null
     },
     "ly": {
       "name": "Libya",
@@ -435,7 +454,15 @@
       "verification": "unverified",
       "last_verified": null,
       "customs_free_company_level": null,
-      "map": "google"
+      "map": "google",
+      "risk_background": {
+        "programs": [
+          "OFAC Libya Sanctions",
+          "UN Security Council Resolution 1970 (2011) concerning Libya"
+        ],
+        "source_url": "https://ofac.treasury.gov/sanctions-programs-and-country-information/libya-sanctions",
+        "verified_at": "2026-11-20"
+      }
     }
   },
   "not_yet_surveyed": [],
