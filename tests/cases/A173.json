@@ -1,0 +1,7 @@
+{
+  "id": "A173",
+  "title": "N-08 示例自检：指南示例电话解析为英国；示例 IBAN 通过 account_check 的 mod-97；所有示例域名以 .example 结尾",
+  "type": "guide_examples",
+  "input": {},
+  "expect": { "all_pass": true }
+}

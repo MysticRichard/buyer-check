@@ -49,6 +49,29 @@ LIST_FILES = {
     "UK OFSI Consolidated": "uk_ofsi.csv",
 }
 
+# Verified on 2026-11-20: only OFAC is configured. EU returns HTTP 403
+# (token/browser session required), the UN XML direct link returns 404, and the
+# UK OFSI Consolidated List closed on 2026-01-28 in favour of the UK Sanctions
+# List. Sources that cannot be downloaded without a token stay not_configured.
+SOURCES = {
+    "OFAC SDN": {"configured": True, "reason": None, "format": "CSV"},
+    "EU Consolidated": {"configured": False, "reason": "http-403-token-required", "format": "CSV/XML"},
+    "UN Security Council": {"configured": False, "reason": "xml-link-404", "format": "XML"},
+    "UK OFSI Consolidated": {"configured": False, "reason": "ofsi-list-closed-2026-01-28", "format": "CSV"},
+}
+
+
+def source_status():
+    return [
+        {
+            "list": name,
+            "status": "configured" if info["configured"] else "not_configured",
+            "format": info.get("format"),
+            "reason": info.get("reason"),
+        }
+        for name, info in SOURCES.items()
+    ]
+
 
 def normalize(name: str) -> str:
     """Lowercase, strip punctuation and collapse whitespace."""
@@ -228,6 +251,8 @@ def analyse(query: str, cache_dir: str = CACHE_DIR, no_update: bool = False) -> 
         "match_count": 0,
         "requires_manual_review": True,
         "note": "同名需人工排除；存疑应标注「疑似命中，需人工核实」",
+        "sources": source_status(),
+        "lists_not_configured": [name for name, info in SOURCES.items() if not info["configured"]],
     }
     cache_error = ensure_cache(cache_dir, no_update=no_update)
     if cache_error:

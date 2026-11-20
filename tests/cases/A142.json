@@ -1,0 +1,32 @@
+{
+  "id": "A142",
+  "title": "N-01 优先级：同时含自动提交、钓鱼、推销、同行信号时按表顺序取第一条",
+  "type": "lead_matrix",
+  "input": {
+    "fixture": "card_harbor.json",
+    "cases": [
+      {
+        "name": "all-four-signals",
+        "signals": ["contains_login_or_download_link", "offers_seo_web_marketing", "asks_customer_or_supplier_list"],
+        "form_meta": { "honeypot_triggered": true },
+        "expect_class": "automated_submission"
+      },
+      {
+        "name": "phishing-over-vendor-and-competitor",
+        "signals": ["contains_login_or_download_link", "offers_seo_web_marketing", "asks_customer_or_supplier_list"],
+        "expect_class": "phishing_like"
+      },
+      {
+        "name": "vendor-over-competitor",
+        "signals": ["offers_inspection_audit_service", "asks_customer_or_supplier_list"],
+        "expect_class": "vendor_solicitation"
+      },
+      {
+        "name": "competitor-over-individual",
+        "signals": ["asks_customer_or_supplier_list", "student_or_research_purpose"],
+        "expect_class": "competitor_probe"
+      }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

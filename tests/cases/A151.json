@@ -1,0 +1,14 @@
+{
+  "id": "A151",
+  "title": "N-01 Python 与 Node 的 computed.lead_class 一致（含 form_meta 与未知信号）",
+  "type": "render_card_parity",
+  "input": {
+    "fixture": "card_harbor.json",
+    "mutate_intake": {
+      "lead_signals": ["mentions_resale_or_distribution", "names_product_model", "unknown_signal"],
+      "form_meta": { "honeypot_triggered": false },
+      "attachments": ["order.pdf"]
+    }
+  },
+  "expect": { "all_pass": true }
+}

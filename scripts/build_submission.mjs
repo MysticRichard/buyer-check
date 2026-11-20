@@ -97,6 +97,10 @@ function embedFixtures(testCase) {
     delete input.compare_fixture;
   }
   for (const entry of input.cases || []) {
+    if (entry.fixture) {
+      entry.fixture_data = JSON.parse(readFileSync(join(ROOT, 'tests', 'fixtures', entry.fixture), 'utf8'));
+      delete entry.fixture;
+    }
     if (entry.old) {
       entry.old_data = JSON.parse(readFileSync(join(ROOT, 'tests', 'fixtures', entry.old), 'utf8'));
       delete entry.old;

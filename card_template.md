@@ -95,11 +95,64 @@
 
 **`intake`（模型抽取）**：`company`、`person`、`email`、`domain`、`phone`、`country`、`city`、`product`、`quantity`、`amount`、`inquiry_text`、`inquiry_type`、`best_next`。`inquiry_type` 取 `tender` / `sample` / `large_first_order` / `account_change` / `pre_order` / `general`；缺失写 `null`。不追问规则见 `SKILL.md` 第 0 步（只要公司名/域名/邮箱/电话/社媒任一存在就开始）。
 
+**v0.11 新增可选字段**（全部可选；旧证据包不带时渲染字节与 v0.10.1 一致）：
+
+- `channel`：来源渠道，取 `alibaba` / `facebook` / `whatsapp` / `website_form` / `email` / `linkedin` / `trade_show` / `other` / `unknown`；缺省 `unknown`。只影响检索起手顺序与报告 1.2，**不改卡片任何字节**。
+- `lead_signals[]`：询盘有效性信号，模型只勾选枚举值，最多 8 个；未知值被脚本忽略并计数。`render_card` 按固定优先级表算出 `lead_class`，模型不得直接写类别；证据包里出现 `intake.lead_class` 时脚本忽略并标 `lead_class_source: "signals"`。
+- `attachments[]`：附件文件名（字符串或 `{name}`），只用于扩展名判断；`exe scr js jar iso img html htm hta lnk vbs msi bat cmd` 及双扩展名（如 `.pdf.exe`）算风险，`pdf docx xlsx jpg png zip rar` 本身不算。
+- `form_meta`：官网表单提交信息，见 2.2。只接收用户粘贴，不采集、不植入追踪。
+- `ship_to`：收货信息，见 2.2。
+
 **`display`（模型填文字，脚本渲染）**：`customer_label`、`inquiry_type`、`dim_notes{company, link, contact, behavior, compliance, scale}`、`attention[]`、`verified[]`、`missing[]`、`open_questions[]`、`scripts[]`。
 
 **`display.scripts[]`（v0.10 本地化话术）**：每项 `{en, zh, localized?}`；`localized` 可选，只接受 `ar`/`fr`/`es`/`pt`/`ru`/`tr`/`id`/`th`/`vi`/`hi`/`zh` 为键、字符串为值。结论卡只渲染 `en` + `zh` 两行，不渲染 `localized`，旧包无此字段时输出与 v0.9.x 字节一致；`localized` 只进完整报告 6.1，且每条必须带「机器翻译，发出前请核对」。`localized` 内出现禁用词（核实/背调/怀疑/诈骗）时返回 `invalid-display`。
 
 **校验规则**：`customer_label`/`inquiry_type` ≤40 字；`dim_notes.*` 已查项必填、每项 ≤28 个汉字；`attention`/`verified`/`missing` ≤3/3/2，每条 `text` ≤30 个汉字；`attention[].kind` 取 `flag`/`clue`，`flag` 必须给 `flag_id` 且能在 `flags` 找到；`missing[].action` 四个字段齐全，`url` 为 http/https 或 `null`；`scripts` ≤3；`open_questions` 每条 ≤12 个汉字、≤3 条；所有文字不含技术词、禁用词、完整手机号和完整邮箱。
+
+### 2.2 询盘有效性分类（v0.11）
+
+“模型填枚举信号，脚本算结果”：模型只把询盘原文里可观察到的信号写进 `intake.lead_signals[]`（最多 8 个），类别、标签、结论句全部由 `render_card` 的固定模板生成，模型不能直接写 `lead_class`。
+
+**信号枚举**：`names_product_model`、`states_quantity`、`states_end_use_project`、`states_target_market`、`asks_certifications`、`mentions_resale_or_distribution`、`mentions_own_brand_oem`、`generic_no_product`、`asks_full_price_list_only`、`asks_catalog_only`、`asks_factory_cost_structure`、`asks_customer_or_supplier_list`、`offers_seo_web_marketing`、`offers_inspection_audit_service`、`offers_freight_or_platform_service`、`offers_sourcing_or_supply`、`contains_login_or_download_link`、`contains_attachment_risky_ext`、`student_or_research_purpose`、`personal_use_small_qty`。
+
+**类别与优先级（从上到下，第一条命中即停）**
+
+| 顺序 | 类别 id | 中文标签（卡片显示） | 命中条件 |
+| --- | --- | --- | --- |
+| 0 | `automated_submission` | 自动提交 | `form_meta.honeypot_triggered == true` |
+| 1 | `phishing_like` | 含需登录或下载内容 | 含 `contains_login_or_download_link` 或 `contains_attachment_risky_ext` |
+| 2 | `vendor_solicitation` | 供应商推销 | 含任一 `offers_*` 信号 |
+| 3 | `competitor_probe` | 更像在了解行情 | 含 `asks_customer_or_supplier_list`；或「弱信号」≥2 且无任何「具体信号」 |
+| 4 | `individual_research` | 个人或调研 | 含 `student_or_research_purpose` 或 `personal_use_small_qty` |
+| 5 | `target_end_user` | 终端用户或项目 | 含 `states_end_use_project` 且（含 `names_product_model` 或 `states_quantity`） |
+| 6 | `reseller` | 分销商、安装商或贸易商 | 含 `mentions_resale_or_distribution` 或 `mentions_own_brand_oem`，且（含 `names_product_model` 或 `states_quantity` 或 `states_target_market`） |
+| 7 | `unclear` | 信息不足 | 其余情况（默认值，不输出建议） |
+
+- 「弱信号」= `generic_no_product`、`asks_full_price_list_only`、`asks_catalog_only`、`asks_factory_cost_structure`；「具体信号」= `names_product_model`、`states_quantity`、`states_end_use_project`、`states_target_market`。
+- 单个弱信号 → `unclear`，不分到非目标类，避免误伤真实小买家。
+
+**显示规则**
+
+- **不新增行**：结论行 `客户：名称（国家/城市）· 询盘类型` 末尾追加 `· 类别：<中文标签>`；`unclear` 不追加。
+- 结论句优先级：**L=高的原有结论句 > 本表固定结论句 > 原有模板**。风险最高时先说风险。
+- 固定结论句（脚本常量，模型不得改写）：
+
+| 类别 | 固定结论句 |
+| --- | --- |
+| `automated_submission` | 这条提交像自动程序发出的，先不回复。 |
+| `phishing_like` | 询盘里有需登录或下载的内容：先不要打开，用官网公示的渠道确认后再处理。 |
+| `vendor_solicitation` | 这更像向你推销服务，不是采购询盘：可以归档。 |
+| `competitor_probe` | 这条更像了解行情：只发标准目录和公开价，不发底价和客户信息。 |
+| `individual_research` | 看起来是个人或调研需求：低优先级，按标准资料回复即可。 |
+
+- 目标类（`target_end_user`、`reseller`）和 `unclear` 不改结论句；类别不改变动作阶梯的四行逻辑（INV-03）。
+- 卡片不得出现「骗子、诈骗、同行、竞争对手」等定性字眼；标签统一用「更像在了解行情」这类中性表述。
+
+**`form_meta`（官网表单，全部可选）**：`submit_ip_masked`（只存脱敏网段：IPv4 /24、IPv6 /48；完整 IP → `invalid-input`）、`referrer_domain`、`utm_source`、`landing_page_path`、`pages_viewed_before_submit`（int）、`seconds_to_submit`（int）、`honeypot_triggered`（bool）、`captcha_passed`（bool）、`ip_origin`（与 `checks[].ip_origin` 同结构，由仓库内 `ip_check --online` 得出后粘贴；精简包缺省 `not-covered`）。脚本计算 `form_meta.anomalies[]`：`honeypot`、`fast-submit`（`seconds_to_submit` < 5）、`direct-no-browse`（`pages_viewed_before_submit == 0` 且无 `referrer_domain`）。三个标记都只作线索、不计分；只有 `honeypot` 会触发 `automated_submission`。
+
+**`ship_to`（收货信息，全部可选）**：`country`（ISO2）、`consignee_name`、`forwarder_name`、`incoterm`。脚本只做三类不计分判断：收货国与买家国不同 → 线索；对方指定货代 → 复用 RF-PAY-002 的既有判定；`ship_to.country` 命中 `country_capabilities.json` 的 `risk_background` → 背景提示（`null` 时不输出）。
+
+**`render_card --json` 的 `computed` 字段**：`lead_class`、`lead_class_label`、`lead_class_basis[]`、`lead_signals[]`、`lead_signals_ignored`（未知信号个数）、`lead_class_source`（固定 `signals`）。
 
 ## 三、结论卡版式（v0.9 硬性规则）
 
@@ -109,7 +162,7 @@
 [1] 标题行      ## 颜色 等级 · 风险 N/100 分数条 ｜ 核实度 M/100（高/中/低）· 有 N 项未完成
 [2] 覆盖行      置信度：x（锚点 n/3）｜覆盖：X/8｜未覆盖：…
 [2a] 未完成行   ⚠ 本次未完成：<检查>未完成（<原因>）→ <下一步>
-[3] 结论行      **结论：一句话。** 客户：名称（国家/城市）· 询盘类型
+[3] 结论行      **结论：一句话。** 客户：名称（国家/城市）· 询盘类型 · 类别：<中文标签>（unclear 不追加）
   ——— 以上加 [4] 为第一屏 ———
 [4] 动作阶梯    表：动作 | 建议 | 条件（4 行）
 [5] 六维表      表：维度 | 状态 | 依据（6 行）
@@ -146,6 +199,7 @@
 | 条件 | 结论句 |
 | --- | --- |
 | L=高 | 先不要投入：不寄样、不垫付、不付款。 |
+| 非目标类（v0.11） | 取 2.2 的固定结论句：自动提交、含需登录或下载内容、供应商推销、更像在了解行情、个人或调研 |
 | 寄样 ✅ 且 定制 ✅ | 可以正常推进，收款前先做订单前复核。 |
 | 寄样 ✅ 且 定制 ⚠️ | 可以报价、寄样；定制或大额备货前，先{定制条件}。 |
 | 寄样 ⚠️ | 可以先报价；投入前先{寄样条件}。 |
@@ -290,6 +344,7 @@
 | 要公司资料（链接层弱） | Could you share your company profile so I can pass it to our sales manager? | 能发一下贵公司简介吗？我转给销售经理。 |
 | 确认职位/部门（对照 LinkedIn） | Which department are you in? I will arrange the right colleague for you. | 您在哪个部门？我帮您安排对接同事。 |
 | 客户主动分享 LinkedIn | Do you have a LinkedIn page? I would like to connect with you there. | 您有 LinkedIn 主页吗？我想和您在那里联系。 |
+| 视频核验（仅 `large_first_order`/`pre_order` 或等级高/中） | Would a short video call with our sales team work for you? It would help us prepare the right quotation for your project. | 能否安排一次简短的视频沟通？这样我们可以为您的项目准备更合适的报价。 |
 
 **业务员提示（只给业务员看）**：
 - 验厂费话术：把话题拉回报价。正常买家会回答型号和数量；异常账号会继续追着验厂费。
@@ -312,3 +367,58 @@
 | name-only-match | 只查到同名页面，不能算同一家 |
 | 锚点 3/3 | 身份线索齐全（3/3） |
 | DMARC 缺失 | 邮件防伪造设置缺失 |
+## 七、使用指南（`--guide` 的固定文本，v0.11）
+
+使用指南不是结论卡：它有自己的行数预算（短版非空行 ≤12、完整版 ≤40），不占结论卡预算，也不得往结论卡里加行或加字。脚本 `render_card.py/.mjs --guide short|full [--lang zh|en]` 原样输出以下文本，模型原样贴出，不改写、不加评论。英文版 `--lang en` 与中文版逐条对应；三类示例中的公司名、`.example` 域名与保留号段保持原样。
+
+**短版（zh）**
+
+```text
+**BuyerCheck 使用提示**：给我下面任意一项就能开始，信息越多结果越准。
+▸ 公司名 + 国家　▸ 邮箱　▸ 带 + 国家区号的电话　▸ 官网域名　▸ 询盘原文或聊天记录
+示例：`帮我背调：NORDIC IMPORT AB，瑞典，邮箱 info@nordic-import.example`
+示例：`客户 Anna，WhatsApp +44 7700 900123，想订 500 个接线端子`
+（示例里的公司、域名、号码都是虚构的，请换成你自己的。）
+说「使用指南」可查看完整用法和更多示例。
+```
+
+**完整版（zh）**
+
+```text
+## BuyerCheck 使用指南
+**一句话**：把询盘里零散的公司名、邮箱、电话和聊天记录，变成一张带来源的风险判断卡。只做风险信号筛查，不判定对方是不是骗子。
+
+**1. 给我什么信息**（任意一项就能开始，越多越准）
+| 档位 | 提供 | 能多查出什么 |
+| --- | --- | --- |
+| 最少 | 公司名、邮箱、带 + 国家区号的电话、官网域名、聊天记录，任一项 | 对方有没有公开痕迹 |
+| 推荐 | 公司名 + 国家 + 邮箱 + 询盘原文 | 邮箱和官网是否对得上、话术是否常见于骗局 |
+| 加分 | 询盘来源、官网表单里的提交信息、邮件原始头、收货地址 | 来源与发件是否一致、收货国是否对得上 |
+| 订单前 | 营业执照编号、收款账户（IBAN/BIC） | 收款账户所在国与买家国是否一致 |
+
+**2. 这些信息去哪里找**
+- 电话：写成 + 开头的完整格式，如 +44…；不带区号我不会猜国家
+- 询盘来源：阿里国际站、Facebook、WhatsApp、官网表单、邮件、领英、展会，说一个就行
+- 邮件原始头：在邮箱里找「显示原始邮件」或「查看邮件标头」，整段复制给我（菜单名称因邮箱而异）
+- 官网表单信息：表单后台那条记录里的提交 IP、来源页、提交耗时；IP 我只保留网段
+
+**3. 示例**（虚构数据，请换成你自己的）
+1. 一句话：`帮我背调：NORDIC IMPORT AB，瑞典，邮箱 info@nordic-import.example`
+2. 名称加电话：`客户 Anna，WhatsApp +44 7700 900123，想订 500 个接线端子`
+3. 贴询盘：`阿里国际站的询盘：We would like to order 2000 pcs, please pay the factory audit fee first.`
+4. 快查：`快查：ACME TRADING LTD，acme-trading.example`
+5. 批量：`批量快筛：`后面粘贴 2–10 封询盘，用空行隔开
+6. 订单前：`订单前复核：客户要求把货款汇到新账户 GB82 WEST 1234 5698 7654 32，买家自称在英国`
+
+**4. 怎么看结果**
+- 风险分（0–100）看“有没有危险信号”，核实度看“查到了多少”，两件事分开看
+- 「风险 待核实」是信息太少，不是没问题
+- “没查到”下面的一行动作：登录一次过一次验证码，把看到的回传给我，我会更新结果
+- 动作阶梯告诉你现在可以做到哪一步：报价、寄样、备货、收款
+
+**5. 隐私与边界**
+- 姓名、邮箱、电话默认打码；银行账号只用于本次分析，不写入文件
+- 只查商业身份相关的公开信息，不查住址、家庭、私人账号
+```
+
+**一致性要求**：本小节的文本与脚本常量必须逐字一致（A176）；README“30 秒上手”的 3 个示例必须与完整版示例 1–3 逐字一致。

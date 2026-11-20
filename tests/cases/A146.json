@@ -1,0 +1,12 @@
+{
+  "id": "A146",
+  "title": "N-01 不含 lead_signals 的旧证据包渲染与 v0.10.1 字节一致（复用现有快照）",
+  "type": "render_card",
+  "input": { "fixture": "card_harbor.json" },
+  "expect": {
+    "status": "ok",
+    "card_file": "card_harbor.expected.txt",
+    "line_count_max": 50,
+    "first_screen_max": 14
+  }
+}

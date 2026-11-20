@@ -1,0 +1,12 @@
+{
+  "id": "A171",
+  "title": "N-08 --guide short（zh/en）：非空行 ≤12，含 ≥2 个示例、含“使用指南/guide”提示",
+  "type": "guide",
+  "input": {
+    "cases": [
+      { "mode": "short", "lang": "zh", "max_nonempty": 12, "min_examples": 2, "includes": ["使用指南", "示例："] },
+      { "mode": "short", "lang": "en", "max_nonempty": 12, "min_examples": 2, "includes": ["guide", "Example:"] }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

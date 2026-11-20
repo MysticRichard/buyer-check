@@ -1,0 +1,7 @@
+{
+  "id": "A164",
+  "title": "N-05 下载失败、内容非法、全部地址失败三种情形与 OFAC 现有行为一致（保留旧缓存；另两种见 A42/A44）",
+  "type": "sanctions_update",
+  "input": { "scenario": "invalid" },
+  "expect": { "all_pass": true }
+}

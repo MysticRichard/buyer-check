@@ -1,0 +1,14 @@
+{
+  "id": "A168",
+  "title": "N-07 unverified-contact 的行格式、排序、≤4 行，旧证据包字节不变",
+  "type": "render_card",
+  "input": { "fixture": "card_unverified_contact.json" },
+  "expect": {
+    "status": "ok",
+    "risk_score": 0,
+    "level": "低",
+    "card_includes": ["▸ 独立确认", "用官网公示的电话或邮箱联系一次"],
+    "line_count_max": 50,
+    "first_screen_max": 14
+  }
+}

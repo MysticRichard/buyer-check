@@ -507,10 +507,18 @@ const runners = {
 
   render_card(testCase) {
     const evidence = testCase.input.fixture_data ? cloneJson(testCase.input.fixture_data) : loadFixture(testCase.input.fixture);
+    if (testCase.input.mutate_intake) {
+      evidence.intake = evidence.intake && typeof evidence.intake === 'object' ? evidence.intake : {};
+      Object.assign(evidence.intake, cloneJson(testCase.input.mutate_intake));
+    }
     const result = renderCard ? renderCard(evidence, loadRules()) : pyRenderEvidence(findPython(), evidence);
     const expect = testCase.expect || {};
     const checks = [];
     if (expect.status !== undefined) checks.push(result.status === expect.status);
+    if (expect.error_codes !== undefined) {
+      const codes = (result.errors || []).map((error) => error.code).sort();
+      checks.push(isDeepStrictEqual(codes, [...expect.error_codes].sort()));
+    }
     if (expect.level !== undefined) checks.push(result.level === expect.level);
     if (expect.risk_score !== undefined) checks.push(result.risk_score === expect.risk_score);
     if (expect.credit !== undefined) checks.push(result.credit?.score === expect.credit);
@@ -534,6 +542,12 @@ const runners = {
     if (expect.evidence_missing !== undefined) checks.push(result.evidence_missing === expect.evidence_missing);
     if (expect.verdict_warning !== undefined) checks.push((result.verdict_warning ?? null) === expect.verdict_warning);
     if (expect.derived_flags !== undefined) checks.push(isDeepStrictEqual(result.derived_flags, expect.derived_flags));
+    const computed = result.computed || {};
+    if (expect.lead_class !== undefined) checks.push(computed.lead_class === expect.lead_class);
+    if (expect.lead_class_label !== undefined) checks.push(computed.lead_class_label === expect.lead_class_label);
+    if (expect.lead_class_basis !== undefined) checks.push(isDeepStrictEqual(computed.lead_class_basis, expect.lead_class_basis));
+    if (expect.lead_signals_ignored !== undefined) checks.push(computed.lead_signals_ignored === expect.lead_signals_ignored);
+    if (expect.lead_class_source !== undefined) checks.push(computed.lead_class_source === expect.lead_class_source);
     if (expect.declaration_count !== undefined) {
       const hits = (String(result.card || '').match(/仅基于公开信息的风险信号筛查，不构成对客户的定性。/g) || []).length;
       checks.push(hits === expect.declaration_count);
@@ -557,6 +571,268 @@ const runners = {
         mismatch: result.actual,
       },
     };
+  },
+
+  lead_matrix(testCase) {
+    const rules = loadRules();
+    const python = findPython();
+    const baseEvidence = testCase.input.fixture_data ? cloneJson(testCase.input.fixture_data) : loadFixture(testCase.input.fixture);
+    const render = (evidence) => (renderCard ? renderCard(evidence, rules) : pyRenderEvidence(python, evidence));
+    const base = render(cloneJson(baseEvidence));
+    const outcomes = (testCase.input.cases || []).map((entry) => {
+      const evidence = cloneJson(baseEvidence);
+      evidence.intake = evidence.intake && typeof evidence.intake === 'object' ? evidence.intake : {};
+      if (entry.intake) Object.assign(evidence.intake, cloneJson(entry.intake));
+      if (entry.signals !== undefined) evidence.intake.lead_signals = cloneJson(entry.signals);
+      if (entry.form_meta !== undefined) evidence.intake.form_meta = cloneJson(entry.form_meta);
+      if (entry.attachments !== undefined) evidence.intake.attachments = cloneJson(entry.attachments);
+      if (entry.lead_class_input !== undefined) evidence.intake.lead_class = entry.lead_class_input;
+      if (entry.quick_check !== undefined) evidence.quick_check = entry.quick_check;
+      const result = render(evidence);
+      const computed = result.computed || {};
+      const card = String(result.card || '');
+      const checks = [result.status === 'ok'];
+      if (entry.expect_class !== undefined) checks.push(computed.lead_class === entry.expect_class);
+      if (entry.expect_label !== undefined) checks.push(computed.lead_class_label === entry.expect_label);
+      if (entry.expect_ignored !== undefined) checks.push(computed.lead_signals_ignored === entry.expect_ignored);
+      if (entry.expect_status !== undefined) checks.push(result.status === entry.expect_status);
+      if (entry.expect_anomalies !== undefined) checks.push(isDeepStrictEqual(result.form_meta_anomalies, entry.expect_anomalies));
+      if (entry.expect_channel !== undefined) checks.push(result.channel === entry.expect_channel);
+      if (entry.expect_channel_ignored !== undefined) checks.push(result.channel_ignored === entry.expect_channel_ignored);
+      if (entry.expect_ship_to_null === true) checks.push(result.ship_to === null || result.ship_to === undefined);
+      if (entry.expect_ship_to !== undefined) {
+        const ship = result.ship_to || null;
+        for (const [key, value] of Object.entries(entry.expect_ship_to)) {
+          checks.push(isDeepStrictEqual(ship ? ship[key] : null, value));
+        }
+      }
+      if (entry.expect_card_equal_base) checks.push(card === String(base.card || ''));
+      if (entry.expect_form_meta !== undefined) {
+        const masked = result.form_meta?.submit_ip_masked;
+        if (entry.expect_form_meta.submit_ip_masked !== undefined) checks.push(masked === entry.expect_form_meta.submit_ip_masked);
+      }
+      if (entry.expect_conclusion !== undefined) checks.push(card.includes(`**结论：${entry.expect_conclusion}`));
+      for (const needle of entry.expect_card_includes || []) checks.push(card.includes(needle));
+      for (const needle of entry.expect_card_excludes || []) checks.push(!card.includes(needle));
+      if (entry.line_count_max !== undefined) checks.push(result.line_count <= entry.line_count_max);
+      if (entry.first_screen_max !== undefined) checks.push(result.first_screen_lines <= entry.first_screen_max);
+      if (testCase.input.invariance) {
+        checks.push(result.risk_score === base.risk_score && result.level === base.level && result.confidence === base.confidence);
+      }
+      for (const word of testCase.input.forbidden_words || []) checks.push(!card.includes(word));
+      return {
+        name: entry.name,
+        ok: checks.every(Boolean),
+        lead_class: computed.lead_class,
+        ignored: computed.lead_signals_ignored,
+        line_count: result.line_count,
+      };
+    });
+    return { ok: outcomes.every((item) => item.ok), actual: outcomes };
+  },
+
+  render_card_parity(testCase) {
+    const python = findPython();
+    if (!python) return { skipped: true, actual: 'python not found' };
+    if (!renderCard) return { skipped: true, actual: 'node renderer not in bundle' };
+    const evidence = testCase.input.fixture_data ? cloneJson(testCase.input.fixture_data) : loadFixture(testCase.input.fixture);
+    evidence.intake = evidence.intake && typeof evidence.intake === 'object' ? evidence.intake : {};
+    if (testCase.input.mutate_intake) Object.assign(evidence.intake, cloneJson(testCase.input.mutate_intake));
+    const py = pyRenderEvidence(python, evidence);
+    const js = renderCard(cloneJson(evidence), loadRules());
+    const checks = [
+      py.status === js.status,
+      (py.computed?.lead_class ?? null) === (js.computed?.lead_class ?? null),
+      py.computed?.lead_class_label === js.computed?.lead_class_label,
+      py.computed?.lead_signals_ignored === js.computed?.lead_signals_ignored,
+      isDeepStrictEqual(py.computed?.lead_class_basis, js.computed?.lead_class_basis),
+      py.card === js.card,
+    ];
+    return {
+      ok: checks.every(Boolean),
+      actual: { py: py.computed, js: js.computed, card_equal: py.card === js.card },
+    };
+  },
+
+  mask_ip(testCase) {
+    const python = findPython();
+    const jsScript = join(ROOT, 'scripts', 'render_card.mjs');
+    const outcomes = (testCase.input.cases || []).map((entry) => {
+      const py = python ? runPythonRender(python, ['--mask-ip', entry.ip]) : null;
+      let js = null;
+      if (existsSync(jsScript)) {
+        const run = spawnSync('node', [jsScript, '--mask-ip', entry.ip], { encoding: 'utf8', timeout: 30000 });
+        if (run.stdout) js = JSON.parse(run.stdout);
+      }
+      const checks = [Boolean(py)];
+      if (py && entry.masked !== undefined) checks.push(py.masked === entry.masked);
+      if (py && entry.status !== undefined) checks.push(py.status === entry.status);
+      if (py && js) checks.push(py.masked === js.masked && py.status === js.status);
+      return { ip: entry.ip, ok: checks.every(Boolean), py: py?.masked, js: js?.masked };
+    });
+    return { ok: outcomes.every((item) => item.ok), actual: outcomes };
+  },
+
+  privacy_ip(testCase) {
+    const script = join(ROOT, 'scripts', 'privacy_scan.mjs');
+    if (!existsSync(script)) return { skipped: true, actual: 'privacy_scan not shipped in lean bundle' };
+    const dir = mkdtempSync(join(tmpdir(), 'buyer-check-privacy-ip-'));
+    const bad = join(dir, 'bad.txt');
+    const good = join(dir, 'good.txt');
+    const publicIp = ['8', '8', '8', '8'].join('.');
+    writeFileSync(bad, `upstream server ${publicIp} answered\n`, 'utf8');
+    writeFileSync(good, 'examples 203.0.113.0/24 and 203.0.113.7 and 2001:db8::/32 and 2001:db8::1\n', 'utf8');
+    const badRun = spawnSync('node', [script, bad], { cwd: ROOT, encoding: 'utf8', timeout: 30000 });
+    const goodRun = spawnSync('node', [script, good], { cwd: ROOT, encoding: 'utf8', timeout: 30000 });
+    const checks = [badRun.status === 1, goodRun.status === 0];
+    return {
+      ok: checks.every(Boolean),
+      actual: {
+        bad_exit: badRun.status,
+        good_exit: goodRun.status,
+        bad_out: String(badRun.stdout || '').trim(),
+        good_out: String(goodRun.stdout || '').trim(),
+      },
+    };
+  },
+
+  guide(testCase) {
+    const python = findPython();
+    const jsScript = join(ROOT, 'scripts', 'render_card.mjs');
+    const outcomes = [];
+    for (const entry of testCase.input.cases || []) {
+      const lang = entry.lang || 'zh';
+      let pyOut = '';
+      if (python) {
+        const [cmd, ...rest] = python.split(' ');
+        const run = spawnSync(cmd, [...rest, join(ROOT, 'scripts', 'render_card.py'), '--guide', entry.mode, '--lang', lang], { encoding: 'utf8', timeout: 30000 });
+        pyOut = String(run.stdout || '');
+      }
+      let jsOut = '';
+      if (existsSync(jsScript)) {
+        const run = spawnSync('node', [jsScript, '--guide', entry.mode, '--lang', lang], { encoding: 'utf8', timeout: 30000 });
+        jsOut = String(run.stdout || '');
+      }
+      const nonempty = pyOut.split('\n').filter((line) => line.trim()).length;
+      const checks = [Boolean(pyOut), nonempty > 0];
+      if (entry.max_nonempty !== undefined) checks.push(nonempty <= entry.max_nonempty);
+      for (const needle of entry.includes || []) checks.push(pyOut.includes(needle));
+      if (entry.min_examples !== undefined) {
+        const count = (pyOut.match(/示例：|^Example: |^\d+\. /gm) || []).length;
+        checks.push(count >= entry.min_examples);
+      }
+      for (const word of entry.forbidden || []) checks.push(!pyOut.includes(word));
+      for (const needle of entry.needles || []) checks.push(pyOut.includes(needle));
+      if (pyOut && jsOut) checks.push(pyOut === jsOut);
+      outcomes.push({ mode: entry.mode, lang, ok: checks.every(Boolean), nonempty, bytes: Buffer.byteLength(pyOut) });
+    }
+    return { ok: outcomes.every((item) => item.ok), actual: outcomes };
+  },
+
+  guide_examples(testCase) {
+    const python = findPython();
+    if (!python) return { skipped: true, actual: 'python not found' };
+    const [cmd, ...rest] = python.split(' ');
+    const guideRun = spawnSync(cmd, [...rest, join(ROOT, 'scripts', 'render_card.py'), '--guide', 'full', '--lang', 'zh'], { encoding: 'utf8', timeout: 30000 });
+    const guideText = String(guideRun.stdout || '');
+    const phones = [...guideText.matchAll(/\+\d[\d\s]{5,}\d/g)].map((match) => match[0].trim());
+    const phoneResults = phones.slice(0, 2).map((phone) => {
+      const run = spawnSync(cmd, [...rest, join(ROOT, 'scripts', 'phone_check.py'), phone], { encoding: 'utf8', timeout: 30000 });
+      const parsed = run.stdout ? JSON.parse(run.stdout) : null;
+      return { phone, country: parsed?.country, valid: parsed?.valid };
+    });
+    const ibanMatch = guideText.match(/GB\d{2}[A-Z0-9\s]{10,30}/);
+    const iban = ibanMatch ? ibanMatch[0].trim() : '';
+    const accountRun = iban
+      ? spawnSync(cmd, [...rest, join(ROOT, 'scripts', 'account_check.py'), '--iban', iban, '--country', 'GB'], { encoding: 'utf8', timeout: 30000 })
+      : null;
+    const account = accountRun?.stdout ? JSON.parse(accountRun.stdout) : null;
+    const domains = [...guideText.matchAll(/\b[a-z0-9][a-z0-9.-]*\.(?:example|com|net|org|io|cn)\b/gi)].map((match) => match[0]);
+    const badDomains = domains.filter((domain) => !domain.endsWith('.example'));
+    const checks = [
+      phones.length >= 1,
+      phoneResults.every((item) => item.valid === true && item.country === 'GB'),
+      Boolean(iban),
+      Boolean(account && account.iban?.valid === true && account.iban?.check_digits_ok === true),
+      badDomains.length === 0,
+    ];
+    return {
+      ok: checks.every(Boolean),
+      actual: { phones: phoneResults, iban: account?.iban?.masked || null, domains, badDomains },
+    };
+  },
+
+  skill_guide(testCase) {
+    const text = readFileSync(join(ROOT, 'SKILL.md'), 'utf8');
+    const match = text.match(/^description:\s*(.+)$/m);
+    const description = match ? match[1] : '';
+    const needles = testCase.input.needles || [];
+    const checks = [
+      description.length > 0 && description.length <= 1024,
+      description.includes('使用指南'),
+      description.includes('guide'),
+      text.includes('使用指南'),
+      text.includes('空输入'),
+      text.includes('不连环追问'),
+      text.includes('原样'),
+    ];
+    for (const needle of needles) checks.push(text.includes(needle));
+    return {
+      ok: checks.every(Boolean),
+      actual: { description_length: description.length, missing: needles.filter((needle) => !text.includes(needle)) },
+    };
+  },
+
+  video_script(testCase) {
+    const rules = loadRules();
+    const python = findPython();
+    const outcomes = (testCase.input.cases || []).map((entry) => {
+      const evidence = entry.fixture_data ? cloneJson(entry.fixture_data) : loadFixture(entry.fixture);
+      evidence.intake = evidence.intake && typeof evidence.intake === 'object' ? evidence.intake : {};
+      if (entry.inquiry_type !== undefined) evidence.intake.inquiry_type = entry.inquiry_type;
+      const result = renderCard ? renderCard(evidence, rules) : pyRenderEvidence(python, evidence);
+      const script = result.video_script;
+      const checks = [];
+      if (entry.expect === false) checks.push(!script);
+      if (entry.expect === true) {
+        checks.push(Boolean(script));
+        if (script) {
+          checks.push(script.en === testCase.input.en && script.zh === testCase.input.zh);
+          for (const word of entry.forbidden || []) checks.push(!script.en.includes(word) && !script.zh.includes(word));
+        }
+      }
+      return { name: entry.name, ok: checks.every(Boolean), video_script: Boolean(script) };
+    });
+    return { ok: outcomes.every((item) => item.ok), actual: outcomes };
+  },
+
+  sanctions_sources(testCase) {
+    const python = findPython();
+    const dir = mkdtempSync(join(tmpdir(), 'buyer-check-sanctions-sources-'));
+    writeFileSync(join(dir, 'ofac_sdn.csv'), testCase.input.csv || '', 'utf8');
+    const [pyCmd, ...pyRest] = (python || '').split(' ');
+    const run = (cmd, rest, script, query) => {
+      const result = spawnSync(cmd, [...rest, script, query, '--no-update', '--cache-dir', dir], { encoding: 'utf8', timeout: 30000 });
+      return result.stdout ? JSON.parse(result.stdout) : null;
+    };
+    const jsScript = join(ROOT, 'scripts', 'sanctions_check.mjs');
+    const outcomes = (testCase.input.queries || []).map((entry) => {
+      const py = python ? run(pyCmd, pyRest, join(ROOT, 'scripts', 'sanctions_check.py'), entry.query) : null;
+      const js = existsSync(jsScript) ? run('node', [], jsScript, entry.query) : null;
+      const checks = [Boolean(py)];
+      if (py) {
+        checks.push(py.status === 'ok');
+        checks.push((py.lists_not_configured || []).includes('EU Consolidated'));
+        checks.push((py.lists_not_configured || []).includes('UN Security Council'));
+        checks.push((py.lists_not_configured || []).includes('UK OFSI Consolidated'));
+        checks.push((py.sources || []).find((item) => item.list === 'OFAC SDN')?.status === 'configured');
+        checks.push(py.match_count === entry.match_count);
+        checks.push(py.requires_manual_review === true);
+      }
+      if (py && js) checks.push(isDeepStrictEqual(py, js));
+      return { query: entry.query, ok: checks.every(Boolean), match_count: py?.match_count, not_configured: py?.lists_not_configured };
+    });
+    return { ok: outcomes.every((item) => item.ok), actual: outcomes };
   },
 
   render_card_boundary(testCase) {

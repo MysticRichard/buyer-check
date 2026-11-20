@@ -1,0 +1,30 @@
+{
+  "id": "A174",
+  "title": "N-08 指南文本无禁用词、无技术词、无真实数据；privacy_scan 通过（示例号码与 IBAN 在白名单内）",
+  "type": "guide",
+  "input": {
+    "cases": [
+      {
+        "mode": "short",
+        "lang": "zh",
+        "forbidden": ["诈骗", "竞争对手", "同行", "RDAP", "DMARC", "HS 编码"]
+      },
+      {
+        "mode": "short",
+        "lang": "en",
+        "forbidden": ["scammer", "competitor", "RDAP", "DMARC", "HS code"]
+      },
+      {
+        "mode": "full",
+        "lang": "zh",
+        "forbidden": ["诈骗", "竞争对手", "同行", "RDAP", "DMARC", "HS 编码"]
+      },
+      {
+        "mode": "full",
+        "lang": "en",
+        "forbidden": ["scammer", "competitor", "RDAP", "DMARC", "HS code"]
+      }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

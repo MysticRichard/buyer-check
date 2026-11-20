@@ -1,0 +1,12 @@
+{
+  "id": "A178",
+  "title": "N-08 --guide 不读证据包、不联网、不写盘；结论卡与旧证据包渲染字节不变（INV-02 快照）",
+  "type": "guide",
+  "input": {
+    "cases": [
+      { "mode": "short", "lang": "zh" },
+      { "mode": "full", "lang": "zh" }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

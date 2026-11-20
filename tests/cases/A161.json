@@ -1,0 +1,12 @@
+{
+  "id": "A161",
+  "title": "N-04 SAN 正例：制裁名单命中且人工未排除 → RF-SAN-001 计 5 分，等级为高",
+  "type": "score",
+  "input": {
+    "flags": ["RF-SAN-001"]
+  },
+  "expect": {
+    "risk_score": 70,
+    "level": "高"
+  }
+}

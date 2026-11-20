@@ -1,0 +1,20 @@
+{
+  "id": "A155",
+  "title": "N-02 global.md 第十四节覆盖 7 个渠道（模板回归，并入 consistency.mjs）",
+  "type": "doc_contains",
+  "input": {
+    "files": ["data-sources/global.md"],
+    "needles": [
+      "第十四节",
+      "按来源渠道的起手核实",
+      "alibaba",
+      "facebook",
+      "whatsapp",
+      "website_form",
+      "email",
+      "linkedin",
+      "trade_show"
+    ]
+  },
+  "expect": { "all_pass": true }
+}

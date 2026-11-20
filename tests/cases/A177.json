@@ -1,0 +1,17 @@
+{
+  "id": "A177",
+  "title": "N-08 SKILL.md 含求助词表、空输入规则（不连环追问）、“指南原样输出”规则；description 总长 ≤1024 字符且保留原有触发词",
+  "type": "skill_guide",
+  "input": {
+    "needles": [
+      "使用指南、怎么用、如何使用、帮助、示例、有什么功能、能做什么、我该给你什么信息",
+      "help、guide、how to use、usage、examples、what can you do",
+      "不连环追问",
+      "可用线索",
+      "原样贴出",
+      "render_card.py --guide full",
+      "render_card.py --guide short"
+    ]
+  },
+  "expect": { "all_pass": true }
+}

@@ -1,0 +1,17 @@
+{
+  "id": "A156",
+  "title": "N-03 IPv4 脱敏到 /24、IPv6 脱敏到 /48（Python/Node 一致）",
+  "type": "mask_ip",
+  "input": {
+    "cases": [
+      { "ip": "203.0.113.25", "masked": "203.0.113.0/24", "status": "ok" },
+      { "ip": "198.51.100.7", "masked": "198.51.100.0/24", "status": "ok" },
+      { "ip": "192.0.2.0/24", "masked": "192.0.2.0/24", "status": "ok" },
+      { "ip": "2001:db8::1", "masked": "2001:db8::/48", "status": "ok" },
+      { "ip": "2001:db8:1234:5678::abcd", "masked": "2001:db8:1234::/48", "status": "ok" },
+      { "ip": "2001:db8::/32", "masked": "2001:db8::/32", "status": "ok" },
+      { "ip": "not-an-ip", "masked": "", "status": "invalid-input" }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

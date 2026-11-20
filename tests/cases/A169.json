@@ -1,0 +1,17 @@
+{
+  "id": "A169",
+  "title": "N-07 视频话术英文+中文齐全、无禁用词、只在指定条件下出现",
+  "type": "video_script",
+  "input": {
+    "en": "Would a short video call with our sales team work for you? It would help us prepare the right quotation for your project.",
+    "zh": "能否安排一次简短的视频沟通？这样我们可以为您的项目准备更合适的报价。",
+    "cases": [
+      { "name": "general-low", "fixture": "card_harbor.json", "inquiry_type": "general", "expect": false },
+      { "name": "large-order-low", "fixture": "card_harbor.json", "inquiry_type": "large_first_order", "expect": true, "forbidden": ["诈骗", "欺诈", "scam", "fraud"] },
+      { "name": "pre-order-low", "fixture": "card_harbor.json", "inquiry_type": "pre_order", "expect": true, "forbidden": ["诈骗", "欺诈", "scam", "fraud"] },
+      { "name": "high-general", "fixture": "card_attention_bypass.json", "inquiry_type": "general", "expect": true, "forbidden": ["诈骗", "欺诈", "scam", "fraud"] },
+      { "name": "account-change-low", "fixture": "card_harbor.json", "inquiry_type": "account_change", "expect": false }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

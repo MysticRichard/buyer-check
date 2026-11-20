@@ -1,0 +1,21 @@
+{
+  "id": "A153",
+  "title": "N-02 同一证据包，channel 取每个枚举值，卡片字节与不带 channel 完全相同；非法枚举值被忽略并计数",
+  "type": "lead_matrix",
+  "input": {
+    "fixture": "card_harbor.json",
+    "cases": [
+      { "name": "alibaba", "intake": { "channel": "alibaba" }, "expect_channel": "alibaba", "expect_channel_ignored": 0, "expect_card_equal_base": true },
+      { "name": "facebook", "intake": { "channel": "facebook" }, "expect_channel": "facebook", "expect_channel_ignored": 0, "expect_card_equal_base": true },
+      { "name": "whatsapp", "intake": { "channel": "whatsapp" }, "expect_channel": "whatsapp", "expect_channel_ignored": 0, "expect_card_equal_base": true },
+      { "name": "website_form", "intake": { "channel": "website_form" }, "expect_channel": "website_form", "expect_channel_ignored": 0, "expect_card_equal_base": true },
+      { "name": "email", "intake": { "channel": "email" }, "expect_channel": "email", "expect_channel_ignored": 0, "expect_card_equal_base": true },
+      { "name": "linkedin", "intake": { "channel": "linkedin" }, "expect_channel": "linkedin", "expect_channel_ignored": 0, "expect_card_equal_base": true },
+      { "name": "trade_show", "intake": { "channel": "trade_show" }, "expect_channel": "trade_show", "expect_channel_ignored": 0, "expect_card_equal_base": true },
+      { "name": "other", "intake": { "channel": "other" }, "expect_channel": "other", "expect_channel_ignored": 0, "expect_card_equal_base": true },
+      { "name": "unknown", "intake": { "channel": "unknown" }, "expect_channel": "unknown", "expect_channel_ignored": 0, "expect_card_equal_base": true },
+      { "name": "invalid-value", "intake": { "channel": "wechat" }, "expect_channel": "unknown", "expect_channel_ignored": 1, "expect_card_equal_base": true }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

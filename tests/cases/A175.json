@@ -1,0 +1,14 @@
+{
+  "id": "A175",
+  "title": "N-08 Python 与 Node 的 --guide 输出逐字节一致（含 --lang）",
+  "type": "guide",
+  "input": {
+    "cases": [
+      { "mode": "short", "lang": "zh" },
+      { "mode": "short", "lang": "en" },
+      { "mode": "full", "lang": "zh" },
+      { "mode": "full", "lang": "en" }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

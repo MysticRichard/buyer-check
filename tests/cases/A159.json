@@ -1,0 +1,30 @@
+{
+  "id": "A159",
+  "title": "N-03 遍历：form_meta 任意取值，风险分、等级、置信度不变",
+  "type": "lead_matrix",
+  "input": {
+    "fixture": "card_harbor.json",
+    "invariance": true,
+    "cases": [
+      { "name": "empty", "form_meta": {}, "expect_anomalies": [] },
+      { "name": "honeypot", "form_meta": { "honeypot_triggered": true }, "expect_anomalies": ["honeypot"] },
+      { "name": "fast-submit", "form_meta": { "seconds_to_submit": 3 }, "expect_anomalies": ["fast-submit"] },
+      { "name": "direct", "form_meta": { "pages_viewed_before_submit": 0 }, "expect_anomalies": ["direct-no-browse"] },
+      {
+        "name": "all-signals",
+        "form_meta": {
+          "submit_ip_masked": "203.0.113.0/24",
+          "referrer_domain": "search.example",
+          "utm_source": "ads",
+          "landing_page_path": "/pumps",
+          "pages_viewed_before_submit": 0,
+          "seconds_to_submit": 2,
+          "honeypot_triggered": true,
+          "captcha_passed": false
+        },
+        "expect_anomalies": ["honeypot", "fast-submit"]
+      }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

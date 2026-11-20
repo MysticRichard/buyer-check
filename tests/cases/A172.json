@@ -1,0 +1,44 @@
+{
+  "id": "A172",
+  "title": "N-08 --guide full（zh/en）：非空行 ≤40，含五个小节标题与四档信息表",
+  "type": "guide",
+  "input": {
+    "cases": [
+      {
+        "mode": "full",
+        "lang": "zh",
+        "max_nonempty": 40,
+        "min_examples": 3,
+        "needles": [
+          "**1. 给我什么信息**",
+          "**2. 这些信息去哪里找**",
+          "**3. 示例**",
+          "**4. 怎么看结果**",
+          "**5. 隐私与边界**",
+          "| 最少 |",
+          "| 推荐 |",
+          "| 加分 |",
+          "| 订单前 |"
+        ]
+      },
+      {
+        "mode": "full",
+        "lang": "en",
+        "max_nonempty": 40,
+        "min_examples": 3,
+        "needles": [
+          "**1. What to give me**",
+          "**2. Where to find it**",
+          "**3. Examples**",
+          "**4. How to read the result**",
+          "**5. Privacy and boundaries**",
+          "| Minimum |",
+          "| Recommended |",
+          "| Bonus |",
+          "| Before order |"
+        ]
+      }
+    ]
+  },
+  "expect": { "all_pass": true }
+}
