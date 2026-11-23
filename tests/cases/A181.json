@@ -1,0 +1,12 @@
+{
+  "id": "A181",
+  "title": "S-01 Python 与 Node 在同一真实格式夹具上输出一致",
+  "type": "sanctions_sources",
+  "input": {
+    "csv": "9001,\"KHALIL, AHMED\",individual,\"TEST-PROGRAM\",-0-,-0-,-0-,-0-,-0-,-0-,-0-,-0-\n9002,\"DELGADO, MARCUS\",individual,\"TEST-PROGRAM\",-0-,-0-,-0-,-0-,-0-,-0-,-0-,-0-\n9003,\"GLOBAL STAR TRADING CO\",-0-,\"TEST-PROGRAM\",-0-,-0-,-0-,-0-,-0-,-0-,-0-,-0-\n9004,\"DOE, JOHN\",individual,\"TEST-PROGRAM\",-0-,-0-,-0-,-0-,-0-,-0-,-0-,-0-\n",
+    "queries": [
+      { "query": "GLOBAL STAR TRADING CO", "match_count": 1 }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

@@ -1,0 +1,12 @@
+{
+  "id": "A190",
+  "title": "U-01 acme.com.tr 与 www.acme.com.tr 视为同一可注册域名",
+  "type": "domain_suffix",
+  "input": {
+    "cases": [
+      { "host": "acme.com.tr", "expect": "acme.com.tr" },
+      { "host": "www.acme.com.tr", "expect": "acme.com.tr" }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

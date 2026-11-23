@@ -1,0 +1,10 @@
+{
+  "id": "A185",
+  "title": "E-01 手册 T01–T14 映射表落库（每条有已有/新增/未实现结论）",
+  "type": "doc_contains",
+  "input": {
+    "files": ["docs/pE-01-report-v0.12.0.md"],
+    "needles": ["T01", "T03", "T08", "T09", "T11", "T14", "已加 SKILL 硬规则", "115 条"]
+  },
+  "expect": { "all_pass": true }
+}

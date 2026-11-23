@@ -1,0 +1,21 @@
+{
+  "id": "A219",
+  "title": "R-01 单一 strong 候选且无其他 medium+ → resolved",
+  "type": "lead_matrix",
+  "input": {
+    "fixture": "card_harbor.json",
+    "cases": [
+      {
+        "name": "single-strong",
+        "identity": {
+          "candidates": [
+            { "name": "Harbor Rim Engineering", "country": "SG", "registry_id": "202001234A", "url": "https://registry.example/harbor", "match_keys": ["legal_name", "registry_id"], "strength": "strong" }
+          ]
+        },
+        "expect_identity_status": "resolved",
+        "expect_card_equal_base": true
+      }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

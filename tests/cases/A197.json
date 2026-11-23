@@ -1,0 +1,11 @@
+{
+  "id": "A197",
+  "title": "F-01 file:///etc/passwd → unsafe_url（scheme）",
+  "type": "url_safety",
+  "input": {
+    "cases": [
+      { "url": "file:///etc/passwd", "expect": "scheme" }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

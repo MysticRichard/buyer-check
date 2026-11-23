@@ -1,0 +1,12 @@
+{
+  "id": "A218",
+  "title": "S-02 lists_checked 含 UK Sanctions List 与 updated_at",
+  "type": "sanctions_uk",
+  "input": {
+    "fixture": "uk_sanctions_synthetic.csv",
+    "queries": [
+      { "query": "COMMONWORD", "match_count": 1, "match_type": "exact" }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

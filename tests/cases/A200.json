@@ -1,0 +1,13 @@
+{
+  "id": "A200",
+  "title": "F-01 重定向 4 跳 / https→http → unsafe_url 原因",
+  "type": "fetch_guard",
+  "input": {
+    "cases": [
+      { "status": 302, "location": "https://example.com/next", "previous_url": "https://example.com", "redirects": 3, "expect": "too-many-redirects" },
+      { "status": 302, "location": "http://example.com/next", "previous_url": "https://example.com", "redirects": 0, "expect": "redirect-downgrade" },
+      { "status": 200, "content_type": "text/html", "size": 100, "expect": null }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

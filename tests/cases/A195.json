@@ -1,0 +1,12 @@
+{
+  "id": "A195",
+  "title": "U-01 旧证据包快照：card_harbor 字节不变（全量遍历见报告）",
+  "type": "render_card",
+  "input": { "fixture": "card_harbor.json" },
+  "expect": {
+    "status": "ok",
+    "card_file": "card_harbor.expected.txt",
+    "line_count_max": 50,
+    "first_screen_max": 14
+  }
+}

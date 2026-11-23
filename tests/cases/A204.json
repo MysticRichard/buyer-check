@@ -1,0 +1,12 @@
+{
+  "id": "A204",
+  "title": "F-01 文本含 ![x](https://attacker.example/p.png) → 卡片不再是可渲染图片语法",
+  "type": "render_card",
+  "input": { "fixture": "card_injection.json" },
+  "expect": {
+    "status": "ok",
+    "card_excludes": ["![x]("],
+    "line_count_max": 50,
+    "first_screen_max": 14
+  }
+}

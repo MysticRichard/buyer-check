@@ -1,0 +1,17 @@
+{
+  "id": "A222",
+  "title": "R-01 无候选 → unresolved，卡片字节不变且无加分",
+  "type": "lead_matrix",
+  "input": {
+    "fixture": "card_harbor.json",
+    "cases": [
+      {
+        "name": "no-candidates",
+        "identity": { "candidates": [] },
+        "expect_identity_status": "unresolved",
+        "expect_card_equal_base": true
+      }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

@@ -3,11 +3,19 @@
   "title": "N-05 每个已配置的源有离线夹具（命中/未命中各一例）；未配置的源返回 not_configured，不抛异常",
   "type": "sanctions_sources",
   "input": {
-    "csv": "1,individual,\"KHALIL, AHMED\"\n2,individual,\"DELGADO, MARCUS\"\n3,entity,\"GLOBAL STAR TRADING CO\"\n4,individual,\"DOE, JOHN\"\n",
+    "csv": "9001,\"KHALIL, AHMED\",individual,\"TEST-PROGRAM\",-0-,-0-,-0-,-0-,-0-,-0-,-0-,-0-\n9002,\"DELGADO, MARCUS\",individual,\"TEST-PROGRAM\",-0-,-0-,-0-,-0-,-0-,-0-,-0-,-0-\n9003,\"GLOBAL STAR TRADING CO\",-0-,\"TEST-PROGRAM\",-0-,-0-,-0-,-0-,-0-,-0-,-0-,-0-\n9004,\"DOE, JOHN\",individual,\"TEST-PROGRAM\",-0-,-0-,-0-,-0-,-0-,-0-,-0-,-0-\n",
     "queries": [
-      { "query": "GLOBAL STAR TRADING CO", "match_count": 1 },
-      { "query": "NOBODY MATCHES THIS", "match_count": 0 }
+      {
+        "query": "GLOBAL STAR TRADING CO",
+        "match_count": 1
+      },
+      {
+        "query": "NOBODY MATCHES THIS",
+        "match_count": 0
+      }
     ]
   },
-  "expect": { "all_pass": true }
+  "expect": {
+    "all_pass": true
+  }
 }

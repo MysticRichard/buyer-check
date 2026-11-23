@@ -1,0 +1,13 @@
+{
+  "id": "A229",
+  "title": "V-02 inferred 证据不能进入“已核实”",
+  "type": "render_card",
+  "input": { "fixture": "card_inferred.json" },
+  "expect": {
+    "status": "ok",
+    "credit": 90,
+    "card_excludes": ["🟢 推断的任职关系"],
+    "line_count_max": 50,
+    "first_screen_max": 14
+  }
+}

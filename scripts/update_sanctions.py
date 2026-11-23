@@ -43,6 +43,14 @@ PER_URL_TIMEOUT = 20.0
 MIN_SDN_ROWS = 15000
 SDN_COLUMNS = 12
 MAX_WIDTH_OUTLIER_RATIO = 0.10
+SDN_NAME_COLUMN = 1
+SDN_TYPE_COLUMN = 2
+SDN_TYPE_VALUES = {"-0-", "individual", "entity", "vessel", "aircraft"}
+MIN_TYPE_COLUMN_RATIO = 0.90
+UK_URL = "https://sanctionslist.fcdo.gov.uk/docs/UK-Sanctions-List.csv"
+UK_FILE = "uk_sanctions_list.csv"
+UK_COLUMNS = 58
+MIN_UK_ROWS = 1000
 
 SOURCES = {
     "OFAC SDN": {
@@ -52,7 +60,7 @@ SOURCES = {
     },
     "EU Consolidated": {"urls": [], "file": "eu_consolidated.csv", "status": "not_configured"},
     "UN Security Council": {"urls": [], "file": "un_sc.csv", "status": "not_configured"},
-    "UK OFSI Consolidated": {"urls": [], "file": "uk_ofsi.csv", "status": "not_configured"},
+    "UK Sanctions List": {"urls": [UK_URL], "file": UK_FILE, "status": "configured"},
 }
 
 
@@ -72,7 +80,36 @@ def validate_sdn(data: bytes) -> tuple:
     good_width = sum(1 for row in rows if len(row) >= SDN_COLUMNS)
     if good_width / len(rows) < (1 - MAX_WIDTH_OUTLIER_RATIO):
         return False, "bad-columns"
+    typed_rows = [row for row in rows if len(row) >= SDN_COLUMNS]
+    type_ok = sum(1 for row in typed_rows if row[SDN_TYPE_COLUMN].strip().lower() in SDN_TYPE_VALUES)
+    if not typed_rows or type_ok / len(typed_rows) < MIN_TYPE_COLUMN_RATIO:
+        return False, "bad-type-column"
     return True, "{} rows".format(len(rows))
+
+
+def validate_uk(data: bytes) -> tuple:
+    """Return (ok, detail) for a UK Sanctions List CSV payload."""
+    if not data:
+        return False, "empty"
+    head = data[:300].lower()
+    if b"<html" in head or b"<!doctype" in head or head.lstrip().startswith(b"<"):
+        return False, "not-csv"
+    text = data.decode("utf-8", errors="replace")
+    rows = list(csv.reader(io.StringIO(text)))
+    header_index = None
+    for index, row in enumerate(rows[:6]):
+        if "name type" in [cell.strip().lower() for cell in row]:
+            header_index = index
+            break
+    if header_index is None:
+        return False, "missing-header"
+    body = [row for row in rows[header_index + 1:] if row and any(cell.strip() for cell in row)]
+    if len(body) < MIN_UK_ROWS:
+        return False, "too-few-rows:{}".format(len(body))
+    good_width = sum(1 for row in body if len(row) >= UK_COLUMNS)
+    if good_width / len(body) < (1 - MAX_WIDTH_OUTLIER_RATIO):
+        return False, "bad-columns"
+    return True, "{} rows".format(len(body))
 
 
 def parse_list_date(last_modified: str, path: str) -> str:
@@ -145,14 +182,57 @@ def download_sdn(cache_dir: str = CACHE_DIR, timeout: float = PER_URL_TIMEOUT, u
     return {"status": "unavailable", "reason": reason, "attempts": attempts}
 
 
-def update(cache_dir: str = CACHE_DIR, timeout: float = PER_URL_TIMEOUT, check_only: bool = False, urls=None) -> dict:
+def download_uk(cache_dir: str = CACHE_DIR, timeout: float = PER_URL_TIMEOUT, urls=None) -> dict:
+    """Download and validate the UK Sanctions List CSV; keep the old cache on failure."""
+    path = os.path.join(cache_dir, UK_FILE)
+    meta_path = os.path.join(cache_dir, "uk_sanctions_list.meta.json")
+    attempts = []
+    invalid_seen = False
+    for url in (urls or [UK_URL]):
+        outcome = download_one(url, timeout)
+        if outcome.get("status") != "ok":
+            attempts.append({"url": url, "status": "failed", "reason": outcome.get("reason", "download-failed")})
+            continue
+        ok, detail = validate_uk(outcome["data"])
+        if not ok:
+            invalid_seen = True
+            attempts.append({"url": url, "status": "invalid-content", "reason": detail})
+            continue
+        os.makedirs(cache_dir, exist_ok=True)
+        temp_path = path + ".tmp"
+        with open(temp_path, "wb") as handle:
+            handle.write(outcome["data"])
+        os.replace(temp_path, path)
+        list_date = parse_list_date(outcome.get("last_modified"), path)
+        try:
+            age_days = (dt.datetime.now(dt.timezone.utc).date() - dt.date.fromisoformat(list_date)).days
+        except ValueError:
+            age_days = None
+        meta = {"source_url": outcome.get("source_url", url), "list_date": list_date, "list_age_days": age_days, "bytes": len(outcome["data"]), "detail": detail}
+        with open(meta_path, "w", encoding="utf-8") as handle:
+            json.dump(meta, handle, ensure_ascii=False)
+        attempts.append({"url": url, "status": "ok", "reason": detail})
+        return {"status": "ok", **meta, "attempts": attempts}
+    reason = "invalid-content" if invalid_seen else "all-urls-failed"
+    return {"status": "unavailable", "reason": reason, "attempts": attempts}
+
+
+def update(cache_dir: str = CACHE_DIR, timeout: float = PER_URL_TIMEOUT, check_only: bool = False, urls=None, uk_urls=None) -> dict:
     results = []
     ok = True
     for name, source in SOURCES.items():
         if check_only or source["status"] != "configured":
             results.append({"list": name, "status": source["status"], "urls": source["urls"]})
             continue
-        outcome = download_sdn(cache_dir, timeout=timeout, urls=urls) if name == "OFAC SDN" else {"status": "unavailable", "reason": "not-configured"}
+        if name == "UK Sanctions List" and urls is not None:
+            results.append({"list": name, "status": source["status"], "urls": source["urls"]})
+            continue
+        if name == "OFAC SDN":
+            outcome = download_sdn(cache_dir, timeout=timeout, urls=urls)
+        elif name == "UK Sanctions List":
+            outcome = download_uk(cache_dir, timeout=timeout, urls=uk_urls)
+        else:
+            outcome = {"status": "unavailable", "reason": "not-configured"}
         item = {"list": name, "status": "downloaded" if outcome.get("status") == "ok" else "failed"}
         item.update({key: outcome.get(key) for key in ("reason", "source_url", "list_date", "list_age_days", "attempts") if key in outcome})
         results.append(item)
@@ -166,9 +246,11 @@ def main(argv=None) -> int:
     parser.add_argument("--check", action="store_true", help="report source status only")
     parser.add_argument("--cache-dir", default=CACHE_DIR, help="cache directory (default: .cache/sanctions)")
     parser.add_argument("--urls", help="test hook: comma-separated SDN URLs")
+    parser.add_argument("--uk-urls", help="test hook: comma-separated UK Sanctions List URLs")
     args = parser.parse_args(argv)
     urls = [item.strip() for item in args.urls.split(",") if item.strip()] if args.urls else None
-    result = update(cache_dir=args.cache_dir, check_only=args.check, urls=urls)
+    uk_urls = [item.strip() for item in args.uk_urls.split(",") if item.strip()] if args.uk_urls else None
+    result = update(cache_dir=args.cache_dir, check_only=args.check, urls=urls, uk_urls=uk_urls)
     print(json.dumps(result, ensure_ascii=False))
     return 0 if result["status"] == "ok" else 1
 

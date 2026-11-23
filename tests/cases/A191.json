@@ -1,0 +1,24 @@
+{
+  "id": "A191",
+  "title": "U-01 邮箱域与官网域均使用 com.mx，视为一致",
+  "type": "domain_suffix",
+  "input": {
+    "cases": [
+      {
+        "host": "acme.com.mx",
+        "expect": "acme.com.mx"
+      },
+      {
+        "host": "mail.acme.com.mx",
+        "expect": "acme.com.mx"
+      },
+      {
+        "host": "sales.acme.com.mx",
+        "expect": "acme.com.mx"
+      }
+    ]
+  },
+  "expect": {
+    "all_pass": true
+  }
+}

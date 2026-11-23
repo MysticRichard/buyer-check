@@ -1,0 +1,12 @@
+{
+  "id": "A209",
+  "title": "S-02 UK Sanctions List 合成夹具命中 → list 为 UK Sanctions List",
+  "type": "sanctions_uk",
+  "input": {
+    "fixture": "uk_sanctions_synthetic.csv",
+    "queries": [
+      { "query": "ALPHA TRADING LLC", "min_match_count": 1, "match_type": "exact" }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

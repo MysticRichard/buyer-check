@@ -29,12 +29,19 @@ const PER_URL_TIMEOUT_MS = 20000;
 const MIN_SDN_ROWS = 15000;
 const SDN_COLUMNS = 12;
 const MAX_WIDTH_OUTLIER_RATIO = 0.10;
+const SDN_NAME_COLUMN = 1;
+const SDN_TYPE_COLUMN = 2;
+const SDN_TYPE_VALUES = new Set(['-0-', 'individual', 'entity', 'vessel', 'aircraft']);
+const MIN_TYPE_COLUMN_RATIO = 0.90;
+const UK_URL = 'https://sanctionslist.fcdo.gov.uk/docs/UK-Sanctions-List.csv';
+const UK_COLUMNS = 58;
+const MIN_UK_ROWS = 1000;
 
 const SOURCES = {
   'OFAC SDN': { urls: SDN_URLS, file: 'ofac_sdn.csv', status: 'configured' },
   'EU Consolidated': { urls: [], file: 'eu_consolidated.csv', status: 'not_configured' },
   'UN Security Council': { urls: [], file: 'un_sc.csv', status: 'not_configured' },
-  'UK OFSI Consolidated': { urls: [], file: 'uk_ofsi.csv', status: 'not_configured' },
+  'UK Sanctions List': { urls: [UK_URL], file: 'uk_sanctions_list.csv', status: 'configured' },
 };
 
 function parseCsvLine(line = '') {
@@ -69,6 +76,23 @@ function parseCsvLine(line = '') {
   return fields;
 }
 
+export function validateUk(buffer) {
+  if (!buffer || buffer.length === 0) return { ok: false, detail: 'empty' };
+  const head = buffer.subarray(0, 300).toString('utf8').trimStart().toLowerCase();
+  if (head.startsWith('<') || head.includes('<html') || head.includes('<!doctype')) return { ok: false, detail: 'not-csv' };
+  const rows = buffer.toString('utf8').split(/\r?\n/).map((line) => parseCsvLine(line));
+  let headerIndex = -1;
+  for (let i = 0; i < Math.min(6, rows.length); i += 1) {
+    if (rows[i].map((field) => field.trim().toLowerCase()).includes('name type')) { headerIndex = i; break; }
+  }
+  if (headerIndex < 0) return { ok: false, detail: 'missing-header' };
+  const body = rows.slice(headerIndex + 1).filter((row) => row.some((cell) => cell.trim()));
+  if (body.length < MIN_UK_ROWS) return { ok: false, detail: `too-few-rows:${body.length}` };
+  const goodWidth = body.filter((row) => row.length >= UK_COLUMNS).length;
+  if (goodWidth / body.length < 1 - MAX_WIDTH_OUTLIER_RATIO) return { ok: false, detail: 'bad-columns' };
+  return { ok: true, detail: `${body.length} rows` };
+}
+
 export function validateSdn(buffer) {
   if (!buffer || buffer.length === 0) return { ok: false, detail: 'empty' };
   const head = buffer.subarray(0, 300).toString('utf8').trimStart().toLowerCase();
@@ -78,6 +102,11 @@ export function validateSdn(buffer) {
   if (rows[0].length < SDN_COLUMNS) return { ok: false, detail: 'missing-columns' };
   const goodWidth = rows.filter((row) => row.length >= SDN_COLUMNS).length;
   if (goodWidth / rows.length < 1 - MAX_WIDTH_OUTLIER_RATIO) return { ok: false, detail: 'bad-columns' };
+  const typedRows = rows.filter((row) => row.length >= SDN_COLUMNS);
+  const typeOk = typedRows.filter((row) => SDN_TYPE_VALUES.has((row[SDN_TYPE_COLUMN] || '').trim().toLowerCase())).length;
+  if (!typedRows.length || typeOk / typedRows.length < MIN_TYPE_COLUMN_RATIO) {
+    return { ok: false, detail: 'bad-type-column' };
+  }
   return { ok: true, detail: `${rows.length} rows` };
 }
 
@@ -152,7 +181,38 @@ export async function downloadSanctions({ cacheDir = CACHE_DIR, timeoutMs = PER_
   return { status: 'unavailable', reason: invalidSeen ? 'invalid-content' : 'all-urls-failed', attempts };
 }
 
-export async function updateSanctions({ cacheDir = CACHE_DIR, timeoutMs = PER_URL_TIMEOUT_MS, checkOnly = false, urls = SDN_URLS } = {}) {
+export async function downloadUk({ cacheDir = CACHE_DIR, timeoutMs = PER_URL_TIMEOUT_MS, urls = [UK_URL] } = {}) {
+  const path = join(cacheDir, 'uk_sanctions_list.csv');
+  const metaPath = join(cacheDir, 'uk_sanctions_list.meta.json');
+  const attempts = [];
+  let invalidSeen = false;
+  for (const url of urls) {
+    const outcome = await downloadOne(url, timeoutMs);
+    if (outcome.status !== 'ok') {
+      attempts.push({ url, status: 'failed', reason: outcome.reason, detail: outcome.detail });
+      continue;
+    }
+    const validation = validateUk(outcome.data);
+    if (!validation.ok) {
+      invalidSeen = true;
+      attempts.push({ url, status: 'invalid-content', reason: validation.detail });
+      continue;
+    }
+    mkdirSync(cacheDir, { recursive: true });
+    const tempPath = `${path}.tmp`;
+    writeFileSync(tempPath, outcome.data);
+    renameSync(tempPath, path);
+    const listDate = parseListDate(outcome.lastModified, path);
+    const listAgeDays = Math.floor((Date.now() - Date.parse(`${listDate}T00:00:00Z`)) / 86400000);
+    const meta = { source_url: outcome.sourceUrl || url, list_date: listDate, list_age_days: Number.isNaN(listAgeDays) ? null : listAgeDays, bytes: outcome.data.length, detail: validation.detail };
+    writeFileSync(metaPath, JSON.stringify(meta), 'utf8');
+    attempts.push({ url, status: 'ok', reason: validation.detail });
+    return { status: 'ok', ...meta, attempts };
+  }
+  return { status: 'unavailable', reason: invalidSeen ? 'invalid-content' : 'all-urls-failed', attempts };
+}
+
+export async function updateSanctions({ cacheDir = CACHE_DIR, timeoutMs = PER_URL_TIMEOUT_MS, checkOnly = false, urls = SDN_URLS, ukUrls = [UK_URL] } = {}) {
   const results = [];
   let ok = true;
   for (const [name, source] of Object.entries(SOURCES)) {
@@ -160,9 +220,14 @@ export async function updateSanctions({ cacheDir = CACHE_DIR, timeoutMs = PER_UR
       results.push({ list: name, status: source.status, urls: source.urls });
       continue;
     }
-    const outcome = name === 'OFAC SDN'
-      ? await downloadSanctions({ cacheDir, timeoutMs, urls })
-      : { status: 'unavailable', reason: 'not-configured' };
+    if (name === 'UK Sanctions List' && urls !== SDN_URLS) {
+      results.push({ list: name, status: source.status, urls: source.urls });
+      continue;
+    }
+    let outcome;
+    if (name === 'OFAC SDN') outcome = await downloadSanctions({ cacheDir, timeoutMs, urls });
+    else if (name === 'UK Sanctions List') outcome = await downloadUk({ cacheDir, timeoutMs, urls: ukUrls });
+    else outcome = { status: 'unavailable', reason: 'not-configured' };
     const item = { list: name, status: outcome.status === 'ok' ? 'downloaded' : 'failed' };
     for (const key of ['reason', 'source_url', 'list_date', 'list_age_days', 'attempts']) {
       if (outcome[key] !== undefined) item[key] = outcome[key];
@@ -174,18 +239,19 @@ export async function updateSanctions({ cacheDir = CACHE_DIR, timeoutMs = PER_UR
 }
 
 function parseArgs(argv) {
-  const args = { check: false, cacheDir: CACHE_DIR, urls: null };
+  const args = { check: false, cacheDir: CACHE_DIR, urls: null, ukUrls: null };
   for (let i = 0; i < argv.length; i += 1) {
     if (argv[i] === '--check') args.check = true;
     else if (argv[i] === '--cache-dir') args.cacheDir = argv[++i];
     else if (argv[i] === '--urls') args.urls = argv[++i].split(',').map((item) => item.trim()).filter(Boolean);
+    else if (argv[i] === '--uk-urls') args.ukUrls = argv[++i].split(',').map((item) => item.trim()).filter(Boolean);
   }
   return args;
 }
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
-  const result = await updateSanctions({ cacheDir: args.cacheDir, checkOnly: args.check, urls: args.urls || SDN_URLS });
+  const result = await updateSanctions({ cacheDir: args.cacheDir, checkOnly: args.check, urls: args.urls || SDN_URLS, ukUrls: args.ukUrls || [UK_URL] });
   console.log(JSON.stringify(result));
   process.exitCode = result.status === 'ok' ? 0 : 1;
 }

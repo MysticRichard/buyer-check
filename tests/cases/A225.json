@@ -1,0 +1,13 @@
+{
+  "id": "A225",
+  "title": "C-01 新增渠道 made_in_china / social_media 被识别，卡片字节不变",
+  "type": "lead_matrix",
+  "input": {
+    "fixture": "card_harbor.json",
+    "cases": [
+      { "name": "made-in-china", "intake": { "channel": "made_in_china" }, "expect_channel": "made_in_china", "expect_channel_ignored": 0, "expect_card_equal_base": true },
+      { "name": "social-media", "intake": { "channel": "social_media" }, "expect_channel": "social_media", "expect_channel_ignored": 0, "expect_card_equal_base": true }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

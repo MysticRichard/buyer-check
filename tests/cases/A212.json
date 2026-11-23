@@ -1,0 +1,12 @@
+{
+  "id": "A212",
+  "title": "S-02 别名命中 → matched_on alias 且带 alias_of",
+  "type": "sanctions_uk",
+  "input": {
+    "fixture": "uk_sanctions_synthetic.csv",
+    "queries": [
+      { "query": "ALPHA TRADING LIMITED", "match_count": 2, "match_type": "exact", "matched_on": "alias", "alias_of": "ALPHA TRADING LLC" }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

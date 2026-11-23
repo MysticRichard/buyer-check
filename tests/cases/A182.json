@@ -1,0 +1,7 @@
+{
+  "id": "A182",
+  "title": "S-01 列语义校验失败（12 列但类型列异常）→ invalid-content，旧缓存不被覆盖",
+  "type": "sanctions_update",
+  "input": { "scenario": "bad-types" },
+  "expect": { "all_pass": true }
+}

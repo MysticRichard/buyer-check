@@ -82,7 +82,12 @@ function mergeMarkdown(spec) {
 function embedFixtures(testCase) {
   const input = testCase.input || {};
   if (input.fixture) {
-    input.fixture_data = JSON.parse(readFileSync(join(ROOT, 'tests', 'fixtures', input.fixture), 'utf8'));
+    const fixturePath = join(ROOT, 'tests', 'fixtures', input.fixture);
+    if (input.fixture.endsWith('.csv')) {
+      input.fixture_text = readFileSync(fixturePath, 'utf8');
+    } else {
+      input.fixture_data = JSON.parse(readFileSync(fixturePath, 'utf8'));
+    }
     delete input.fixture;
   }
   if (Array.isArray(input.fixtures)) {

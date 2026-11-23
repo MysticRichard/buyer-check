@@ -1,0 +1,7 @@
+{
+  "id": "A187",
+  "title": "E-01 score_eval --self 通过（含身份状态混淆矩阵）",
+  "type": "eval_self",
+  "input": {},
+  "expect": { "all_pass": true }
+}

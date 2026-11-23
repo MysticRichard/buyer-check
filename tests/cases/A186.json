@@ -1,0 +1,10 @@
+{
+  "id": "A186",
+  "title": "E-01 评测语料含 E086–E115 与 expected_identity_status",
+  "type": "doc_contains",
+  "input": {
+    "files": ["tests/eval/inquiries.jsonl"],
+    "needles": ["E086", "E115", "expected_identity_status", "\"ambiguous\""]
+  },
+  "expect": { "all_pass": true }
+}

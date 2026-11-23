@@ -1,0 +1,10 @@
+{
+  "id": "A227",
+  "title": "V-02 证据字段 observed_at / entity_match_basis / inferred 写入模板",
+  "type": "doc_contains",
+  "input": {
+    "files": ["card_template.md", "report_template.md"],
+    "needles": ["observed_at", "entity_match_basis", "inferred", "name_exact", "alias_inferred"]
+  },
+  "expect": { "all_pass": true }
+}

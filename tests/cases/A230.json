@@ -1,0 +1,11 @@
+{
+  "id": "A230",
+  "title": "V-02 inferred 不改变核实度与覆盖（与 card_harbor 同分）",
+  "type": "render_card",
+  "input": { "fixture": "card_inferred.json" },
+  "expect": {
+    "status": "ok",
+    "credit": 90,
+    "credit_tier": "高"
+  }
+}

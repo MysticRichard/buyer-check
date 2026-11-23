@@ -1,0 +1,18 @@
+{
+  "id": "A196",
+  "title": "U-01 Python 与 Node 在新增后缀上输出一致",
+  "type": "domain_suffix",
+  "input": {
+    "cases": [
+      { "host": "acme.com.tr", "expect": "acme.com.tr" },
+      { "host": "mail.acme.com.mx", "expect": "acme.com.mx" },
+      { "host": "acme.co.za", "expect": "acme.co.za" },
+      { "host": "acme.com.pk", "expect": "acme.com.pk" },
+      { "host": "acme.com.ng", "expect": "acme.com.ng" },
+      { "host": "acme.co.kr", "expect": "acme.co.kr" },
+      { "host": "acme.co.jp", "expect": "acme.co.jp" },
+      { "host": "acme.com.pl", "expect": "acme.com.pl" }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

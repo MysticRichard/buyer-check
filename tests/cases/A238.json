@@ -1,0 +1,10 @@
+{
+  "id": "A238",
+  "title": "G-01 本版只给链接、不加自动脚本，且保留 check_sources 字段",
+  "type": "doc_contains",
+  "input": {
+    "files": ["data-sources/global.md"],
+    "needles": ["不加自动查询脚本", "check_sources", "本版只登记"]
+  },
+  "expect": { "all_pass": true }
+}

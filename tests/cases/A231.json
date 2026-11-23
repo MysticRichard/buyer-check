@@ -1,0 +1,21 @@
+{
+  "id": "A231",
+  "title": "B-01 付款方与买家不同 → 固定提示，风险分/卡片字节不变",
+  "type": "lead_matrix",
+  "input": {
+    "fixture": "card_harbor.json",
+    "cases": [
+      {
+        "name": "different-payer",
+        "intake": { "payer": "Global Pay Ltd", "consignee": "Harbor Rim Engineering", "buyer_type": "distributor", "end_use": "own project" },
+        "expect_trade_background": {
+          "payer": "Global Pay Ltd",
+          "payer_differs": true,
+          "relationship_prompt": "付款方/收货方与买家不同：请书面确认关系与授权"
+        },
+        "expect_card_equal_base": true
+      }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

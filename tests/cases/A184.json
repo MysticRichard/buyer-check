@@ -1,0 +1,12 @@
+{
+  "id": "A184",
+  "title": "S-01 真实 12 列格式夹具：个人名「姓, 名」在列 1，查询命中",
+  "type": "sanctions_sources",
+  "input": {
+    "csv": "9001,\"KHALIL, AHMED\",individual,\"TEST-PROGRAM\",-0-,-0-,-0-,-0-,-0-,-0-,-0-,-0-\n9002,\"DELGADO, MARCUS\",individual,\"TEST-PROGRAM\",-0-,-0-,-0-,-0-,-0-,-0-,-0-,-0-\n9003,\"GLOBAL STAR TRADING CO\",-0-,\"TEST-PROGRAM\",-0-,-0-,-0-,-0-,-0-,-0-,-0-,-0-\n9004,\"DOE, JOHN\",individual,\"TEST-PROGRAM\",-0-,-0-,-0-,-0-,-0-,-0-,-0-,-0-\n",
+    "queries": [
+      { "query": "DELGADO, MARCUS", "match_count": 1 }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

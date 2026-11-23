@@ -1,0 +1,14 @@
+{
+  "id": "A180",
+  "title": "S-01 查询 individual / -0- / vessel 类型词不得命中",
+  "type": "sanctions_sources",
+  "input": {
+    "csv": "9001,\"KHALIL, AHMED\",individual,\"TEST-PROGRAM\",-0-,-0-,-0-,-0-,-0-,-0-,-0-,-0-\n9002,\"DELGADO, MARCUS\",individual,\"TEST-PROGRAM\",-0-,-0-,-0-,-0-,-0-,-0-,-0-,-0-\n9003,\"GLOBAL STAR TRADING CO\",-0-,\"TEST-PROGRAM\",-0-,-0-,-0-,-0-,-0-,-0-,-0-,-0-\n9004,\"DOE, JOHN\",individual,\"TEST-PROGRAM\",-0-,-0-,-0-,-0-,-0-,-0-,-0-,-0-\n",
+    "queries": [
+      { "query": "individual", "match_count": 0 },
+      { "query": "-0-", "match_count": 0 },
+      { "query": "vessel", "match_count": 0 }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

@@ -80,6 +80,7 @@
 - 证据强制（v0.9.1）：证据包一旦带 `evidence`，`display.attention[]` 与 `display.verified[]` 每条必须带 `evidence_ids`，每个编号必须真实存在且带 `url` + `retrieved_at`；缺编号、假编号、重复编号自动移入「没查到」并加「（缺证据）」，返回 `evidence_missing` 计数。`source_type: user_input` 可无 URL，但只能留在「需要注意」，不能进「已核实」。旧证据包不带 `evidence` 时不做强制。
 - 来源等级（v0.9.1）：`source_type` 缺省映射 `registry/sanctions_list → official`、`search/map → third_party`、`website/user_input/other → self_declared`；可用 `source_grade` 显式覆盖。条目末尾显示 `[官方]/[第三方]/[自述]`。进入「已核实」至少 1 条 `official`，或 2 条主域（eTLD+1）不同的 `third_party`；同主域多页只算一条；只有自述的移入「没查到」并写「客户自述，未证实」。
 - 数据日期（v0.9.1）：每条证据可选 `data_as_of`（YYYY-MM-DD）；有值时在六维表下方输出「数据日期：制裁名单 … · 注册处 … · 地图 …」，没有该来源就不列。制裁名单超过 7 天视为陈旧，由调用方写入 `checks_incomplete` 的 `stale` 原因，与 R2 同一行显示。
+- 证据字段（v0.12.0）：`evidence[]` 可选 `observed_at`（来源页面标注的发布/更新时间，ISO 日期）、`entity_match_basis[]`（`name_exact registry_id domain_match address_match phone_match person_link alias_official alias_inferred`）、`source_grade: "inferred"`（推断层级，按最低一级处理，不进入「已核实」、不新增覆盖或加分）。
 - 来源冲突（v0.9.1）：可选 `conflicts[]`，每项 `{topic, a:{claim≤30字, evidence_id}, b:{claim≤30字, evidence_id}}`，两个 `evidence_id` 必须存在于 `evidence`。卡片在「需要注意」栏输出一行「⚠ 来源冲突：A，B」，占 3 条名额之一，不替用户二选一，不改风险分。
 - 红旗说明（v0.9.1）：每条红旗在 `red_flags.json` 带 `why`（为什么是信号）与 `benign`（可能的无害解释）；卡片只给“需要注意”里权重最高的触发行追加「· 可能无害：…」，完整报告逐条显示两者。
 - 什么会改变结论（v0.9.1）：`display.flip_hint` 可选、≤40 字；有值时在六维表下方输出「什么会改变结论：…」，不在首屏 14 行内；没有就不输出，不用通用文字填充。
@@ -102,6 +103,7 @@
 - `attachments[]`：附件文件名（字符串或 `{name}`），只用于扩展名判断；`exe scr js jar iso img html htm hta lnk vbs msi bat cmd` 及双扩展名（如 `.pdf.exe`）算风险，`pdf docx xlsx jpg png zip rar` 本身不算。
 - `form_meta`：官网表单提交信息，见 2.2。只接收用户粘贴，不采集、不植入追踪。
 - `ship_to`：收货信息，见 2.2。
+- v0.12.0 交易背景（全部可选）：`end_use`（≤80 字）、`end_user`、`payer`、`consignee`（自然人姓名按 INV-07 脱敏）、`buyer_type`（`distributor`/`wholesaler_retailer`/`oem_manufacturer`/`contractor_epc`/`end_user`/`trading_intermediary`/`unknown`）。付款方或收货方与买家不同只给固定提示「付款方/收货方与买家不同：请书面确认关系与授权」，不计分、不加红旗、不进卡片行。
 
 **`display`（模型填文字，脚本渲染）**：`customer_label`、`inquiry_type`、`dim_notes{company, link, contact, behavior, compliance, scale}`、`attention[]`、`verified[]`、`missing[]`、`open_questions[]`、`scripts[]`。
 

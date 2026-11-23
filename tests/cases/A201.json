@@ -1,0 +1,13 @@
+{
+  "id": "A201",
+  "title": "F-01 内容类型不符 / 超过 2 MiB → unsafe_url 原因（边界 2 MiB 通过）",
+  "type": "fetch_guard",
+  "input": {
+    "cases": [
+      { "status": 200, "content_type": "application/octet-stream", "size": 100, "expect": "content-type" },
+      { "status": 200, "content_type": "text/html", "size": 2097153, "expect": "too-large" },
+      { "status": 200, "content_type": "text/html", "size": 2097152, "expect": null }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

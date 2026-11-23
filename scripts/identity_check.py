@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import html as html_lib
+import ipaddress
 import json
 import os
 import datetime as dt
@@ -30,7 +31,7 @@ import urllib.robotparser
 from datetime import datetime, timezone
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urljoin, urlencode, urlparse
-from urllib.request import Request, urlopen
+from urllib.request import HTTPRedirectHandler, Request, build_opener, urlopen
 
 try:  # optional dependency; never required
     from PIL import Image
@@ -38,6 +39,142 @@ except Exception:  # pragma: no cover
     Image = None
 
 USER_AGENT = "buyer-check/0.8.0 (company-profile; read-only)"
+MAX_FETCH_BYTES = 2 * 1024 * 1024
+SAFE_REDIRECTS = 3
+HTML_CONTENT_TYPES = {"text/html", "application/xhtml+xml", "text/plain"}
+JSON_CONTENT_TYPES = {"application/json"}
+REDIRECT_CODES = {301, 302, 303, 307, 308}
+
+
+def fetch_guard_reason(status, location, content_type, size, redirects=0, previous_url="", allowed=None):
+    """Pure guard used by safe_open and by offline tests."""
+    allowed_types = {item.lower() for item in (allowed or HTML_CONTENT_TYPES)}
+    if status in REDIRECT_CODES:
+        if redirects >= SAFE_REDIRECTS:
+            return "too-many-redirects"
+        if text_of(previous_url).lower().startswith("https:") and text_of(location).lower().startswith("http:"):
+            return "redirect-downgrade"
+        return None
+    detected = text_of(content_type).split(";")[0].strip().lower()
+    if allowed_types and detected and detected not in allowed_types:
+        return "content-type"
+    if size > MAX_FETCH_BYTES:
+        return "too-large"
+    return None
+
+
+class UnsafeUrl(Exception):
+    """Raised when a URL fails the outbound fetch safety checks."""
+
+    def __init__(self, reason: str):
+        super().__init__(reason)
+        self.reason = reason
+
+
+def _is_global_address(value: str) -> bool:
+    try:
+        ip = ipaddress.ip_address(value)
+    except ValueError:
+        return False
+    if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped:
+        ip = ip.ipv4_mapped
+    return bool(
+        ip.is_global
+        and not ip.is_private
+        and not ip.is_loopback
+        and not ip.is_link_local
+        and not ip.is_multicast
+        and not ip.is_reserved
+        and not ip.is_unspecified
+    )
+
+
+def validate_url(url: str, resolver=None):
+    """Validate scheme, host, port and every resolved address before a fetch."""
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        raise UnsafeUrl("scheme")
+    if parsed.username or parsed.password:
+        raise UnsafeUrl("userinfo")
+    host = parsed.hostname
+    if not host:
+        raise UnsafeUrl("host")
+    try:
+        ipaddress.ip_address(host)
+    except ValueError:
+        pass
+    else:
+        raise UnsafeUrl("ip-literal")
+    try:
+        port = parsed.port
+    except ValueError:
+        raise UnsafeUrl("port")
+    if port not in (None, 80, 443):
+        raise UnsafeUrl("port")
+    resolver = resolver or socket.getaddrinfo
+    try:
+        infos = resolver(host, port or (443 if parsed.scheme == "https" else 80), 0, 0, 0)
+    except OSError:
+        raise UnsafeUrl("non-global-address")
+    if not infos:
+        raise UnsafeUrl("non-global-address")
+    for info in infos:
+        if not _is_global_address(info[4][0]):
+            raise UnsafeUrl("non-global-address")
+    return parsed
+
+
+class _SafeRedirectHandler(HTTPRedirectHandler):
+    max_redirections = SAFE_REDIRECTS
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        if req.full_url.startswith("https:") and newurl.startswith("http:"):
+            raise UnsafeUrl("redirect-downgrade")
+        validate_url(newurl)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+def safe_open(url: str, timeout: float = 10.0, content_types=None, opener=None) -> bytes:
+    """Open a URL with SSRF, redirect, content-type and size guards."""
+    validate_url(url)
+    allowed = {item.lower() for item in (content_types or HTML_CONTENT_TYPES)}
+    opener = opener or build_opener(_SafeRedirectHandler())
+    request = Request(url, headers={"User-Agent": USER_AGENT, "Accept": "text/html"})
+    try:
+        response = opener.open(request, timeout=timeout)
+    except HTTPError as exc:
+        if exc.code in (301, 302, 303, 307, 308):
+            raise UnsafeUrl("too-many-redirects")
+        raise
+    with response:
+        content_type = (response.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+        if allowed and content_type not in allowed:
+            raise UnsafeUrl("content-type")
+        chunks = []
+        total = 0
+        while True:
+            chunk = response.read(65536)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > MAX_FETCH_BYTES:
+                raise UnsafeUrl("too-large")
+            chunks.append(chunk)
+    return b"".join(chunks)
+
+
+def fetch(url, timeout=10):
+    return safe_open(url, timeout=timeout, content_types=HTML_CONTENT_TYPES).decode("utf-8", errors="replace")
+
+
+def robots_allows(domain, scheme, path):
+    try:
+        parser = urllib.robotparser.RobotFileParser()
+        parser.set_url(urljoin(f"{scheme}://{domain}", "/robots.txt"))
+        parser.read()
+        return parser.can_fetch(USER_AGENT, urljoin(f"{scheme}://{domain}", path))
+    except Exception:
+        return True
 SOCIAL_PATTERNS = {
     "facebook": r"https?://(?:www\.)?facebook\.com/[^\s\"'<>]+",
     "linkedin": r"https?://(?:[a-z]{2}\.)?(?:www\.)?linkedin\.com/[^\s\"'<>]+",
@@ -138,20 +275,6 @@ def parse_html(html, base_url):
     }
 
 
-def fetch(url, timeout=10):
-    request = Request(url, headers={"User-Agent": USER_AGENT, "Accept": "text/html"})
-    with urlopen(request, timeout=timeout) as response:
-        return response.read().decode("utf-8", errors="replace")
-
-
-def robots_allows(domain, scheme, path):
-    try:
-        parser = urllib.robotparser.RobotFileParser()
-        parser.set_url(urljoin(f"{scheme}://{domain}", "/robots.txt"))
-        parser.read()
-        return parser.can_fetch(USER_AGENT, urljoin(f"{scheme}://{domain}", path))
-    except Exception:
-        return True
 
 
 def site_command(args):
@@ -169,17 +292,23 @@ def site_command(args):
         domain = args.domain.strip().lower()
         scheme = "https"
         paths = ["/", "/about", "/products", "/contact"][: max(1, min(args.max_pages, 4))]
+        unsafe_reason = None
         for index, path in enumerate(paths):
             if index and not robots_allows(domain, scheme, path):
                 continue
             try:
                 body = fetch(urljoin(f"{scheme}://{domain}", path), timeout=args.timeout)
                 pages.append((urljoin(f"{scheme}://{domain}", path), body))
+            except UnsafeUrl as exc:
+                unsafe_reason = unsafe_reason or exc.reason
+                continue
             except Exception:
                 continue
             if index:
                 time.sleep(max(0, args.delay))
         if not pages:
+            if unsafe_reason:
+                return {"status": "unsafe_url", "command": "site", "reason": unsafe_reason}
             return {"status": "unavailable", "command": "site", "error": "website not reachable"}
 
     merged = {
@@ -310,9 +439,7 @@ def normalize_name(value):
 
 
 def fetch_json(url, timeout=10):
-    request = Request(url, headers={"User-Agent": USER_AGENT, "Accept": "application/json"})
-    with urlopen(request, timeout=timeout) as response:
-        return json.loads(response.read().decode("utf-8", errors="replace"))
+    return json.loads(safe_open(url, timeout=timeout, content_types=JSON_CONTENT_TYPES).decode("utf-8", errors="replace"))
 
 
 def phone_matches(candidate, phone):

@@ -1,0 +1,13 @@
+{
+  "id": "A240",
+  "title": "L-01 同域名不同联系人 → 同一组并提示不同联系人",
+  "type": "dedup",
+  "input": {
+    "packs": [
+      { "subject": { "company": "Acme A", "email": "alice@acme.example", "domain": "acme.example" }, "intake": {} },
+      { "subject": { "company": "Acme B", "email": "bob@acme.example", "domain": "acme.example" }, "intake": {} }
+    ],
+    "contains": ["域名", "不同联系人", "#1", "#2"]
+  },
+  "expect": { "all_pass": true }
+}
