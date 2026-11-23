@@ -66,8 +66,11 @@ const DOC_IPV4_PREFIXES = [
   ['10'],
   ['127'],
   ['172', '16'],
+  ['169', '254'],
+  ['100', '64'],
+  ['93', '184', '216'],
 ];
-const DOC_IPV6_PREFIXES = ['2001:db8:', '::1', 'fe80:'];
+const DOC_IPV6_PREFIXES = ['2001:db8:', '::1', 'fe80:', '::ffff:'];
 
 function allowedIpv4(match) {
   const parts = match.split('.');

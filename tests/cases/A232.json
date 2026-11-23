@@ -1,0 +1,17 @@
+{
+  "id": "A232",
+  "title": "B-01 付款方与买家相同 → 无提示",
+  "type": "lead_matrix",
+  "input": {
+    "fixture": "card_harbor.json",
+    "cases": [
+      {
+        "name": "same-payer",
+        "intake": { "payer": "Harbor Rim Engineering", "buyer_type": "end_user" },
+        "expect_trade_background": { "payer_differs": false, "relationship_prompt": null },
+        "expect_card_equal_base": true
+      }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

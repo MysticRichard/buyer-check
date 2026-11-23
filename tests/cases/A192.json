@@ -1,0 +1,12 @@
+{
+  "id": "A192",
+  "title": "U-01 acme.co.za 与 acme.com 仍判为不同域名",
+  "type": "domain_suffix",
+  "input": {
+    "cases": [
+      { "host": "acme.co.za", "expect": "acme.co.za" },
+      { "host": "acme.com", "expect": "acme.com" }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

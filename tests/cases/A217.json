@@ -1,0 +1,13 @@
+{
+  "id": "A217",
+  "title": "S-02 旧 uk_ofsi.csv 缓存存在时被忽略",
+  "type": "sanctions_uk",
+  "input": {
+    "fixture": "uk_sanctions_synthetic.csv",
+    "old_csv": "OLD NAME,OLD ID\n",
+    "queries": [
+      { "query": "OLD NAME", "match_count": 0 }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

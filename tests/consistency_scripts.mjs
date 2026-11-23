@@ -114,10 +114,10 @@ const headerB = [
 
 // ---------- sanctions_check (synthetic list) ----------
 const syntheticCsv = [
-  '1,individual,"KHALIL, AHMED"',
-  '2,individual,"DELGADO, MARCUS"',
-  '3,entity,"GLOBAL STAR TRADING CO"',
-  '4,individual,"DOE, JOHN"',
+  '9001,"KHALIL, AHMED",individual,"TEST-PROGRAM",-0-,-0-,-0-,-0-,-0-,-0-,-0-,-0-',
+  '9002,"DELGADO, MARCUS",individual,"TEST-PROGRAM",-0-,-0-,-0-,-0-,-0-,-0-,-0-,-0-',
+  '9003,"GLOBAL STAR TRADING CO",-0-,"TEST-PROGRAM",-0-,-0-,-0-,-0-,-0-,-0-,-0-,-0-',
+  '9004,"DOE, JOHN",individual,"TEST-PROGRAM",-0-,-0-,-0-,-0-,-0-,-0-,-0-,-0-',
 ].join('\n');
 
 function main() {

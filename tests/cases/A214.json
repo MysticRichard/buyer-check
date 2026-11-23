@@ -1,0 +1,12 @@
+{
+  "id": "A214",
+  "title": "S-02 法律形式词不同（LLC vs LTD）→ token_exact 命中",
+  "type": "sanctions_uk",
+  "input": {
+    "fixture": "uk_sanctions_synthetic.csv",
+    "queries": [
+      { "query": "ALPHA TRADING LTD", "min_match_count": 1, "match_type": "token_exact" }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

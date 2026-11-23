@@ -1,0 +1,31 @@
+{
+  "id": "A198",
+  "title": "F-01 回环/云元数据/IPv6 回环 → 拒绝；域名解析到回环也拒绝",
+  "type": "url_safety",
+  "input": {
+    "cases": [
+      {
+        "url": "http://127.0.0.1/",
+        "expect": "ip-literal"
+      },
+      {
+        "url": "http://169.254.169.254/",
+        "expect": "ip-literal"
+      },
+      {
+        "url": "http://[::1]/",
+        "expect": "ip-literal"
+      },
+      {
+        "url": "http://example.com/",
+        "ips": [
+          "127.0.0.1"
+        ],
+        "expect": "non-global-address"
+      }
+    ]
+  },
+  "expect": {
+    "all_pass": true
+  }
+}

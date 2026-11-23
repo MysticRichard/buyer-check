@@ -1,0 +1,13 @@
+{
+  "id": "A239",
+  "title": "L-01 同邮箱两条询盘 → 同一组",
+  "type": "dedup",
+  "input": {
+    "packs": [
+      { "subject": { "company": "Acme A", "email": "buyer@acme-a.example", "domain": "acme-a.example" }, "intake": {} },
+      { "subject": { "company": "Acme B", "email": "buyer@acme-a.example", "domain": "acme-b.example" }, "intake": {} }
+    ],
+    "contains": ["邮箱", "#1", "#2"]
+  },
+  "expect": { "all_pass": true }
+}

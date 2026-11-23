@@ -41,9 +41,9 @@
 | 名单 | 入口 | 状态 |
 | --- | --- | --- |
 | OFAC SDN | `scripts/update_sanctions` 下载 CSV 后本地匹配（官方直链） | configured |
-| EU Consolidated | 官方下载入口未核实 | not_configured |
-| UN Security Council | 官方下载入口未核实 | not_configured |
-| UK OFSI | 官方下载入口未核实 | not_configured |
+| EU Consolidated | 官方下载需要 token（实测 403） | not_configured（`http-403-token-required`） |
+| UN Security Council | 页面可访问，但无免令牌稳定直链（旧 XML 直链 404） | not_configured（`un-no-stable-direct-link`） |
+| UK Sanctions List | `https://sanctionslist.fcdo.gov.uk/docs/UK-Sanctions-List.csv`（OGL v3.0，本地缓存） | configured |
 
 人名/公司名匹配需人工排除同名；存疑时标注「疑似命中，需人工核实」。
 
@@ -168,5 +168,20 @@
 | `email` | 邮件头（`email_header_check`）、Reply-To、发件域 DMARC/SPF；显示原始邮件的方法因邮箱而异，不写死菜单路径 |
 | `linkedin` | 对方主页现任职公司与自称是否一致、主页创建时间、是否模板化群发私信；不登录、不绕验证码 |
 | `trade_show` | 参展商名录里是否有该公司；名片上的公司名、域名、电话是否一致 |
+| `made_in_china` | 平台会员等级、认证标识、账号注册时长：**具体字段名待核实**；平台标识只作线索，不证明身份 |
+| `social_media` | Instagram/TikTok/Telegram 等私信：优先按现有头像与账号时长人工核对清单；名称 + 电话/域名双匹配后再看主页是否绑定公司 |
 
 **纪律**：渠道只决定先查什么，不作为可信度证据；不打开对方发来的链接和附件，只比对链接域名与附件扩展名；完整 IP 只保留网段（IPv4 /24、IPv6 /48）。
+## 第十五节 免费登记与筛查来源（v0.12，G-01）
+
+本版只登记“链接 + 查什么 + 怎么看结果”，不加自动查询脚本；只有来源在 `country_capabilities.json` 标为 `automation_allowed` 且条款核实允许时，后续版本才考虑 `--online`。
+
+| 来源 | 用途 | 入口 | 免费 / Key | terms_checked | verified_at | 提醒 |
+| --- | --- | --- | --- | --- | --- | --- |
+| GLEIF（LEI 库） | 全球法人识别号查询 | https://www.gleif.org/en/lei/search/ | 免费网页；公开 API 免 key（以官方条款为准） | 页面可访问；自动化条款待逐条核实 | 2026-11-23 | 只覆盖有 LEI 的主体，小买家查不到不扣分 |
+| EU VIES | 欧盟增值税号有效性 | https://ec.europa.eu/taxation_customs/vies/ | 免费网页；无需 key | 页面可访问；条款待核实 | 2026-11-23 | 号码有效 ≠ 正在经营 ≠ 与询盘人有关；只在客户给了 VAT 号时用 |
+| SEC EDGAR | 美国上市公司 | https://www.sec.gov/edgar/search/ | 免费；SEC 要求可识别的 User-Agent 与访问频率 | 页面可访问；User-Agent 与频率要求已记录，细则待复核 | 2026-11-23 | 只覆盖美国上市公司 |
+| trade.gov CSL | 美国多部门限制名单汇总 | https://www.trade.gov/consolidated-screening-list | 免费网页；API key / 下载方式待核实 | 页面可访问；是否需 key 待核实 | 2026-11-23 | 只写“疑似命中，需人工核实”，不计分 |
+| UK Companies House | 英国公司登记 | https://find-and-update.company-information.service.gov.uk/ | 网页免费；API 需要 key（待核实） | 页面可访问；API 条款待核实 | 2026-11-23 | 默认只给链接，不自动查询 |
+
+**纪律**：查不到只写“未覆盖/未查到”，不扣分；新增来源不得改变风险分、等级、置信度与覆盖分母；`check_sources` 的 `verified_at` / `terms_checked` 字段必须保留，自动化能力另立版本。

@@ -23,6 +23,14 @@ DEFAULT_BRANDS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "brand
 
 HOMOGLYPHS = str.maketrans({"l": "1", "i": "1", "o": "0", "s": "5", "e": "3"})
 SHORT = 5
+PUBLIC_SUFFIXES = set("""
+co.uk org.uk ac.uk com.au net.au co.jp com.br com.cn net.cn org.cn gov.cn edu.cn com.hk com.sg com.tw co.in co.nz
+com.tr org.tr com.mx org.mx com.ar org.ar co.cl gob.cl gov.cl com.co org.co com.pe org.pe com.pk org.pk
+com.bd org.bd com.lk org.lk com.ng org.ng co.ke or.ke com.eg org.eg co.ma org.ma com.sa org.sa
+co.ae org.ae com.ru org.ru com.ua org.ua com.pl org.pl co.kr or.kr co.jp or.jp co.za org.za
+com.my org.my co.id or.id co.th or.th com.vn org.vn com.ph org.ph com.qa org.qa com.kw org.kw
+com.bh org.bh com.om org.om com.lb org.lb com.ly org.ly
+""".split())
 
 
 def normalize(domain: str) -> str:
@@ -36,10 +44,12 @@ def normalize(domain: str) -> str:
 
 
 def core_label(domain: str) -> tuple:
-    """Return (label, tld) for a domain, keeping multi-part TLDs together."""
+    """Return (label, suffix) using the same multi-label suffix table as render_card."""
     parts = normalize(domain).split(".")
     if len(parts) < 2:
         return normalize(domain), ""
+    if len(parts) >= 3 and ".".join(parts[-2:]) in PUBLIC_SUFFIXES:
+        return parts[-3], ".".join(parts[-2:])
     return parts[0], ".".join(parts[1:])
 
 

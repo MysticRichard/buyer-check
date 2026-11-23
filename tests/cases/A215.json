@@ -1,0 +1,12 @@
+{
+  "id": "A215",
+  "title": "S-02 公共词只有一个且为通用词 → 不命中",
+  "type": "sanctions_uk",
+  "input": {
+    "fixture": "uk_sanctions_synthetic.csv",
+    "queries": [
+      { "query": "TRADING", "match_count": 0 }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

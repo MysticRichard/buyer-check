@@ -46,6 +46,7 @@ const NON_TARGET_CLASSES = new Set([
   'competitor_probe',
   'individual_research',
 ]);
+const IDENTITY_STATUSES = ['resolved', 'probable', 'ambiguous', 'unresolved'];
 
 function loadCorpus() {
   const lines = readFileSync(CORPUS, 'utf8').split(/\r?\n/).filter((l) => l.trim());
@@ -100,6 +101,7 @@ function evaluate(corpus, predictions) {
 
   const coveredFlags = [...flagStats.keys()];
   const lead = evaluateLeadClasses(corpus, byId);
+  const identity = evaluateIdentityStatuses(corpus, byId);
   return {
     inquiries: corpus.length,
     normal_inquiries: normalTotal,
@@ -108,7 +110,60 @@ function evaluate(corpus, predictions) {
     flags_covered: coveredFlags.length,
     per_flag: perFlag,
     lead,
+    identity,
   };
+}
+
+function evaluateIdentityStatuses(corpus, byId) {
+  const labeled = corpus.filter((item) => IDENTITY_STATUSES.includes(item.expected_identity_status));
+  const predicted = labeled.filter((item) => IDENTITY_STATUSES.includes((byId.get(item.id) || {}).identity_status));
+  const base = {
+    labeled_inquiries: labeled.length,
+    predicted_inquiries: predicted.length,
+    evaluated: predicted.length > 0,
+    statuses: IDENTITY_STATUSES,
+  };
+  if (predicted.length === 0) return base;
+
+  const classes = [...new Set([
+    ...IDENTITY_STATUSES,
+    ...labeled.map((item) => item.expected_identity_status),
+    ...predicted.map((item) => (byId.get(item.id) || {}).identity_status),
+  ])];
+  const confusion = {};
+  const stats = new Map();
+  for (const expected of classes) {
+    confusion[expected] = {};
+    for (const actual of classes) confusion[expected][actual] = 0;
+    stats.set(expected, { tp: 0, fn: 0, fp: 0, support: 0 });
+  }
+  for (const item of predicted) {
+    const expected = item.expected_identity_status;
+    const actual = (byId.get(item.id) || {}).identity_status;
+    confusion[expected][actual] += 1;
+    stats.get(expected).support += 1;
+    if (expected === actual) {
+      stats.get(expected).tp += 1;
+    } else {
+      stats.get(expected).fn += 1;
+      if (stats.has(actual)) stats.get(actual).fp += 1;
+    }
+  }
+  const perStatus = {};
+  for (const name of classes) {
+    const s = stats.get(name);
+    const recall = s.tp + s.fn === 0 ? null : s.tp / (s.tp + s.fn);
+    const precision = s.tp + s.fp === 0 ? null : s.tp / (s.tp + s.fp);
+    perStatus[name] = {
+      support: s.support,
+      tp: s.tp,
+      fn: s.fn,
+      fp: s.fp,
+      recall: recall === null ? 'n/a' : Math.round(recall * 1000) / 1000,
+      precision: precision === null ? 'n/a' : Math.round(precision * 1000) / 1000,
+    };
+  }
+  return { ...base, per_status: perStatus, confusion, classes };
 }
 
 function evaluateLeadClasses(corpus, byId) {
@@ -190,6 +245,7 @@ function main() {
       id: item.id,
       flags: item.expected_flags,
       lead_class: item.expected_lead_class,
+      identity_status: item.expected_identity_status,
     }));
     console.log('mode: self-check (expectations used as predictions — must be perfect)');
   } else if (args[0]) {
@@ -230,12 +286,31 @@ function main() {
     console.log('\nlead-class metrics: skipped (no lead_class in predictions)');
   }
 
+  if (result.identity.evaluated) {
+    console.log(`\nidentity-status metrics (${result.identity.predicted_inquiries}/${result.identity.labeled_inquiries} labeled inquiries have a prediction):`);
+    for (const [name, m] of Object.entries(result.identity.per_status)) {
+      console.log(`  ${name}  recall=${m.recall}  precision=${m.precision}  support=${m.support}  (tp ${m.tp} / fn ${m.fn} / fp ${m.fp})`);
+    }
+    console.log('\nidentity confusion matrix (expected -> predicted):');
+    const header = `  ${'expected'.padEnd(18)}${result.identity.classes.map((name) => name.slice(0, 10).padStart(12)).join('')}`;
+    console.log(header);
+    for (const expected of result.identity.classes) {
+      const row = result.identity.classes.map((actual) => String(result.identity.confusion[expected]?.[actual] ?? 0).padStart(12)).join('');
+      console.log(`  ${expected.padEnd(18)}${row}`);
+    }
+  } else {
+    console.log('\nidentity-status metrics: skipped (no identity_status in predictions)');
+  }
+
   if (args[0] === '--self') {
     const imperfect = Object.values(result.per_flag).some((m) => m.recall !== 1 || m.fp !== 0);
     const classImperfect = result.lead.evaluated && Object.entries(result.lead.per_class).some(
       ([, m]) => m.support > 0 && (m.recall !== 1 || m.fp !== 0),
     );
-    if (imperfect || classImperfect || result.false_alarms_on_normal > 0 || (result.lead.evaluated && !result.lead.target_met)) {
+    const identityImperfect = result.identity.evaluated && Object.entries(result.identity.per_status).some(
+      ([, m]) => m.support > 0 && (m.recall !== 1 || m.fp !== 0),
+    );
+    if (imperfect || classImperfect || identityImperfect || result.false_alarms_on_normal > 0 || (result.lead.evaluated && !result.lead.target_met)) {
       console.log('\nself-check FAILED: scorer or corpus is inconsistent');
       process.exit(1);
     }

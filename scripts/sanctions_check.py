@@ -24,6 +24,7 @@ import io
 import json
 import os
 import re
+import unicodedata
 import sys
 import urllib.error
 import urllib.request
@@ -41,23 +42,31 @@ PER_URL_TIMEOUT = 20.0
 MIN_SDN_ROWS = 15000
 SDN_COLUMNS = 12
 MAX_WIDTH_OUTLIER_RATIO = 0.10
+SDN_NAME_COLUMN = 1
+SDN_TYPE_COLUMN = 2
+SDN_TYPE_VALUES = {"-0-", "individual", "entity", "vessel", "aircraft"}
+MIN_TYPE_COLUMN_RATIO = 0.90
 
 LIST_FILES = {
     "OFAC SDN": "ofac_sdn.csv",
     "EU Consolidated": "eu_consolidated.csv",
     "UN Security Council": "un_sc.csv",
-    "UK OFSI Consolidated": "uk_ofsi.csv",
+    "UK Sanctions List": "uk_sanctions_list.csv",
 }
 
-# Verified on 2026-11-20: only OFAC is configured. EU returns HTTP 403
-# (token/browser session required), the UN XML direct link returns 404, and the
-# UK OFSI Consolidated List closed on 2026-01-28 in favour of the UK Sanctions
-# List. Sources that cannot be downloaded without a token stay not_configured.
+# 2026-11-23: OFAC and UK Sanctions List are configured. EU still needs a token
+# (403) and the UN page has no stable token-free direct link (404 on the old XML
+# URL). Unconfigured sources stay not_configured and never throw.
 SOURCES = {
     "OFAC SDN": {"configured": True, "reason": None, "format": "CSV"},
     "EU Consolidated": {"configured": False, "reason": "http-403-token-required", "format": "CSV/XML"},
-    "UN Security Council": {"configured": False, "reason": "xml-link-404", "format": "XML"},
-    "UK OFSI Consolidated": {"configured": False, "reason": "ofsi-list-closed-2026-01-28", "format": "CSV"},
+    "UN Security Council": {"configured": False, "reason": "un-no-stable-direct-link", "format": "XML"},
+    "UK Sanctions List": {"configured": True, "reason": None, "format": "CSV"},
+}
+
+LEGAL_SUFFIXES = {
+    "ltd", "llc", "inc", "co", "corp", "corporation", "company", "limited", "gmbh",
+    "fze", "fzc", "fzco", "jsc", "sdn", "bhd", "pte", "tbk",
 }
 
 
@@ -74,10 +83,15 @@ def source_status():
 
 
 def normalize(name: str) -> str:
-    """Lowercase, strip punctuation and collapse whitespace."""
-    text = (name or "").lower()
+    """NFKD-fold, casefold, strip punctuation and collapse whitespace."""
+    text = unicodedata.normalize("NFKD", name or "")
+    text = "".join(char for char in text if not unicodedata.combining(char)).casefold()
     text = re.sub(r"[^\w\s]", " ", text)
     return re.sub(r"\s+", " ", text).strip()
+
+
+def name_tokens(name: str) -> list:
+    return [token for token in normalize(name).split() if token not in LEGAL_SUFFIXES]
 
 
 def parse_csv_line(line: str) -> list:
@@ -121,22 +135,79 @@ def load_entries(path: str, name_column: int) -> list:
                 continue
             name = fields[name_column].strip()
             if name:
-                entries.append({"raw": name, "normalized": normalize(name)})
+                entries.append({
+                    "raw": name,
+                    "normalized": normalize(name),
+                    "tokens": name_tokens(name),
+                    "matched_on": "primary",
+                    "alias_of": None,
+                })
+    return entries
+
+
+def load_uk_entries(path: str) -> list:
+    rows = []
+    header_seen = False
+    with open(path, "r", encoding="utf-8", errors="replace") as handle:
+        for line in handle:
+            fields = parse_csv_line(line.rstrip("\n").rstrip("\r"))
+            if not header_seen:
+                if "name type" in [field.strip().lower() for field in fields]:
+                    header_seen = True
+                continue
+            if len(fields) < 11:
+                continue
+            group = fields[2].strip()
+            name = " ".join(field.strip() for field in [fields[4]] + fields[5:10] if field.strip()).strip()
+            if not name:
+                continue
+            rows.append((group, name, fields[10].strip().lower()))
+    primary = {}
+    for group, name, entry_type in rows:
+        if "primary" in entry_type and group not in primary:
+            primary[group] = name
+    entries = []
+    for group, name, entry_type in rows:
+        alias_of = primary.get(group) if "alias" in entry_type else None
+        entries.append({
+            "raw": name,
+            "normalized": normalize(name),
+            "tokens": name_tokens(name),
+            "matched_on": "alias" if alias_of else "primary",
+            "alias_of": alias_of,
+        })
     return entries
 
 
 def match(query: str, entries: list) -> list:
-    """Exact or containment match on normalized names."""
+    """Exact / token-set / token-subset match with legal-suffix folding."""
     target = normalize(query)
+    target_tokens = set(name_tokens(query))
     if not target:
         return []
     hits = []
     for entry in entries:
+        match_type = None
         if entry["normalized"] == target:
-            hits.append({"entry": entry["raw"], "match_type": "exact"})
-        elif target in entry["normalized"] or entry["normalized"] in target:
-            if len(entry["normalized"]) >= 4 and len(target) >= 4:
-                hits.append({"entry": entry["raw"], "match_type": "partial"})
+            match_type = "exact"
+        elif target_tokens and set(entry.get("tokens") or []) == target_tokens:
+            match_type = "token_exact"
+        elif target_tokens and set(entry.get("tokens") or []):
+            entry_tokens = set(entry["tokens"])
+            common = target_tokens & entry_tokens
+            if common and common == target_tokens or common == entry_tokens:
+                if len(common) >= 2 or (len(common) == 1 and len(next(iter(common))) >= 8):
+                    match_type = "partial"
+            elif target in entry["normalized"] or entry["normalized"] in target:
+                if len(entry["normalized"]) >= 4 and len(target) >= 4:
+                    match_type = "partial"
+        if match_type:
+            hits.append({
+                "entry": entry["raw"],
+                "match_type": match_type,
+                "matched_on": entry.get("matched_on", "primary"),
+                "alias_of": entry.get("alias_of"),
+            })
     return hits
 
 
@@ -155,6 +226,10 @@ def validate_sdn(data: bytes) -> tuple:
     good_width = sum(1 for row in rows if len(row) >= SDN_COLUMNS)
     if good_width / len(rows) < (1 - MAX_WIDTH_OUTLIER_RATIO):
         return False, "bad-columns"
+    typed_rows = [row for row in rows if len(row) >= SDN_COLUMNS]
+    type_ok = sum(1 for row in typed_rows if row[SDN_TYPE_COLUMN].strip().lower() in SDN_TYPE_VALUES)
+    if not typed_rows or type_ok / len(typed_rows) < MIN_TYPE_COLUMN_RATIO:
+        return False, "bad-type-column"
     return True, "{} rows".format(len(rows))
 
 
@@ -264,14 +339,20 @@ def analyse(query: str, cache_dir: str = CACHE_DIR, no_update: bool = False) -> 
             continue
         any_list = True
         try:
-            entries = load_entries(path, name_column=2 if list_name == "OFAC SDN" else 0)
+            if list_name == "OFAC SDN":
+                entries = load_entries(path, name_column=SDN_NAME_COLUMN)
+            elif list_name == "UK Sanctions List":
+                entries = load_uk_entries(path)
+            else:
+                entries = load_entries(path, name_column=0)
         except OSError:
             continue
         mtime = os.path.getmtime(path)
         updated = dt.datetime.fromtimestamp(mtime, dt.timezone.utc).strftime("%Y-%m-%d")
         entry = {"list": list_name, "updated_at": updated}
-        if list_name == "OFAC SDN":
-            meta_path = os.path.join(cache_dir, "ofac_sdn.meta.json")
+        meta_name = "ofac_sdn.meta.json" if list_name == "OFAC SDN" else "uk_sanctions_list.meta.json" if list_name == "UK Sanctions List" else None
+        if meta_name:
+            meta_path = os.path.join(cache_dir, meta_name)
             try:
                 with open(meta_path, "r", encoding="utf-8") as handle:
                     meta = json.load(handle)
@@ -282,9 +363,13 @@ def analyse(query: str, cache_dir: str = CACHE_DIR, no_update: bool = False) -> 
                 pass
         result["lists_checked"].append(entry)
         for hit in match(query, entries):
-            result["possible_matches"].append(
-                {"list": list_name, "entry": hit["entry"], "match_type": hit["match_type"]}
-            )
+            result["possible_matches"].append({
+                "list": list_name,
+                "entry": hit["entry"],
+                "match_type": hit["match_type"],
+                "matched_on": hit.get("matched_on", "primary"),
+                "alias_of": hit.get("alias_of"),
+            })
     result["match_count"] = len(result["possible_matches"])
     if not any_list:
         return {**result, "status": "unavailable", "error": "no sanctions list cached"}

@@ -1,0 +1,7 @@
+{
+  "id": "A183",
+  "title": "S-01 旧 3 列夹具被拒绝（missing-columns → invalid-content），不静默错列匹配",
+  "type": "sanctions_update",
+  "input": { "scenario": "old-format" },
+  "expect": { "all_pass": true }
+}

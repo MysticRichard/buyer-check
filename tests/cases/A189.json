@@ -1,0 +1,10 @@
+{
+  "id": "A189",
+  "title": "E-01 身份状态四类在报告中定义（resolved/probable/ambiguous/unresolved）",
+  "type": "doc_contains",
+  "input": {
+    "files": ["docs/pE-01-report-v0.12.0.md"],
+    "needles": ["resolved", "probable", "ambiguous", "unresolved", "identity.status"]
+  },
+  "expect": { "all_pass": true }
+}

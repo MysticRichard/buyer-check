@@ -1,0 +1,16 @@
+{
+  "id": "A236",
+  "title": "B-01 Python/Node 交易背景输出一致",
+  "type": "render_card_parity",
+  "input": {
+    "fixture": "card_harbor.json",
+    "mutate_intake": {
+      "payer": "Global Pay Ltd",
+      "consignee": "Jane Doe",
+      "end_use": "own project",
+      "end_user": "John Smith",
+      "buyer_type": "distributor"
+    }
+  },
+  "expect": { "all_pass": true }
+}

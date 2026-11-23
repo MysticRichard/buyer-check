@@ -1,0 +1,10 @@
+{
+  "id": "A188",
+  "title": "E-01 SKILL.md 含“不编造技术参数、型号、配置”约束（T14）",
+  "type": "doc_contains",
+  "input": {
+    "files": ["SKILL.md"],
+    "needles": ["不编造技术参数、型号、配置", "列出需要客户确认的问题"]
+  },
+  "expect": { "all_pass": true }
+}

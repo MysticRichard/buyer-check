@@ -1,0 +1,12 @@
+{
+  "id": "A216",
+  "title": "S-02 Python 与 Node 在 UK 名称匹配上输出一致",
+  "type": "sanctions_uk",
+  "input": {
+    "fixture": "uk_sanctions_synthetic.csv",
+    "queries": [
+      { "query": "GLOBAL TRADING CO", "match_count": 1, "match_type": "exact" }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

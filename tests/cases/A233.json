@@ -1,0 +1,17 @@
+{
+  "id": "A233",
+  "title": "B-01 end_user 为自然人姓名 → 脱敏",
+  "type": "lead_matrix",
+  "input": {
+    "fixture": "card_harbor.json",
+    "cases": [
+      {
+        "name": "person-end-user",
+        "intake": { "end_user": "John Smith", "end_use": "own project", "buyer_type": "end_user" },
+        "expect_trade_background": { "end_user": "J*** S****", "end_use": "own project", "buyer_type": "end_user" },
+        "expect_card_equal_base": true
+      }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

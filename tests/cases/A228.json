@@ -1,0 +1,12 @@
+{
+  "id": "A228",
+  "title": "V-02 旧证据包（无新字段）→ 卡片字节一致",
+  "type": "render_card",
+  "input": { "fixture": "card_harbor.json" },
+  "expect": {
+    "status": "ok",
+    "card_file": "card_harbor.expected.txt",
+    "line_count_max": 50,
+    "first_screen_max": 14
+  }
+}

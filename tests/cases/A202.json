@@ -1,0 +1,11 @@
+{
+  "id": "A202",
+  "title": "F-01 网页里的 contact 链接只列出，不自动访问（parse_html 纯函数）",
+  "type": "contact_links",
+  "input": {
+    "base": "https://example.com",
+    "html": "<a href=\"/contact\">Contact</a><a href=\"http://127.0.0.1/contact\">bad</a><a href=\"/about\">About</a>",
+    "contains": ["https://example.com/contact", "http://127.0.0.1/contact"]
+  },
+  "expect": { "all_pass": true }
+}

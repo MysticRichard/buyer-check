@@ -163,6 +163,42 @@ function videoScriptInfo(evidence, level) {
   return null;
 }
 
+const IDENTITY_STRENGTH = { strong: 3, medium: 2, weak: 1, none: 0 };
+const IDENTITY_QUESTION = '请提供注册号或国家';
+
+function identityInfo(evidence) {
+  const raw = evidence.identity && typeof evidence.identity === 'object' && !Array.isArray(evidence.identity) ? evidence.identity : {};
+  const candidates = [];
+  for (const item of (raw.candidates || []).slice(0, 5)) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+    const strength = IDENTITY_STRENGTH[text(item.strength).toLowerCase()] !== undefined ? text(item.strength).toLowerCase() : 'none';
+    candidates.push({
+      name: text(item.name),
+      country: text(item.country).toUpperCase(),
+      registry_id: text(item.registry_id),
+      url: text(item.url),
+      match_keys: (item.match_keys || []).map((key) => text(key)).filter(Boolean),
+      strength,
+    });
+  }
+  if (candidates.length === 0) return { status: 'unresolved', candidates: [], count: 0, ambiguous_count: 0 };
+  const ranks = candidates.map((item) => IDENTITY_STRENGTH[item.strength]);
+  const highest = Math.max(...ranks);
+  const top = candidates.filter((item, index) => ranks[index] === highest);
+  const topKeys = new Set(top.map((item) => `${item.country}|${item.registry_id || item.name}`));
+  const mediumPlus = candidates.filter((item, index) => ranks[index] >= 2);
+  let status = 'unresolved';
+  if (highest === 3 && mediumPlus.length === 1) status = 'resolved';
+  else if (highest === 2 && mediumPlus.length === 1) status = 'probable';
+  else if (highest >= 2 && topKeys.size >= 2) status = 'ambiguous';
+  return {
+    status,
+    candidates,
+    count: status === 'ambiguous' ? topKeys.size : candidates.length,
+    ambiguous_count: status === 'ambiguous' ? topKeys.size : 0,
+  };
+}
+
 let COUNTRY_DATA = null;
 function countryEntry(code) {
   if (COUNTRY_DATA === null) {
@@ -199,6 +235,94 @@ function shipToInfo(evidence) {
     country_mismatch: Boolean(country && buyer && country !== buyer),
     risk_background: background,
   };
+}
+
+const BUYER_TYPES = new Set(['distributor', 'wholesaler_retailer', 'oem_manufacturer', 'contractor_epc', 'end_user', 'trading_intermediary', 'unknown']);
+const PARTY_COMPANY_SUFFIXES = new Set(['ltd', 'llc', 'inc', 'co', 'corp', 'corporation', 'company', 'limited', 'gmbh', 'fze', 'fzc', 'fzco', 'jsc', 'sdn', 'bhd', 'pte', 'tbk', 'trading', 'group', 'holdings']);
+
+function looksLikePersonName(value) {
+  const raw = text(value).trim();
+  const tokens = raw.match(/[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ'\-]*/g) || [];
+  if (tokens.length < 2 || tokens.length > 4) return false;
+  return !tokens.some((token) => PARTY_COMPANY_SUFFIXES.has(token.toLowerCase().replace(/[.,]/g, '')));
+}
+
+function maskPersonName(value) {
+  const raw = text(value).trim();
+  if (!raw || !looksLikePersonName(raw)) return raw;
+  return raw.split(/\s+/).map((token) => token[0] + '*'.repeat(Math.max(1, token.length - 1))).join(' ');
+}
+
+function normalizeParty(value) {
+  return text(value).toLowerCase().replace(/[^a-z0-9]+/g, '');
+}
+
+function tradeBackgroundInfo(evidence) {
+  const intake = evidence.intake || {};
+  const buyer = text((evidence.subject && evidence.subject.company) || intake.company);
+  const buyerNorm = normalizeParty(buyer);
+  const safeParty = (value) => {
+    const raw = text(value).trim();
+    if (raw && normalizeParty(raw) === buyerNorm) return raw;
+    return maskPersonName(raw);
+  };
+  const endUse = text(intake.end_use) || null;
+  const endUser = safeParty(intake.end_user) || null;
+  const payer = safeParty(intake.payer) || null;
+  const consignee = safeParty(intake.consignee) || null;
+  const rawType = text(intake.buyer_type).trim().toLowerCase();
+  const buyerType = BUYER_TYPES.has(rawType) ? rawType : 'unknown';
+  const buyerTypeIgnored = rawType && !BUYER_TYPES.has(rawType) ? 1 : 0;
+  const differs = (party) => {
+    const value = normalizeParty(party);
+    return Boolean(value && buyerNorm && value !== buyerNorm && !value.includes(buyerNorm) && !buyerNorm.includes(value));
+  };
+  const payerDiffers = differs(payer);
+  const consigneeDiffers = differs(consignee);
+  return {
+    end_use: endUse,
+    end_user: endUser,
+    payer,
+    consignee,
+    buyer_type: buyerType,
+    buyer_type_ignored: buyerTypeIgnored,
+    payer_differs: payerDiffers,
+    consignee_differs: consigneeDiffers,
+    relationship_prompt: payerDiffers || consigneeDiffers ? '付款方/收货方与买家不同：请书面确认关系与授权' : null,
+  };
+}
+
+const FREE_EMAIL_DOMAINS = new Set(['gmail.com', 'outlook.com', 'hotmail.com', 'yahoo.com', 'qq.com', '163.com', '126.com', 'mail.ru', 'yandex.ru', 'icloud.com', 'proton.me', 'example.com']);
+
+function dedupText(packs) {
+  const groups = { email: new Map(), domain: new Map(), phone: new Map(), company: new Map() };
+  const add = (key, value, index) => {
+    if (!value) return;
+    if (!groups[key].has(value)) groups[key].set(value, []);
+    groups[key].get(value).push(index);
+  };
+  packs.forEach((pack, offset) => {
+    const intake = pack.intake || {};
+    const subject = pack.subject || {};
+    const email = text(intake.email || subject.email).trim().toLowerCase();
+    add('email', email, offset + 1);
+    let domainSource = text(intake.domain || subject.domain);
+    if (!domainSource && email.includes('@')) domainSource = email.split('@').pop();
+    const domain = registrableDomain(urlHost(domainSource) || domainSource);
+    if (domain && !FREE_EMAIL_DOMAINS.has(domain)) add('domain', domain, offset + 1);
+    const digits = text(intake.phone || subject.phone).replace(/\D/g, '');
+    if (digits.length >= 8) add('phone', `+${digits}`, offset + 1);
+    add('company', normalizeParty(text(intake.company || subject.company)), offset + 1);
+  });
+  const lines = ['## 批内去重提示'];
+  for (const [label, key] of [['邮箱', 'email'], ['域名', 'domain'], ['电话', 'phone'], ['公司名', 'company']]) {
+    for (const ids of groups[key].values()) {
+      if (ids.length < 2) continue;
+      lines.push(`- ${label}：询盘 ${ids.map((id) => `#${id}`).join('、')}（可能为同一主体，请人工确认是否合并跟进）${key === 'domain' ? '（不同联系人）' : ''}`);
+    }
+  }
+  if (lines.length === 1) lines.push('- 未发现重复线索');
+  return lines.slice(0, 21).join('\n');
 }
 
 const CHECKPOINT_NAMES = {
@@ -291,7 +415,7 @@ const LEAD_CLASS_CONCLUSION = {
   individual_research: '看起来是个人或调研需求：低优先级，按标准资料回复即可。',
 };
 const RISKY_ATTACHMENT_EXTS = new Set(['exe', 'scr', 'js', 'jar', 'iso', 'img', 'html', 'htm', 'hta', 'lnk', 'vbs', 'msi', 'bat', 'cmd']);
-const CHANNEL_SET = new Set(['alibaba', 'facebook', 'whatsapp', 'website_form', 'email', 'linkedin', 'trade_show', 'other', 'unknown']);
+const CHANNEL_SET = new Set(['alibaba', 'facebook', 'whatsapp', 'website_form', 'email', 'linkedin', 'trade_show', 'made_in_china', 'social_media', 'other', 'unknown']);
 
 const GUIDE_SHORT_ZH = [
   '**BuyerCheck 使用提示**：给我下面任意一项就能开始，信息越多结果越准。',
@@ -654,6 +778,10 @@ function parseUncovered(entry) {
 function uncoveredSentence(entry) {
   const { checkpoint, reason } = parseUncovered(entry);
   return `${CHECKPOINT_NAMES[checkpoint] || checkpoint}（${reasonText(checkpoint, reason)}）`;
+}
+
+function neutralizeMarkdown(value) {
+  return text(value).replace(/!\[/g, '!\\[').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 function isTechnical(value) {
@@ -1056,9 +1184,16 @@ const SOURCE_GRADE_DEFAULT = {
   user_input: 'self_declared',
   other: 'self_declared',
 };
-const GRADE_LABEL = { official: '官方', third_party: '第三方', self_declared: '自述' };
-const GRADE_RANK = { self_declared: 0, third_party: 1, official: 2 };
-const MULTI_SUFFIX = new Set(['co.uk', 'org.uk', 'ac.uk', 'com.au', 'net.au', 'co.jp', 'com.br', 'com.cn', 'net.cn', 'org.cn', 'gov.cn', 'edu.cn', 'com.hk', 'com.sg', 'com.tw', 'co.in', 'co.nz']);
+const GRADE_LABEL = { official: '官方', third_party: '第三方', self_declared: '自述', inferred: '推断' };
+const GRADE_RANK = { inferred: -1, self_declared: 0, third_party: 1, official: 2 };
+const MULTI_SUFFIX = new Set(`
+co.uk org.uk ac.uk com.au net.au co.jp com.br com.cn net.cn org.cn gov.cn edu.cn com.hk com.sg com.tw co.in co.nz
+com.tr org.tr com.mx org.mx com.ar org.ar co.cl gob.cl gov.cl com.co org.co com.pe org.pe com.pk org.pk
+com.bd org.bd com.lk org.lk com.ng org.ng co.ke or.ke com.eg org.eg co.ma org.ma com.sa org.sa
+co.ae org.ae com.ru org.ru com.ua org.ua com.pl org.pl co.kr or.kr co.jp or.jp co.za org.za
+com.my org.my co.id or.id co.th or.th com.vn org.vn com.ph org.ph com.qa org.qa com.kw org.kw
+com.bh org.bh com.om org.om com.lb org.lb com.ly org.ly
+`.trim().split(/\s+/));
 
 function urlHost(url) {
   try {
@@ -1068,7 +1203,7 @@ function urlHost(url) {
   }
 }
 
-function registrableDomain(host) {
+export function registrableDomain(host) {
   const parts = host ? host.split('.') : [];
   if (parts.length <= 2) return host;
   if (MULTI_SUFFIX.has(parts.slice(-2).join('.'))) return parts.slice(-3).join('.');
@@ -1248,6 +1383,7 @@ function deriveFlags(evidence) {
     const ids = (item.evidence_ids || []).map((id) => text(id)).filter(Boolean);
     const baseGrades = ids.map((id) => SOURCE_GRADE_DEFAULT[text((evidenceIndex.get(id) || {}).source_type)] || 'self_declared');
     if (declared === 'official' && baseGrades.includes('official')) return 'official';
+    if (declared === 'inferred') return 'inferred';
     if (declared === 'third_party' || declared === 'self_declared') return declared;
     if (baseGrades.includes('third_party')) return 'third_party';
     return 'self_declared';
@@ -1341,7 +1477,7 @@ const MATCH_KEY_LABELS = {
   person_name: '人名',
   registration_no: '注册号',
 };
-const SOURCE_GRADE_LABELS = { official: '官方', third_party: '第三方', self_declared: '自述' };
+const SOURCE_GRADE_LABELS = { official: '官方', third_party: '第三方', self_declared: '自述', inferred: '推断' };
 
 function verdictLine(display, evidence, level, actions) {
   let verdict = text(display.verdict);
@@ -1586,6 +1722,11 @@ export function renderCard(evidence, rules) {
   const behaviorStatus = behaviorFlags ? '有异常' : inquiryText(evidence) ? '无异常' : '未核实';
   const behaviorSymbol = behaviorFlags ? '⚠️' : behaviorStatus === '无异常' ? '✅' : '❓';
 
+  const identity = identityInfo(evidence);
+  const questions = [...(display.open_questions || [])];
+  if (identity.status === 'ambiguous' && !questions.includes(IDENTITY_QUESTION)) {
+    questions.splice(0, questions.length, ...questions.concat([IDENTITY_QUESTION]).slice(0, 3));
+  }
   const actions = computeActions(
     level,
     credit.tier,
@@ -1594,7 +1735,7 @@ export function renderCard(evidence, rules) {
     evidence.stage || 'inquiry',
     Boolean(evidence.account_verified),
     credit.complianceHalves >= 2,
-    display.open_questions || [],
+    questions,
   );
 
   const uncovered = Array.isArray(coverage.uncovered) ? coverage.uncovered : [];
@@ -1606,6 +1747,7 @@ export function renderCard(evidence, rules) {
   const channel = channelInfo(evidence);
   const videoScript = videoScriptInfo(evidence, level);
   const shipTo = shipToInfo(evidence);
+  const tradeBackground = tradeBackgroundInfo(evidence);
   const leadConclusion = level === '高' ? conclusion : (LEAD_CLASS_CONCLUSION[lead.lead_class] || conclusion);
   const leadSuffix = lead.lead_class === 'unclear' ? '' : ` · 类别：${lead.lead_class_label}`;
   const verdict = verdictLine(display, evidence, level, actions);
@@ -1623,6 +1765,13 @@ export function renderCard(evidence, rules) {
   let behaviorNote = text(dimNotes.behavior);
   if (newMode && behaviorStatus === '未核实' && (!behaviorNote || behaviorNote === '暂未核实')) behaviorNote = NEXT_STEPS_DIM.behavior;
   dims.splice(3, 0, { key: 'behavior', label: '交易行为', status: behaviorStatus, symbol: behaviorSymbol, bar: '—', note: behaviorNote || (behaviorStatus === '有异常' ? '发现异常交易要求' : behaviorStatus === '无异常' ? '没发现异常交易要求' : '没有询盘原文') });
+  if (identity.status === 'ambiguous') {
+    const phrase = `${identity.ambiguous_count} 个同名候选需确认`;
+    const companyDim = dims.find((item) => item.key === 'company');
+    if (companyDim && !companyDim.note.includes(phrase)) {
+      companyDim.note = companyDim.note ? `${companyDim.note}；${phrase}` : phrase;
+    }
+  }
 
   const flagAttention = ids
     .filter((id) => flagIndex.has(id))
@@ -1933,16 +2082,19 @@ export function renderCard(evidence, rules) {
       lead_signals: lead.lead_signals,
       lead_signals_ignored: lead.lead_signals_ignored,
       lead_class_source: lead.lead_class_source,
+      identity_status: identity.status,
     },
+    identity,
     form_meta_anomalies: formMeta.anomalies,
     form_meta: { submit_ip_masked: formMeta.submit_ip_masked },
     channel: channel.channel,
     channel_ignored: channel.channel_ignored,
     video_script: videoScript,
     ship_to: shipTo,
+    trade_background: tradeBackground,
     line_count: lines.length,
     first_screen_lines: firstScreenLines,
-    card: lines.join('\n'),
+    card: neutralizeMarkdown(lines.join('\n')),
   };
 }
 
@@ -2262,7 +2414,7 @@ export function reportAppendix(evidence) {
 }
 
 function parseArgs(argv) {
-  const args = { source: null, json: false, ladder: false, diff: [], batch: [], report: false, rules: RULES_FILE, maskIp: null, guide: null, lang: 'zh' };
+  const args = { source: null, json: false, ladder: false, diff: [], batch: [], dedup: [], report: false, rules: RULES_FILE, maskIp: null, guide: null, lang: 'zh' };
   for (let i = 0; i < argv.length; i += 1) {
     const token = argv[i];
     if (token === '--json') args.json = true;
@@ -2278,6 +2430,9 @@ function parseArgs(argv) {
     } else if (token === '--batch') {
       args.batch = [];
       while (i + 1 < argv.length && !argv[i + 1].startsWith('--')) args.batch.push(argv[++i]);
+    } else if (token === '--dedup') {
+      args.dedup = [];
+      while (i + 1 < argv.length && !argv[i + 1].startsWith('--')) args.dedup.push(argv[++i]);
     } else if (!token.startsWith('--') && args.source === null) args.source = token;
   }
   return args;
@@ -2302,6 +2457,15 @@ function main() {
   } catch (error) {
     console.log(JSON.stringify({ status: 'invalid-input', error: String(error) }));
     return 1;
+  }
+  if (args.dedup.length > 0) {
+    const packs = args.dedup.map((path) => readInput(path));
+    if (packs.some((pack) => !pack || typeof pack !== 'object' || Array.isArray(pack))) {
+      console.log(JSON.stringify({ status: 'invalid-input', error: 'evidence pack must be an object' }));
+      return 1;
+    }
+    process.stdout.write(`${dedupText(packs)}\n`);
+    return 0;
   }
   if (args.report) {
     if (!args.source) {

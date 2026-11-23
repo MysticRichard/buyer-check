@@ -1,0 +1,20 @@
+{
+  "id": "A199",
+  "title": "F-01 解析结果混有私网地址 → 拒绝",
+  "type": "url_safety",
+  "input": {
+    "cases": [
+      {
+        "url": "http://example.com/",
+        "ips": [
+          "93.184.216.34",
+          "10.0.0.1"
+        ],
+        "expect": "non-global-address"
+      }
+    ]
+  },
+  "expect": {
+    "all_pass": true
+  }
+}

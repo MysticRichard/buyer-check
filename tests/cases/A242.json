@@ -1,0 +1,34 @@
+{
+  "id": "A242",
+  "title": "L-01 免费邮箱域（gmail）不作为域名分组依据",
+  "type": "dedup",
+  "input": {
+    "packs": [
+      {
+        "subject": {
+          "company": "Acme A",
+          "email": "alice@example.com",
+          "domain": "example.com"
+        },
+        "intake": {}
+      },
+      {
+        "subject": {
+          "company": "Beta B",
+          "email": "bob@example.com",
+          "domain": "example.com"
+        },
+        "intake": {}
+      }
+    ],
+    "contains": [
+      "未发现重复线索"
+    ],
+    "excludes": [
+      "域名"
+    ]
+  },
+  "expect": {
+    "all_pass": true
+  }
+}

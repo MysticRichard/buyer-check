@@ -1,0 +1,11 @@
+{
+  "id": "A208",
+  "title": "F-01 IPv4-mapped IPv6 私网地址先解包再判 → 拒绝",
+  "type": "url_safety",
+  "input": {
+    "cases": [
+      { "url": "http://example.com/", "ips": ["::ffff:10.0.0.1"], "expect": "non-global-address" }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

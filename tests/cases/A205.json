@@ -1,0 +1,11 @@
+{
+  "id": "A205",
+  "title": "F-01 非默认端口 → unsafe_url（port）",
+  "type": "url_safety",
+  "input": {
+    "cases": [
+      { "url": "http://example.com:8080/", "expect": "port" }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

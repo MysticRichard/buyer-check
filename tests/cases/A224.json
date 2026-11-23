@@ -1,0 +1,15 @@
+{
+  "id": "A224",
+  "title": "R-01 Python/Node 的 identity.status 与卡片一致（ambiguous）",
+  "type": "render_card_parity",
+  "input": {
+    "fixture": "card_harbor.json",
+    "mutate_identity": {
+      "candidates": [
+        { "name": "Harbor Rim Engineering", "country": "SG", "registry_id": "111111", "url": "https://registry.example/one", "match_keys": ["legal_name", "registry_id"], "strength": "strong" },
+        { "name": "Harbor Rim Engineering", "country": "SG", "registry_id": "222222", "url": "https://registry.example/two", "match_keys": ["legal_name", "registry_id"], "strength": "strong" }
+      ]
+    }
+  },
+  "expect": { "all_pass": true }
+}

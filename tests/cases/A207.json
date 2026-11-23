@@ -1,0 +1,19 @@
+{
+  "id": "A207",
+  "title": "F-01 公网地址通过校验（Python/Node 一致）",
+  "type": "url_safety",
+  "input": {
+    "cases": [
+      {
+        "url": "http://example.com/",
+        "ips": [
+          "93.184.216.34"
+        ],
+        "expect": "ok"
+      }
+    ]
+  },
+  "expect": {
+    "all_pass": true
+  }
+}

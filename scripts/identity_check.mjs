@@ -8,8 +8,10 @@
  */
 
 import { createHash } from 'node:crypto';
+import { lookup as dnsLookup } from 'node:dns/promises';
 import { createRequire } from 'node:module';
 import { readFileSync } from 'node:fs';
+import { isIP } from 'node:net';
 import { basename, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -22,6 +24,124 @@ try {
 }
 
 const USER_AGENT = 'buyer-check/0.8.0 (company-profile; read-only)';
+const MAX_FETCH_BYTES = 2 * 1024 * 1024;
+const SAFE_REDIRECTS = 3;
+const HTML_CONTENT_TYPES = new Set(['text/html', 'application/xhtml+xml', 'text/plain']);
+const JSON_CONTENT_TYPES = new Set(['application/json']);
+const REDIRECT_CODES = new Set([301, 302, 303, 307, 308]);
+
+export function fetchGuardReason(status, location, contentType, size, redirects = 0, previousUrl = '', allowed = null) {
+  const allowedTypes = new Set([...(allowed || HTML_CONTENT_TYPES)].map((item) => String(item).toLowerCase()));
+  if (REDIRECT_CODES.has(Number(status))) {
+    if (redirects >= SAFE_REDIRECTS) return 'too-many-redirects';
+    if (String(previousUrl).toLowerCase().startsWith('https:') && String(location).toLowerCase().startsWith('http:')) return 'redirect-downgrade';
+    return null;
+  }
+  const detected = String(contentType || '').split(';')[0].trim().toLowerCase();
+  if (allowedTypes.size && detected && !allowedTypes.has(detected)) return 'content-type';
+  if (Number(size) > MAX_FETCH_BYTES) return 'too-large';
+  return null;
+}
+
+export class UnsafeUrl extends Error {
+  constructor(reason) {
+    super(reason);
+    this.reason = reason;
+    this.code = 'unsafe_url';
+  }
+}
+
+function isGlobalIp(address) {
+  const version = isIP(address);
+  if (version === 4) {
+    const parts = address.split('.').map(Number);
+    const [a, b] = parts;
+    if (a === 0 || a === 10 || a === 127 || a >= 224) return false;
+    if (a === 100 && b >= 64 && b <= 127) return false;
+    if (a === 169 && b === 254) return false;
+    if (a === 172 && b >= 16 && b <= 31) return false;
+    if (a === 192 && b === 168) return false;
+    if (a === 198 && (b === 18 || b === 19)) return false;
+    return true;
+  }
+  if (version === 6) {
+    const lower = address.toLowerCase();
+    if (lower === '::1' || lower === '::') return false;
+    if (lower.startsWith('fc') || lower.startsWith('fd')) return false;
+    if (lower.startsWith('fe8') || lower.startsWith('fe9') || lower.startsWith('fea') || lower.startsWith('feb')) return false;
+    if (lower.startsWith('::ffff:')) return isGlobalIp(lower.slice(7));
+    return true;
+  }
+  return false;
+}
+
+export async function validateUrl(url, resolver = null) {
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new UnsafeUrl('scheme');
+  }
+  if (!['http:', 'https:'].includes(parsed.protocol)) throw new UnsafeUrl('scheme');
+  if (parsed.username || parsed.password) throw new UnsafeUrl('userinfo');
+  if (!parsed.hostname) throw new UnsafeUrl('host');
+  const host = parsed.hostname.replace(/^\[|\]$/g, '');
+  if (isIP(host)) throw new UnsafeUrl('ip-literal');
+  if (parsed.port && !['80', '443'].includes(parsed.port)) throw new UnsafeUrl('port');
+  const lookup = resolver || ((target) => dnsLookup(target, { all: true, verbatim: true }));
+  let infos;
+  try {
+    infos = await lookup(host);
+  } catch {
+    throw new UnsafeUrl('non-global-address');
+  }
+  if (!Array.isArray(infos) || infos.length === 0) throw new UnsafeUrl('non-global-address');
+  for (const info of infos) {
+    if (!isGlobalIp(info.address)) throw new UnsafeUrl('non-global-address');
+  }
+  return parsed;
+}
+
+async function safeFetch(url, timeoutMs, allowedTypes) {
+  let current = url;
+  for (let hop = 0; hop <= SAFE_REDIRECTS; hop += 1) {
+    await validateUrl(current);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    let response;
+    try {
+      response = await fetch(current, {
+        headers: { 'User-Agent': USER_AGENT, Accept: allowedTypes.has('application/json') ? 'application/json' : 'text/html' },
+        redirect: 'manual',
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timer);
+    }
+    if ([301, 302, 303, 307, 308].includes(response.status)) {
+      if (hop === SAFE_REDIRECTS) throw new UnsafeUrl('too-many-redirects');
+      const location = response.headers.get('location');
+      if (!location) return null;
+      const next = new URL(location, current);
+      if (current.startsWith('https:') && next.protocol === 'http:') throw new UnsafeUrl('redirect-downgrade');
+      current = next.href;
+      continue;
+    }
+    if (!response.ok) return null;
+    const contentType = (response.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
+    if (allowedTypes.size && !allowedTypes.has(contentType)) throw new UnsafeUrl('content-type');
+    const buffer = Buffer.from(await response.arrayBuffer());
+    if (buffer.length > MAX_FETCH_BYTES) throw new UnsafeUrl('too-large');
+    return buffer;
+  }
+  throw new UnsafeUrl('too-many-redirects');
+}
+
+async function fetchText(url, timeoutMs) {
+  const buffer = await safeFetch(url, timeoutMs, HTML_CONTENT_TYPES);
+  return buffer ? buffer.toString('utf8') : null;
+}
+
 const SOCIAL_PATTERNS = {
   facebook: /https?:\/\/(?:www\.)?facebook\.com\/[^\s"'<>]+/gi,
   linkedin: /https?:\/\/(?:[a-z]{2}\.)?(?:www\.)?linkedin\.com\/[^\s"'<>]+/gi,
@@ -132,22 +252,6 @@ function parseHtml(html, baseUrl) {
   };
 }
 
-async function fetchText(url, timeoutMs) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const response = await fetch(url, {
-      headers: { 'User-Agent': USER_AGENT, Accept: 'text/html' },
-      signal: controller.signal,
-    });
-    if (!response.ok) return null;
-    return await response.text();
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(timer);
-  }
-}
 
 async function robotsAllows(domain, path) {
   const text = await fetchText(`https://${domain}/robots.txt`, 8000);
@@ -173,14 +277,22 @@ async function siteCommand(args) {
   } else {
     const domain = String(args.domain).trim().toLowerCase();
     const paths = ['/', '/about', '/products', '/contact'].slice(0, Math.max(1, Math.min(args.maxPages, 4)));
+    let unsafeReason = null;
     for (let index = 0; index < paths.length; index += 1) {
       if (index && !(await robotsAllows(domain, paths[index]))) continue;
       const url = new URL(`https://${domain}${paths[index]}`).href;
-      const body = await fetchText(url, args.timeout * 1000);
-      if (body) pages.push([url, body]);
+      try {
+        const body = await fetchText(url, args.timeout * 1000);
+        if (body) pages.push([url, body]);
+      } catch (error) {
+        if (error instanceof UnsafeUrl) unsafeReason = unsafeReason || error.reason;
+      }
       if (index) await sleep(args.delay * 1000);
     }
-    if (pages.length === 0) return { status: 'unavailable', command: 'site', error: 'website not reachable' };
+    if (pages.length === 0) {
+      if (unsafeReason) return { status: 'unsafe_url', command: 'site', reason: unsafeReason };
+      return { status: 'unavailable', command: 'site', error: 'website not reachable' };
+    }
   }
 
   const merged = {
@@ -314,22 +426,13 @@ function normalizeName(value) {
 }
 
 async function fetchJson(url, timeoutMs) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const response = await fetch(url, {
-      headers: { 'User-Agent': USER_AGENT, Accept: 'application/json' },
-      signal: controller.signal,
-    });
-    if (!response.ok) {
-      const error = new Error(`http-${response.status}`);
-      error.code = `http-${response.status}`;
-      throw error;
-    }
-    return await response.json();
-  } finally {
-    clearTimeout(timer);
+  const buffer = await safeFetch(url, timeoutMs, JSON_CONTENT_TYPES);
+  if (!buffer) {
+    const error = new Error('http-response');
+    error.code = 'http-response';
+    throw error;
   }
+  return JSON.parse(buffer.toString('utf8'));
 }
 
 function phoneMatches(candidate, phone) {

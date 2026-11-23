@@ -1,0 +1,10 @@
+{
+  "id": "A237",
+  "title": "G-01 免费来源清单含 GLEIF/VIES/EDGAR/CSL/Companies House 与 verified_at/terms_checked",
+  "type": "doc_contains",
+  "input": {
+    "files": ["data-sources/global.md"],
+    "needles": ["第十五节", "GLEIF", "EU VIES", "SEC EDGAR", "trade.gov CSL", "UK Companies House", "verified_at", "terms_checked"]
+  },
+  "expect": { "all_pass": true }
+}

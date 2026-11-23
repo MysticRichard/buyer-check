@@ -1,0 +1,12 @@
+{
+  "id": "A211",
+  "title": "S-02 UN 未配置 → 输出 not_configured 与具体原因，不写成未命中",
+  "type": "sanctions_sources",
+  "input": {
+    "csv": "9001,\"KHALIL, AHMED\",individual,\"TEST-PROGRAM\",-0-,-0-,-0-,-0-,-0-,-0-,-0-,-0-\n9002,\"GLOBAL STAR TRADING CO\",-0-,\"TEST-PROGRAM\",-0-,-0-,-0-,-0-,-0-,-0-,-0-,-0-\n",
+    "queries": [
+      { "query": "GLOBAL STAR TRADING CO", "match_count": 1 }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

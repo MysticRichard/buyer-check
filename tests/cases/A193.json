@@ -1,0 +1,11 @@
+{
+  "id": "A193",
+  "title": "U-01 a.b.example.co.uk 的可注册域名保持 example.co.uk",
+  "type": "domain_suffix",
+  "input": {
+    "cases": [
+      { "host": "a.b.example.co.uk", "expect": "example.co.uk" }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

@@ -1,0 +1,17 @@
+{
+  "id": "A235",
+  "title": "B-01 buyer_type 非枚举值 → unknown 并计数",
+  "type": "lead_matrix",
+  "input": {
+    "fixture": "card_harbor.json",
+    "cases": [
+      {
+        "name": "invalid-buyer-type",
+        "intake": { "buyer_type": "weird_type" },
+        "expect_trade_background": { "buyer_type": "unknown", "buyer_type_ignored": 1 },
+        "expect_card_equal_base": true
+      }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

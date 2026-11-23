@@ -1,0 +1,22 @@
+{
+  "id": "A221",
+  "title": "R-01 两个同名不同登记号候选并列 strong → ambiguous，卡片提示需确认",
+  "type": "lead_matrix",
+  "input": {
+    "fixture": "card_harbor.json",
+    "cases": [
+      {
+        "name": "two-strong-entities",
+        "identity": {
+          "candidates": [
+            { "name": "Harbor Rim Engineering", "country": "SG", "registry_id": "111111", "url": "https://registry.example/one", "match_keys": ["legal_name", "registry_id"], "strength": "strong" },
+            { "name": "Harbor Rim Engineering", "country": "SG", "registry_id": "222222", "url": "https://registry.example/two", "match_keys": ["legal_name", "registry_id"], "strength": "strong" }
+          ]
+        },
+        "expect_identity_status": "ambiguous",
+        "expect_card_includes": ["同名候选需确认"]
+      }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

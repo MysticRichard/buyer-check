@@ -143,6 +143,50 @@ def video_script_info(evidence, level):
     return None
 
 
+IDENTITY_STRENGTH = {"strong": 3, "medium": 2, "weak": 1, "none": 0}
+IDENTITY_QUESTION = "请提供注册号或国家"
+
+
+def identity_info(evidence):
+    raw = evidence.get("identity") if isinstance(evidence.get("identity"), dict) else {}
+    candidates = []
+    for item in (raw.get("candidates") or [])[:5]:
+        if not isinstance(item, dict):
+            continue
+        strength = text(item.get("strength")).lower()
+        if strength not in IDENTITY_STRENGTH:
+            strength = "none"
+        candidates.append({
+            "name": text(item.get("name")),
+            "country": text(item.get("country")).upper(),
+            "registry_id": text(item.get("registry_id")),
+            "url": text(item.get("url")),
+            "match_keys": [text(key) for key in (item.get("match_keys") or []) if text(key)],
+            "strength": strength,
+        })
+    if not candidates:
+        return {"status": "unresolved", "candidates": [], "count": 0, "ambiguous_count": 0}
+    ranks = [IDENTITY_STRENGTH[item["strength"]] for item in candidates]
+    highest = max(ranks)
+    top = [item for item, rank in zip(candidates, ranks) if rank == highest]
+    top_keys = {(item["country"], item["registry_id"] or item["name"]) for item in top}
+    medium_plus = [item for item, rank in zip(candidates, ranks) if rank >= 2]
+    if highest == 3 and len(medium_plus) == 1:
+        status = "resolved"
+    elif highest == 2 and len(medium_plus) == 1:
+        status = "probable"
+    elif highest >= 2 and len(top_keys) >= 2:
+        status = "ambiguous"
+    else:
+        status = "unresolved"
+    return {
+        "status": status,
+        "candidates": candidates,
+        "count": len(top_keys) if status == "ambiguous" else len(candidates),
+        "ambiguous_count": len(top_keys) if status == "ambiguous" else 0,
+    }
+
+
 _COUNTRY_DATA = None
 
 
@@ -188,6 +232,68 @@ def ship_to_info(evidence):
     }
 
 
+BUYER_TYPES = {"distributor", "wholesaler_retailer", "oem_manufacturer", "contractor_epc", "end_user", "trading_intermediary", "unknown"}
+PARTY_COMPANY_SUFFIXES = {"ltd", "llc", "inc", "co", "corp", "corporation", "company", "limited", "gmbh", "fze", "fzc", "fzco", "jsc", "sdn", "bhd", "pte", "tbk", "trading", "group", "holdings"}
+
+
+def looks_like_person_name(value):
+    raw = text(value).strip()
+    tokens = re.findall(r"[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ'\-]*", raw)
+    if not (2 <= len(tokens) <= 4):
+        return False
+    return not any(token.lower().strip(".,") in PARTY_COMPANY_SUFFIXES for token in tokens)
+
+
+def mask_person_name(value):
+    raw = text(value).strip()
+    if not raw or not looks_like_person_name(raw):
+        return raw
+    return " ".join(token[0] + "*" * max(1, len(token) - 1) for token in raw.split())
+
+
+def normalize_party(value):
+    return re.sub(r"[^a-z0-9]+", "", text(value).lower())
+
+
+def trade_background_info(evidence):
+    intake = evidence.get("intake") or {}
+    buyer = text((evidence.get("subject") or {}).get("company") or intake.get("company"))
+    buyer_norm = normalize_party(buyer)
+
+    def safe_party(value):
+        raw = text(value).strip()
+        if raw and normalize_party(raw) == buyer_norm:
+            return raw
+        return mask_person_name(raw)
+
+    end_use = text(intake.get("end_use")) or None
+    end_user = safe_party(intake.get("end_user")) or None
+    payer = safe_party(intake.get("payer")) or None
+    consignee = safe_party(intake.get("consignee")) or None
+    raw_type = text(intake.get("buyer_type")).strip().lower()
+    buyer_type = raw_type if raw_type in BUYER_TYPES else "unknown"
+    buyer_type_ignored = 1 if raw_type and raw_type not in BUYER_TYPES else 0
+
+    def differs(party):
+        value = normalize_party(party)
+        return bool(value and buyer_norm and value != buyer_norm and value not in buyer_norm and buyer_norm not in value)
+
+    payer_differs = differs(payer)
+    consignee_differs = differs(consignee)
+    prompt = "付款方/收货方与买家不同：请书面确认关系与授权" if (payer_differs or consignee_differs) else None
+    return {
+        "end_use": end_use,
+        "end_user": end_user,
+        "payer": payer,
+        "consignee": consignee,
+        "buyer_type": buyer_type,
+        "buyer_type_ignored": buyer_type_ignored,
+        "payer_differs": payer_differs,
+        "consignee_differs": consignee_differs,
+        "relationship_prompt": prompt,
+    }
+
+
 CHECKPOINT_NAMES = {
     "company": "公司名",
     "domain": "域名",
@@ -199,6 +305,7 @@ CHECKPOINT_NAMES = {
     "customs": "海关",
     "social": "社媒",
 }
+
 
 REASON_TEXT = {
     "needs-browser": "需浏览器",
@@ -279,7 +386,7 @@ LEAD_CLASS_CONCLUSION = {
 }
 LEAD_NON_TARGET = {"automated_submission", "phishing_like", "vendor_solicitation", "competitor_probe", "individual_research"}
 RISKY_ATTACHMENT_EXTS = {"exe", "scr", "js", "jar", "iso", "img", "html", "htm", "hta", "lnk", "vbs", "msi", "bat", "cmd"}
-CHANNEL_SET = {"alibaba", "facebook", "whatsapp", "website_form", "email", "linkedin", "trade_show", "other", "unknown"}
+CHANNEL_SET = {"alibaba", "facebook", "whatsapp", "website_form", "email", "linkedin", "trade_show", "made_in_china", "social_media", "other", "unknown"}
 
 GUIDE_SHORT_ZH = """**BuyerCheck 使用提示**：给我下面任意一项就能开始，信息越多结果越准。
 ▸ 公司名 + 国家　▸ 邮箱　▸ 带 + 国家区号的电话　▸ 官网域名　▸ 询盘原文或聊天记录
@@ -683,6 +790,13 @@ def uncovered_sentence(entry):
     parsed = parse_uncovered(entry)
     checkpoint = parsed["checkpoint"]
     return f"{CHECKPOINT_NAMES.get(checkpoint, checkpoint)}（{reason_text(checkpoint, parsed['reason'])}）"
+
+
+def neutralize_markdown(value):
+    """Neutralize image syntax and raw HTML from model-supplied text."""
+    raw = text(value)
+    raw = raw.replace("![", "!\\[")
+    return raw.replace("<", "&lt;").replace(">", "&gt;")
 
 
 def is_technical(value):
@@ -1108,9 +1222,16 @@ SOURCE_GRADE_DEFAULT = {
     "user_input": "self_declared",
     "other": "self_declared",
 }
-GRADE_LABEL = {"official": "官方", "third_party": "第三方", "self_declared": "自述"}
-GRADE_RANK = {"self_declared": 0, "third_party": 1, "official": 2}
-MULTI_SUFFIX = {"co.uk", "org.uk", "ac.uk", "com.au", "net.au", "co.jp", "com.br", "com.cn", "net.cn", "org.cn", "gov.cn", "edu.cn", "com.hk", "com.sg", "com.tw", "co.in", "co.nz"}
+GRADE_LABEL = {"official": "官方", "third_party": "第三方", "self_declared": "自述", "inferred": "推断"}
+GRADE_RANK = {"inferred": -1, "self_declared": 0, "third_party": 1, "official": 2}
+MULTI_SUFFIX = set("""
+co.uk org.uk ac.uk com.au net.au co.jp com.br com.cn net.cn org.cn gov.cn edu.cn com.hk com.sg com.tw co.in co.nz
+com.tr org.tr com.mx org.mx com.ar org.ar co.cl gob.cl gov.cl com.co org.co com.pe org.pe com.pk org.pk
+com.bd org.bd com.lk org.lk com.ng org.ng co.ke or.ke com.eg org.eg co.ma org.ma com.sa org.sa
+co.ae org.ae com.ru org.ru com.ua org.ua com.pl org.pl co.kr or.kr co.jp or.jp co.za org.za
+com.my org.my co.id or.id co.th or.th com.vn org.vn com.ph org.ph com.qa org.qa com.kw org.kw
+com.bh org.bh com.om org.om com.lb org.lb com.ly org.ly
+""".split())
 
 
 def url_host(url):
@@ -1334,6 +1455,8 @@ def derive_flags(evidence):
         base_grades = [SOURCE_GRADE_DEFAULT.get(text((evidence_index.get(eid) or {}).get("source_type")), "self_declared") for eid in ids]
         if declared == "official" and "official" in base_grades:
             return "official"
+        if declared == "inferred":
+            return "inferred"
         if declared in ("third_party", "self_declared"):
             return declared
         if "third_party" in base_grades:
@@ -1705,7 +1828,7 @@ MATCH_KEY_LABELS = {
     "person_name": "人名",
     "registration_no": "注册号",
 }
-SOURCE_GRADE_LABELS = {"official": "官方", "third_party": "第三方", "self_declared": "自述"}
+SOURCE_GRADE_LABELS = {"official": "官方", "third_party": "第三方", "self_declared": "自述", "inferred": "推断"}
 
 
 def verdict_line(display, evidence, level, actions):
@@ -2008,6 +2131,10 @@ def render_card(evidence, rules):
     behavior_status = "有异常" if behavior_flags else ("无异常" if inquiry_text(evidence) else "未核实")
     behavior_symbol = "⚠️" if behavior_flags else ("✅" if behavior_status == "无异常" else "❓")
 
+    identity = identity_info(evidence)
+    questions = list(display.get("open_questions") or [])
+    if identity["status"] == "ambiguous" and IDENTITY_QUESTION not in questions:
+        questions = (questions + [IDENTITY_QUESTION])[:3]
     actions = compute_actions(
         level,
         credit["tier"],
@@ -2016,7 +2143,7 @@ def render_card(evidence, rules):
         evidence.get("stage") or "inquiry",
         bool(evidence.get("account_verified")),
         credit["compliance_halves"] >= 2,
-        display.get("open_questions") or [],
+        questions,
     )
 
     uncovered = coverage.get("uncovered") if isinstance(coverage.get("uncovered"), list) else []
@@ -2028,6 +2155,7 @@ def render_card(evidence, rules):
     channel = channel_info(evidence)
     video_script = video_script_info(evidence, level)
     ship_to = ship_to_info(evidence)
+    trade_background = trade_background_info(evidence)
     lead_conclusion = conclusion if level == "高" else LEAD_CLASS_CONCLUSION.get(lead["lead_class"], conclusion)
     lead_suffix = "" if lead["lead_class"] == "unclear" else f" · 类别：{lead['lead_class_label']}"
     verdict_text, verdict_warning = verdict_line(display, evidence, level, actions)
@@ -2051,6 +2179,13 @@ def render_card(evidence, rules):
     if new_mode and behavior_status == "未核实" and (not behavior_display or behavior_display == "暂未核实"):
         behavior_display = NEXT_STEPS_DIM["behavior"]
     dims.insert(3, {"key": "behavior", "label": "交易行为", "status": behavior_status, "symbol": behavior_symbol, "bar": "—", "note": behavior_display or behavior_note})
+    if identity["status"] == "ambiguous":
+        phrase = f"{identity['ambiguous_count']} 个同名候选需确认"
+        for dim in dims:
+            if dim["key"] == "company":
+                if phrase not in dim["note"]:
+                    dim["note"] = f"{dim['note']}；{phrase}" if dim["note"] else phrase
+                break
 
     flag_attention = [
         {"id": flag_id, "name": flag_index[flag_id].get("name"), "weight": flag_index[flag_id].get("weight", 0)}
@@ -2359,16 +2494,19 @@ def render_card(evidence, rules):
             "lead_signals": lead["lead_signals"],
             "lead_signals_ignored": lead["lead_signals_ignored"],
             "lead_class_source": lead["lead_class_source"],
+            "identity_status": identity["status"],
         },
+        "identity": identity,
         "form_meta_anomalies": form_meta["anomalies"],
         "form_meta": {"submit_ip_masked": form_meta["submit_ip_masked"]},
         "channel": channel["channel"],
         "channel_ignored": channel["channel_ignored"],
         "video_script": video_script,
         "ship_to": ship_to,
+        "trade_background": trade_background,
         "line_count": len(lines),
         "first_screen_lines": first_screen_lines,
-        "card": "\n".join(lines),
+        "card": neutralize_markdown("\n".join(lines)),
     }
 
 
@@ -2402,6 +2540,40 @@ def ladder_combinations():
     return combos
 
 
+def dedup_text(packs):
+    free_domains = {"gmail.com", "outlook.com", "hotmail.com", "yahoo.com", "qq.com", "163.com", "126.com", "mail.ru", "yandex.ru", "icloud.com", "proton.me", "example.com"}
+    groups = {"email": {}, "domain": {}, "phone": {}, "company": {}}
+    for index, pack in enumerate(packs, 1):
+        intake = pack.get("intake") or {}
+        subject = pack.get("subject") or {}
+        email = text(intake.get("email") or subject.get("email")).strip().lower()
+        if email:
+            groups["email"].setdefault(email, []).append(index)
+        domain_source = text(intake.get("domain") or subject.get("domain"))
+        if not domain_source and email and "@" in email:
+            domain_source = email.split("@")[-1]
+        domain = registrable_domain(url_host(domain_source) or domain_source)
+        if domain and domain not in free_domains:
+            groups["domain"].setdefault(domain, []).append(index)
+        phone = text(intake.get("phone") or subject.get("phone"))
+        digits = re.sub(r"\D", "", phone)
+        if len(digits) >= 8:
+            groups["phone"].setdefault("+" + digits, []).append(index)
+        company = normalize_party(text(intake.get("company") or subject.get("company")))
+        if company:
+            groups["company"].setdefault(company, []).append(index)
+    lines = ["## 批内去重提示"]
+    for label, key in (("邮箱", "email"), ("域名", "domain"), ("电话", "phone"), ("公司名", "company")):
+        for _, ids in groups[key].items():
+            if len(ids) < 2:
+                continue
+            suffix = "（不同联系人）" if key == "domain" else ""
+            lines.append(f"- {label}：询盘 " + "、".join(f"#{item}" for item in ids) + f"（可能为同一主体，请人工确认是否合并跟进）{suffix}")
+    if len(lines) == 1:
+        lines.append("- 未发现重复线索")
+    return "\n".join(lines[:21])
+
+
 def build_parser():
     parser = argparse.ArgumentParser(description="Render a deterministic buyer-check conclusion card.")
     parser.add_argument("source", nargs="?", help="evidence pack JSON path, or - for stdin")
@@ -2409,6 +2581,7 @@ def build_parser():
     parser.add_argument("--ladder", action="store_true", help="print the full 768-combination action ladder")
     parser.add_argument("--diff", nargs="+", metavar="PACK", help="compare old/new evidence packs, or one pack with previous")
     parser.add_argument("--batch", nargs="+", metavar="PACK", help="triage 2-10 quick-check evidence packs, or one JSON array file")
+    parser.add_argument("--dedup", nargs="+", metavar="PACK", help="print possible duplicate hints for 2+ evidence packs")
     parser.add_argument("--report", action="store_true", help="render the search-log appendix from the evidence pack")
     parser.add_argument("--mask-ip", metavar="IP", help="mask a full IPv4/IPv6 address to a /24 or /48 network")
     parser.add_argument("--guide", choices=("short", "full"), help="print the fixed usage guide (no evidence pack needed)")
@@ -2461,6 +2634,24 @@ def main(argv=None) -> int:
         else:
             print(result["text"])
         return 0 if result["status"] == "ok" else 1
+    if args.dedup:
+        try:
+            packs = []
+            for path in args.dedup:
+                if path == "-":
+                    packs.append(json.load(sys.stdin))
+                else:
+                    with open(path, "r", encoding="utf-8") as handle:
+                        packs.append(json.load(handle))
+        except (OSError, json.JSONDecodeError) as exc:
+            print(json.dumps({"status": "invalid-input", "error": str(exc)}, ensure_ascii=False))
+            return 1
+        if any(not isinstance(pack, dict) for pack in packs):
+            print(json.dumps({"status": "invalid-input", "error": "evidence pack must be an object"}, ensure_ascii=False))
+            return 1
+        sys.stdout.buffer.write((dedup_text(packs) + "\n").encode("utf-8"))
+        sys.stdout.buffer.flush()
+        return 0
     if args.batch:
         try:
             loaded = []

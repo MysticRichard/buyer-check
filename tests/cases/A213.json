@@ -1,0 +1,12 @@
+{
+  "id": "A213",
+  "title": "S-02 “SURNAME, Given” 与 “Given SURNAME” 命中同一条",
+  "type": "sanctions_uk",
+  "input": {
+    "fixture": "uk_sanctions_synthetic.csv",
+    "queries": [
+      { "query": "GIVEN SURNAME", "match_count": 1, "match_type": "token_exact" }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

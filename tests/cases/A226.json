@@ -1,0 +1,12 @@
+{
+  "id": "A226",
+  "title": "C-01 未知渠道仍回退 unknown 且不崩溃",
+  "type": "lead_matrix",
+  "input": {
+    "fixture": "card_harbor.json",
+    "cases": [
+      { "name": "unknown-channel", "intake": { "channel": "wechat" }, "expect_channel": "unknown", "expect_channel_ignored": 1, "expect_card_equal_base": true }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

@@ -1,0 +1,13 @@
+{
+  "id": "A241",
+  "title": "L-01 无重复 → 输出“未发现重复线索”",
+  "type": "dedup",
+  "input": {
+    "packs": [
+      { "subject": { "company": "Acme A", "email": "buyer@acme-a.example", "domain": "acme-a.example" }, "intake": {} },
+      { "subject": { "company": "Beta B", "email": "buyer@beta-b.example", "domain": "beta-b.example" }, "intake": {} }
+    ],
+    "contains": ["未发现重复线索"]
+  },
+  "expect": { "all_pass": true }
+}

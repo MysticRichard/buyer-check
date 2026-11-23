@@ -3,6 +3,6 @@
   "title": "制裁名单自动下载：无缓存/有缓存无命中/同名命中/下载成功/下载失败",
   "type": "sanctions",
   "input": {
-    "csv": "1,individual,\"KHALIL, AHMED\"\n2,individual,\"DELGADO, MARCUS\"\n3,entity,\"GLOBAL STAR TRADING CO\"\n4,individual,\"DOE, JOHN\"\n"
+    "csv": "9001,\"KHALIL, AHMED\",individual,\"TEST-PROGRAM\",-0-,-0-,-0-,-0-,-0-,-0-,-0-,-0-\n9002,\"DELGADO, MARCUS\",individual,\"TEST-PROGRAM\",-0-,-0-,-0-,-0-,-0-,-0-,-0-,-0-\n9003,\"GLOBAL STAR TRADING CO\",-0-,\"TEST-PROGRAM\",-0-,-0-,-0-,-0-,-0-,-0-,-0-,-0-\n9004,\"DOE, JOHN\",individual,\"TEST-PROGRAM\",-0-,-0-,-0-,-0-,-0-,-0-,-0-,-0-\n"
   }
 }

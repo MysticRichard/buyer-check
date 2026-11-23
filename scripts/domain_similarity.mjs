@@ -20,6 +20,14 @@ export const DEFAULT_BRANDS = join(DIR, 'brands.json');
 
 const HOMOGLYPHS = { l: '1', i: '1', o: '0', s: '5', e: '3' };
 const SHORT = 5;
+export const PUBLIC_SUFFIXES = new Set(`
+co.uk org.uk ac.uk com.au net.au co.jp com.br com.cn net.cn org.cn gov.cn edu.cn com.hk com.sg com.tw co.in co.nz
+com.tr org.tr com.mx org.mx com.ar org.ar co.cl gob.cl gov.cl com.co org.co com.pe org.pe com.pk org.pk
+com.bd org.bd com.lk org.lk com.ng org.ng co.ke or.ke com.eg org.eg co.ma org.ma com.sa org.sa
+co.ae org.ae com.ru org.ru com.ua org.ua com.pl org.pl co.kr or.kr co.jp or.jp co.za org.za
+com.my org.my co.id or.id co.th or.th com.vn org.vn com.ph org.ph com.qa org.qa com.kw org.kw
+com.bh org.bh com.om org.om com.lb org.lb com.ly org.ly
+`.trim().split(/\s+/));
 
 export function normalize(domain = '') {
   let value = String(domain).trim().toLowerCase();
@@ -32,6 +40,8 @@ export function normalize(domain = '') {
 export function coreLabel(domain) {
   const parts = normalize(domain).split('.');
   if (parts.length < 2) return [normalize(domain), ''];
+  const suffix = parts.slice(-2).join('.');
+  if (parts.length >= 3 && PUBLIC_SUFFIXES.has(suffix)) return [parts[parts.length - 3], suffix];
   return [parts[0], parts.slice(1).join('.')];
 }
 

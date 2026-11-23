@@ -1,0 +1,13 @@
+{
+  "id": "A243",
+  "title": "L-01 Python/Node 去重输出一致",
+  "type": "dedup",
+  "input": {
+    "packs": [
+      { "subject": { "company": "Acme A", "email": "buyer@acme.example", "domain": "acme.example" }, "intake": {} },
+      { "subject": { "company": "Acme B", "email": "buyer@acme.example", "domain": "acme.example" }, "intake": {} }
+    ],
+    "contains": ["邮箱"]
+  },
+  "expect": { "all_pass": true }
+}

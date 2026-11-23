@@ -1,0 +1,13 @@
+{
+  "id": "A210",
+  "title": "S-02 UK 下载内容为空/HTML/行数过少 → invalid-content",
+  "type": "uk_validate",
+  "input": {
+    "cases": [
+      "",
+      "<html><body>error</body></html>",
+      "Report Date: 23-Nov-2026\nLast Updated,Unique ID\n01/01/2026,U1\n"
+    ]
+  },
+  "expect": { "all_pass": true }
+}

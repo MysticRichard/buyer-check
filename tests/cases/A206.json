@@ -1,0 +1,11 @@
+{
+  "id": "A206",
+  "title": "F-01 URL 带 user:pass@ → unsafe_url（userinfo）",
+  "type": "url_safety",
+  "input": {
+    "cases": [
+      { "url": "http://user:pass@example.com/", "expect": "userinfo" }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

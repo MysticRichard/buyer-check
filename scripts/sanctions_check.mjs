@@ -26,15 +26,17 @@ const LIST_FILES = {
   'OFAC SDN': 'ofac_sdn.csv',
   'EU Consolidated': 'eu_consolidated.csv',
   'UN Security Council': 'un_sc.csv',
-  'UK OFSI Consolidated': 'uk_ofsi.csv',
+  'UK Sanctions List': 'uk_sanctions_list.csv',
 };
 
 const SOURCES = {
   'OFAC SDN': { configured: true, reason: null, format: 'CSV' },
   'EU Consolidated': { configured: false, reason: 'http-403-token-required', format: 'CSV/XML' },
-  'UN Security Council': { configured: false, reason: 'xml-link-404', format: 'XML' },
-  'UK OFSI Consolidated': { configured: false, reason: 'ofsi-list-closed-2026-01-28', format: 'CSV' },
+  'UN Security Council': { configured: false, reason: 'un-no-stable-direct-link', format: 'XML' },
+  'UK Sanctions List': { configured: true, reason: null, format: 'CSV' },
 };
+
+const LEGAL_SUFFIXES = new Set(['ltd', 'llc', 'inc', 'co', 'corp', 'corporation', 'company', 'limited', 'gmbh', 'fze', 'fzc', 'fzco', 'jsc', 'sdn', 'bhd', 'pte', 'tbk']);
 
 function sourceStatus() {
   return Object.entries(SOURCES).map(([list, info]) => ({
@@ -46,8 +48,12 @@ function sourceStatus() {
 }
 
 export function normalize(name = '') {
-  const text = String(name).toLowerCase().replace(/[^\w\s]/g, ' ');
+  const text = String(name).normalize('NFKD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^\w\s]/g, ' ');
   return text.replace(/\s+/g, ' ').trim();
+}
+
+export function nameTokens(name = '') {
+  return normalize(name).split(' ').filter((token) => token && !LEGAL_SUFFIXES.has(token));
 }
 
 export function parseCsvLine(line = '') {
@@ -90,24 +96,64 @@ export function loadEntries(path, nameColumn) {
     const fields = parseCsvLine(rawLine);
     if (fields.length <= nameColumn) continue;
     const name = fields[nameColumn].trim();
-    if (name) entries.push({ raw: name, normalized: normalize(name) });
+    if (name) entries.push({ raw: name, normalized: normalize(name), tokens: nameTokens(name), matched_on: 'primary', alias_of: null });
   }
   return entries;
 }
 
+export function loadUkEntries(path) {
+  const rows = [];
+  let headerSeen = false;
+  for (const rawLine of readFileSync(path, 'utf8').split(/\r?\n/)) {
+    const fields = parseCsvLine(rawLine);
+    if (!headerSeen) {
+      if (fields.map((field) => field.trim().toLowerCase()).includes('name type')) headerSeen = true;
+      continue;
+    }
+    if (fields.length < 11) continue;
+    const group = (fields[2] || '').trim();
+    const name = [fields[4], ...fields.slice(5, 10)].map((field) => (field || '').trim()).filter(Boolean).join(' ');
+    if (!name) continue;
+    rows.push({ group, name, type: (fields[10] || '').trim().toLowerCase() });
+  }
+  const primary = new Map();
+  for (const row of rows) {
+    if (row.type.includes('primary') && !primary.has(row.group)) primary.set(row.group, row.name);
+  }
+  return rows.map((row) => {
+    const aliasOf = row.type.includes('alias') ? primary.get(row.group) || null : null;
+    return {
+      raw: row.name,
+      normalized: normalize(row.name),
+      tokens: nameTokens(row.name),
+      matched_on: aliasOf ? 'alias' : 'primary',
+      alias_of: aliasOf,
+    };
+  });
+}
+
 export function match(query, entries) {
   const target = normalize(query);
+  const targetTokens = new Set(nameTokens(query));
   if (!target) return [];
   const hits = [];
   for (const entry of entries) {
+    const entryTokens = new Set(entry.tokens || []);
+    let matchType = null;
     if (entry.normalized === target) {
-      hits.push({ entry: entry.raw, match_type: 'exact' });
-    } else if (
-      (entry.normalized.includes(target) || target.includes(entry.normalized)) &&
-      entry.normalized.length >= 4 &&
-      target.length >= 4
-    ) {
-      hits.push({ entry: entry.raw, match_type: 'partial' });
+      matchType = 'exact';
+    } else if (targetTokens.size && entryTokens.size && targetTokens.size === entryTokens.size
+      && [...targetTokens].every((token) => entryTokens.has(token))) {
+      matchType = 'token_exact';
+    } else if (targetTokens.size && entryTokens.size) {
+      const common = [...targetTokens].filter((token) => entryTokens.has(token));
+      const subset = common.length === targetTokens.size || common.length === entryTokens.size;
+      if (subset && (common.length >= 2 || (common.length === 1 && common[0].length >= 8))) matchType = 'partial';
+    } else if ((entry.normalized.includes(target) || target.includes(entry.normalized)) && entry.normalized.length >= 4 && target.length >= 4) {
+      matchType = 'partial';
+    }
+    if (matchType) {
+      hits.push({ entry: entry.raw, match_type: matchType, matched_on: entry.matched_on || 'primary', alias_of: entry.alias_of || null });
     }
   }
   return hits;
@@ -152,15 +198,18 @@ export async function analyse(query, cacheDir = CACHE_DIR, noUpdate = false) {
     anyList = true;
     let entries;
     try {
-      entries = loadEntries(path, listName === 'OFAC SDN' ? 2 : 0);
+      if (listName === 'OFAC SDN') entries = loadEntries(path, 1);
+      else if (listName === 'UK Sanctions List') entries = loadUkEntries(path);
+      else entries = loadEntries(path, 0);
     } catch {
       continue;
     }
     const updated = new Date(statSync(path).mtimeMs).toISOString().slice(0, 10);
     const entry = { list: listName, updated_at: updated };
-    if (listName === 'OFAC SDN') {
+    const metaName = listName === 'OFAC SDN' ? 'ofac_sdn.meta.json' : listName === 'UK Sanctions List' ? 'uk_sanctions_list.meta.json' : null;
+    if (metaName) {
       try {
-        const meta = JSON.parse(readFileSync(join(cacheDir, 'ofac_sdn.meta.json'), 'utf8'));
+        const meta = JSON.parse(readFileSync(join(cacheDir, metaName), 'utf8'));
         for (const key of ['source_url', 'list_date', 'list_age_days']) {
           if (meta[key] !== undefined && meta[key] !== null) entry[key] = meta[key];
         }
@@ -170,7 +219,7 @@ export async function analyse(query, cacheDir = CACHE_DIR, noUpdate = false) {
     }
     result.lists_checked.push(entry);
     for (const hit of match(query, entries)) {
-      result.possible_matches.push({ list: listName, entry: hit.entry, match_type: hit.match_type });
+      result.possible_matches.push({ list: listName, entry: hit.entry, match_type: hit.match_type, matched_on: hit.matched_on || 'primary', alias_of: hit.alias_of || null });
     }
   }
   result.match_count = result.possible_matches.length;
