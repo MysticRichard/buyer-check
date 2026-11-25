@@ -23,7 +23,7 @@
 ### 未完成 / 需负责人本地执行
 
 - **K-08 真实名单实测**：已完成（本地 `.cache/sanctions/`，不进仓库）：OFAC 19,599 行、UK 58,779 行（含 117 处引号内换行），Py/Node 行数一致；查询 1.5–2.2 秒（低于 5 秒阈值，无需索引）；21 个合成名误报 0。Node 解析 RSS ≈1.56 GB，仅作对照实现。
-- **K-09 校准与走查**：≥50 条脱敏真实询盘校准、p08 业务员走查仍需真实数据与业务员；`render_card.py` 已完成文件内分区注释整理（10 个分区、不拆文件、不改行为）。
+- **K-09 校准与走查**：已完成 80 条脱敏真实 FB 表单线索校准（A 0/6、B 62/62、C 0/7、D 0/5；lead_class 12 条多选被归 target；红旗 0 阳性样本），只写建议未改阈值；p08 业务员走查仍需真实业务员；`render_card.py` 已完成文件内分区注释整理（10 个分区、不拆文件、不改行为）。
 - **K-10**：已实际打开 CSL、ImportYeti、VIES、GLEIF、SEC EDGAR、Companies House 与 Made-in-China 页面：CSL 的免费 API/无需 key/每日更新已核对；ImportYeti 需免费注册登录（额度/覆盖未展开）；GLEIF terms 页与 Companies House API 指引页 404、SEC EDGAR 访问页 403、VIES 条款未渲染，均如实保留待核实。
 
 ## [0.12.0] - 2026-11-23
