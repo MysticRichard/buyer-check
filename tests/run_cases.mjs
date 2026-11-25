@@ -526,6 +526,14 @@ const runners = {
       evidence.intake = evidence.intake && typeof evidence.intake === 'object' ? evidence.intake : {};
       Object.assign(evidence.intake, cloneJson(testCase.input.mutate_intake));
     }
+    if (testCase.input.mutate_layers) {
+      evidence.layers = evidence.layers && typeof evidence.layers === 'object' ? evidence.layers : {};
+      for (const [key, value] of Object.entries(cloneJson(testCase.input.mutate_layers))) {
+        evidence.layers[key] = { ...(evidence.layers[key] || {}), ...value };
+      }
+    }
+    if (testCase.input.mutate_customs_profile !== undefined) evidence.customs_profile = cloneJson(testCase.input.mutate_customs_profile);
+    if (testCase.input.mutate_as_of !== undefined) evidence.as_of = testCase.input.mutate_as_of;
     const result = renderCard ? renderCard(evidence, loadRules()) : pyRenderEvidence(findPython(), evidence);
     const expect = testCase.expect || {};
     const checks = [];
@@ -563,6 +571,20 @@ const runners = {
     if (expect.lead_class_basis !== undefined) checks.push(isDeepStrictEqual(computed.lead_class_basis, expect.lead_class_basis));
     if (expect.lead_signals_ignored !== undefined) checks.push(computed.lead_signals_ignored === expect.lead_signals_ignored);
     if (expect.lead_class_source !== undefined) checks.push(computed.lead_class_source === expect.lead_class_source);
+
+    if (expect.follow_up_grade !== undefined) checks.push(computed.follow_up_grade === expect.follow_up_grade);
+    if (expect.follow_up_advice !== undefined) checks.push(computed.follow_up_advice === expect.follow_up_advice);
+    if (expect.follow_up_grade_basis !== undefined) checks.push(isDeepStrictEqual(computed.follow_up_grade_basis, expect.follow_up_grade_basis));
+    if (expect.follow_up_grade_ignored !== undefined) checks.push(computed.follow_up_grade_ignored === expect.follow_up_grade_ignored);
+    if (expect.hub_exception !== undefined) checks.push(isDeepStrictEqual(computed.hub_exception ?? null, expect.hub_exception));
+    if (expect.customs_profile !== undefined) checks.push(isDeepStrictEqual(result.customs_profile ?? null, expect.customs_profile));
+    if (expect.site_activity !== undefined) checks.push(isDeepStrictEqual(result.site_activity ?? null, expect.site_activity));
+    if (expect.person_role !== undefined) checks.push(isDeepStrictEqual(result.person_role ?? null, expect.person_role));
+    if (expect.customs_hint !== undefined) checks.push((result.customs_profile?.follow_up_hint ?? null) === expect.customs_hint);
+    if (expect.main_hs !== undefined) checks.push(isDeepStrictEqual(result.customs_profile?.main_hs, expect.main_hs));
+    if (expect.main_hs_ignored !== undefined) checks.push(result.customs_profile?.main_hs_ignored === expect.main_hs_ignored);
+    if (expect.site_hint_includes !== undefined) checks.push((result.site_activity?.hints || []).some((hint) => hint.includes(expect.site_hint_includes)));
+    if (expect.person_hint_includes !== undefined) checks.push((result.person_role?.hints || []).some((hint) => hint.includes(expect.person_hint_includes)));
     if (expect.declaration_count !== undefined) {
       const hits = (String(result.card || '').match(/仅基于公开信息的风险信号筛查，不构成对客户的定性。/g) || []).length;
       checks.push(hits === expect.declaration_count);
@@ -793,6 +815,12 @@ const runners = {
       if (entry.attachments !== undefined) evidence.intake.attachments = cloneJson(entry.attachments);
       if (entry.lead_class_input !== undefined) evidence.intake.lead_class = entry.lead_class_input;
       if (entry.identity !== undefined) evidence.identity = cloneJson(entry.identity);
+      if (entry.flags !== undefined) evidence.flags = cloneJson(entry.flags);
+      if (entry.anchors !== undefined) evidence.anchors = cloneJson(entry.anchors);
+      if (entry.layers !== undefined) evidence.layers = cloneJson(entry.layers);
+      if (entry.confidence !== undefined) evidence.confidence = entry.confidence;
+      if (entry.country !== undefined) evidence.subject = { ...(evidence.subject || {}), country: entry.country };
+      if (entry.follow_up_grade_input !== undefined) evidence.follow_up_grade = entry.follow_up_grade_input;
       if (entry.quick_check !== undefined) evidence.quick_check = entry.quick_check;
       const result = render(evidence);
       const computed = result.computed || {};
@@ -800,6 +828,16 @@ const runners = {
       const checks = [result.status === 'ok'];
       if (entry.expect_class !== undefined) checks.push(computed.lead_class === entry.expect_class);
       if (entry.expect_label !== undefined) checks.push(computed.lead_class_label === entry.expect_label);
+      if (entry.expect_follow_up_grade !== undefined) checks.push(computed.follow_up_grade === entry.expect_follow_up_grade);
+      if (entry.expect_follow_up_basis !== undefined) checks.push(isDeepStrictEqual(computed.follow_up_grade_basis, entry.expect_follow_up_basis));
+      if (entry.expect_follow_up_advice !== undefined) checks.push(computed.follow_up_advice === entry.expect_follow_up_advice);
+      if (entry.expect_follow_up_ignored !== undefined) checks.push(computed.follow_up_grade_ignored === entry.expect_follow_up_ignored);
+      if (entry.expect_hub_exception !== undefined) checks.push(isDeepStrictEqual(computed.hub_exception ?? null, entry.expect_hub_exception));
+      if (entry.expect_risk_score !== undefined) checks.push(result.risk_score === entry.expect_risk_score);
+      if (entry.expect_confidence !== undefined) checks.push(result.confidence === entry.expect_confidence);
+      if (entry.expect_level !== undefined) checks.push(result.level === entry.expect_level);
+      if (entry.expect_card_includes_follow_up) checks.push(card.includes(` · 跟进：${entry.expect_card_includes_follow_up}`));
+      if (entry.expect_card_excludes_follow_up_suffix === true) checks.push(!/ · 跟进：[ABCD]/.test(card));
       if (entry.expect_ignored !== undefined) checks.push(computed.lead_signals_ignored === entry.expect_ignored);
       if (entry.expect_status !== undefined) checks.push(result.status === entry.expect_status);
       if (entry.expect_anomalies !== undefined) checks.push(isDeepStrictEqual(result.form_meta_anomalies, entry.expect_anomalies));
@@ -852,6 +890,10 @@ const runners = {
     evidence.intake = evidence.intake && typeof evidence.intake === 'object' ? evidence.intake : {};
     if (testCase.input.mutate_intake) Object.assign(evidence.intake, cloneJson(testCase.input.mutate_intake));
     if (testCase.input.mutate_identity) evidence.identity = cloneJson(testCase.input.mutate_identity);
+    if (testCase.input.mutate_flags) evidence.flags = cloneJson(testCase.input.mutate_flags);
+    if (testCase.input.mutate_anchors) evidence.anchors = cloneJson(testCase.input.mutate_anchors);
+    if (testCase.input.mutate_layers) evidence.layers = cloneJson(testCase.input.mutate_layers);
+    if (testCase.input.mutate_customs_profile !== undefined) evidence.customs_profile = cloneJson(testCase.input.mutate_customs_profile);
     const py = pyRenderEvidence(python, evidence);
     const js = renderCard(cloneJson(evidence), loadRules());
     const checks = [
@@ -861,6 +903,12 @@ const runners = {
       py.computed?.lead_signals_ignored === js.computed?.lead_signals_ignored,
       isDeepStrictEqual(py.computed?.lead_class_basis, js.computed?.lead_class_basis),
       py.computed?.identity_status === js.computed?.identity_status,
+      py.computed?.follow_up_grade === js.computed?.follow_up_grade,
+      isDeepStrictEqual(py.computed?.follow_up_grade_basis, js.computed?.follow_up_grade_basis),
+      isDeepStrictEqual(py.computed?.hub_exception ?? null, js.computed?.hub_exception ?? null),
+      isDeepStrictEqual(py.customs_profile ?? null, js.customs_profile ?? null),
+      isDeepStrictEqual(py.site_activity ?? null, js.site_activity ?? null),
+      isDeepStrictEqual(py.person_role ?? null, js.person_role ?? null),
       isDeepStrictEqual(py.trade_background, js.trade_background),
       py.card === js.card,
     ];
@@ -1226,6 +1274,330 @@ const runners = {
       };
     });
     return { ok: outcomes.every((item) => item.ok), actual: outcomes };
+  },
+
+  phone_variants(testCase) {
+    if (!existsSync(join(ROOT, 'scripts', 'phone_check.mjs'))) {
+      return { skipped: true, actual: 'node phone_check not shipped' };
+    }
+    const python = findPython();
+    if (!python) return { skipped: true, actual: 'python not found' };
+    const [pyCmd, ...pyRest] = python.split(' ');
+    const outcomes = (testCase.input.cases || []).map((entry) => {
+      const args = [entry.number];
+      if (entry.country) args.push('--country', entry.country);
+      const pyRun = spawnSync(pyCmd, [...pyRest, join(ROOT, 'scripts', 'phone_check.py'), ...args], { encoding: 'utf8', timeout: 30000 });
+      const jsRun = spawnSync('node', [join(ROOT, 'scripts', 'phone_check.mjs'), ...args], { encoding: 'utf8', timeout: 30000 });
+      let py = null;
+      let js = null;
+      try { py = JSON.parse(pyRun.stdout); } catch { py = null; }
+      try { js = JSON.parse(jsRun.stdout); } catch { js = null; }
+      const expect = entry.expect || {};
+      const variants = Array.isArray(py?.search_variants) ? py.search_variants : [];
+      const stripOptional = (value) => {
+        if (!value || typeof value !== 'object') return value;
+        const copy = { ...value };
+        for (const key of ['number_type', 'carrier', 'carrier_note', 'timezones', 'enriched_by']) delete copy[key];
+        return copy;
+      };
+      const checks = [Boolean(py && py.status === 'ok'), isDeepStrictEqual(stripOptional(py), stripOptional(js))];
+      for (const needle of expect.variants_include || []) checks.push(variants.includes(needle));
+      if (expect.variants_count_max !== undefined) checks.push(variants.length <= expect.variants_count_max);
+      if (expect.variants_unique) checks.push(new Set(variants).size === variants.length);
+      if (expect.variants_empty) checks.push(variants.length === 0);
+      if (expect.all_variants_min_length !== undefined) checks.push(variants.every((item) => item.length >= expect.all_variants_min_length));
+      if (expect.landline_hint !== undefined) checks.push((py?.landline_hint ?? null) === expect.landline_hint);
+      if (expect.legacy_keys) checks.push(expect.legacy_keys.every((key) => key in (py || {})));
+      return { name: entry.name, ok: checks.every(Boolean), variants, py, js };
+    });
+    return { ok: outcomes.every((item) => item.ok), actual: outcomes };
+  },
+
+  phone_privacy(testCase) {
+    const rules = loadRules();
+    const python = findPython();
+    const evidence = testCase.input.fixture_data ? cloneJson(testCase.input.fixture_data) : loadFixture(testCase.input.fixture);
+    evidence.intake = evidence.intake && typeof evidence.intake === 'object' ? evidence.intake : {};
+    const variants = testCase.input.variants || [];
+    evidence.intake.phone = testCase.input.number || evidence.intake.phone;
+    const result = renderCard ? renderCard(evidence, rules) : pyRenderEvidence(python, evidence);
+    const card = String(result.card || '');
+    const digits = String(testCase.input.number || '').replace(/\D/g, '');
+    const checks = [result.status === 'ok', digits.length >= 7 && !card.includes(digits)];
+    for (const variant of variants) checks.push(!card.includes(variant));
+    const docs = ['SKILL.md', 'card_template.md', 'data-sources/global.md']
+      .filter((file) => existsSync(join(ROOT, file)))
+      .map((file) => readFileSync(join(ROOT, file), 'utf8'))
+      .join('\n');
+    checks.push(docs.includes('search_variants'));
+    checks.push(docs.includes('不进卡片'));
+    return { ok: checks.every(Boolean), actual: { status: result.status, digits, card_sample: card.slice(0, 200) } };
+  },
+
+  messenger_table(testCase) {
+    const file = testCase.input.file || 'data-sources/global.md';
+    if (!existsSync(join(ROOT, file))) return { skipped: true, actual: `${file} not shipped in lean bundle` };
+    const text = readFileSync(join(ROOT, file), 'utf8');
+    const names = testCase.input.names || ['Viber', 'Telegram', 'Zalo', 'Line', 'KakaoTalk', '微信'];
+    const marker = text.indexOf('即时通讯地区表');
+    const section = marker >= 0 ? text.slice(marker) : text;
+    const rows = [];
+    for (const line of section.split(/\r?\n/)) {
+      if (!line.trim().startsWith('|')) {
+        if (rows.length > 0) break;
+        continue;
+      }
+      if (names.some((name) => line.includes(name))) rows.push(line);
+    }
+    const bad = rows.filter((line) => !line.includes('待核实') && !line.includes('依据'));
+    return { ok: rows.length >= names.length && bad.length === 0, actual: { rows: rows.length, bad } };
+  },
+
+  sanctions_csv(testCase) {
+    if (!existsSync(join(ROOT, 'scripts', 'sanctions_check.mjs'))) {
+      return { skipped: true, actual: 'node sanctions script not shipped' };
+    }
+    const python = findPython();
+    if (!python) return { skipped: true, actual: 'python not found' };
+    const [pyCmd, ...pyRest] = python.split(' ');
+    const dir = mkdtempSync(join(tmpdir(), 'buyer-check-csv-'));
+    const file = join(dir, 'list.csv');
+    writeFileSync(file, testCase.input.csv || '', 'utf8');
+    const mode = testCase.input.mode || 'uk';
+    const nameColumn = testCase.input.name_column ?? 0;
+    const pyCode = [
+      'import sys, json',
+      `sys.path.insert(0, ${JSON.stringify(join(ROOT, 'scripts'))})`,
+      'import sanctions_check',
+      `path = ${JSON.stringify(file)}`,
+      `rows = sanctions_check.load_uk_entries(path) if ${JSON.stringify(mode)} == 'uk' else sanctions_check.load_entries(path, ${nameColumn})`,
+      "print(json.dumps({'count': len(rows), 'names': [row.get('name') or row.get('raw') for row in rows]}, ensure_ascii=False))",
+    ].join('\n');
+    const pyRun = spawnSync(pyCmd, [...pyRest, '-c', pyCode], { cwd: ROOT, encoding: 'utf8', timeout: 30000 });
+    const jsCode = [
+      `import { loadUkEntries, loadEntries } from ${JSON.stringify(pathToFileURL(join(ROOT, 'scripts', 'sanctions_check.mjs')).href)};`,
+      `const rows = ${JSON.stringify(mode)} === 'uk' ? loadUkEntries(${JSON.stringify(file)}) : loadEntries(${JSON.stringify(file)}, ${nameColumn});`,
+      "console.log(JSON.stringify({ count: rows.length, names: rows.map((row) => row.name ?? row.raw) }));",
+    ].join('\n');
+    const jsRun = spawnSync('node', ['--input-type=module', '-e', jsCode], { cwd: ROOT, encoding: 'utf8', timeout: 30000 });
+    let py = null;
+    let js = null;
+    try { py = JSON.parse(pyRun.stdout); } catch { py = null; }
+    try { js = JSON.parse(jsRun.stdout); } catch { js = null; }
+    const expect = testCase.expect || {};
+    const checks = [Boolean(py), Boolean(js), isDeepStrictEqual(py, js)];
+    if (expect.count !== undefined) checks.push(py?.count === expect.count);
+    if (expect.names !== undefined) checks.push(isDeepStrictEqual(py?.names, expect.names));
+    return { ok: checks.every(Boolean), actual: { py, js } };
+  },
+
+  sanctions_deterministic(testCase) {
+    const python = findPython();
+    if (!python) return { skipped: true, actual: 'python not found' };
+    const [pyCmd, ...pyRest] = python.split(' ');
+    const dir = mkdtempSync(join(tmpdir(), 'buyer-check-sanctions-deterministic-'));
+    const withIndex = join(dir, 'with-index');
+    const withoutIndex = join(dir, 'without-index');
+    mkdirSync(withIndex, { recursive: true });
+    mkdirSync(withoutIndex, { recursive: true });
+    for (const path of [withIndex, withoutIndex]) writeFileSync(join(path, 'ofac_sdn.csv'), testCase.input.csv || '', 'utf8');
+    writeFileSync(join(withIndex, 'ofac_sdn.idx'), '', 'utf8');
+    const script = join(ROOT, 'scripts', 'sanctions_check.py');
+    const run = (cache, name) => {
+      const result = spawnSync(pyCmd, [...pyRest, script, name, '--no-update', '--cache-dir', cache], { cwd: ROOT, encoding: 'utf8', timeout: 30000 });
+      try { return JSON.parse(result.stdout); } catch { return null; }
+    };
+    const fields = ['status', 'match_count', 'requires_manual_review'];
+    const pick = (value) => Object.fromEntries(fields.map((key) => [key, value?.[key] ?? null]));
+    const a = pick(run(withoutIndex, testCase.input.name || 'GLOBAL STAR TRADING CO'));
+    const b = pick(run(withIndex, testCase.input.name || 'GLOBAL STAR TRADING CO'));
+    const checks = [a.status === 'ok', isDeepStrictEqual(a, b), a.match_count === (testCase.expect?.match_count ?? a.match_count)];
+    return { ok: checks.every(Boolean), actual: { withoutIndex: a, withIndex: b } };
+  },
+
+  sources_table(testCase) {
+    const file = testCase.input.file || 'data-sources/global.md';
+    if (!existsSync(join(ROOT, file))) return { skipped: true, actual: `${file} not shipped in lean bundle` };
+    const text = readFileSync(join(ROOT, file), 'utf8');
+    const marker = text.indexOf('第十五节');
+    const section = marker >= 0 ? text.slice(marker) : text;
+    const lines = section.split(/\r?\n/).filter((line) => line.trim().startsWith('|'));
+    const headerIndex = lines.findIndex((line) => line.includes('terms_checked') && line.includes('verified_at'));
+    const header = headerIndex >= 0 ? lines[headerIndex] : '';
+    const dataRows = headerIndex >= 0 ? lines.slice(headerIndex + 1).filter((line) => !/^\|\s*-/.test(line.trim())) : [];
+    const bad = dataRows.filter((line) => {
+      const cells = line.split('|').map((cell) => cell.trim());
+      return cells.length < 8 || !cells[5] || !cells[6];
+    });
+    return {
+      ok: Boolean(header) && dataRows.length >= 6 && bad.length === 0,
+      actual: { header, data_rows: dataRows.length, bad },
+    };
+  },
+
+  check_sources_offline(testCase) {
+    if (!existsSync(join(ROOT, 'scripts', 'check_sources.mjs'))) {
+      return { skipped: true, actual: 'check_sources not shipped in lean bundle' };
+    }
+    const dir = mkdtempSync(join(tmpdir(), 'buyer-check-sources-'));
+    const config = join(dir, 'sources.json');
+    writeFileSync(config, JSON.stringify({ sources: [] }), 'utf8');
+    const run = spawnSync('node', [join(ROOT, 'scripts', 'check_sources.mjs'), '--config', config], { cwd: ROOT, encoding: 'utf8', timeout: 60000 });
+    let result = null;
+    try { result = JSON.parse(run.stdout); } catch { result = null; }
+    const checks = [run.status === 0, result !== null, result?.status === 'ok'];
+    return { ok: checks.every(Boolean), actual: { exit: run.status, result } };
+  },
+
+  safe_fetch(testCase) {
+    const python = findPython();
+    const outcomes = (testCase.input.cases || []).map((entry) => {
+      let run;
+      if (entry.runtime === 'python') {
+        if (!python) return { name: entry.name, ok: false, result: null, error: 'python not found' };
+        const [cmd, ...rest] = python.split(' ');
+        run = spawnSync(cmd, [...rest, '-c', entry.code], { cwd: ROOT, encoding: 'utf8', timeout: 60000 });
+      } else {
+        if (!existsSync(join(ROOT, 'scripts', 'identity_check.mjs'))) {
+          return { name: entry.name, ok: true, skipped: true, result: null, error: 'node identity_check not shipped' };
+        }
+        run = spawnSync('node', ['--input-type=module', '-e', entry.code], { cwd: ROOT, encoding: 'utf8', timeout: 60000 });
+      }
+      let result = null;
+      try { result = JSON.parse(run.stdout); } catch { result = null; }
+      const expect = entry.expect || {};
+      const checks = [result !== null];
+      if (expect.status !== undefined) checks.push(result?.status === expect.status);
+      if (expect.reason !== undefined) checks.push(result?.reason === expect.reason);
+      if (expect.calls !== undefined) checks.push(result?.calls === expect.calls);
+      if (expect.bytes_lt_total) checks.push(result?.bytes_read < expect.bytes_lt_total);
+      if (expect.expect_ok) checks.push(result?.status === 'ok');
+      return { name: entry.name, ok: checks.every(Boolean), result, stderr: String(run.stderr || '').slice(-300) };
+    });
+    return { ok: outcomes.every((item) => item.ok), actual: outcomes };
+  },
+
+  false_positive(testCase) {
+    if (!existsSync(join(ROOT, 'tests', 'false_positive_measure.mjs'))) {
+      return { skipped: true, actual: 'false-positive script not shipped' };
+    }
+    const run = spawnSync('node', [join(ROOT, 'tests', 'false_positive_measure.mjs')], { cwd: ROOT, encoding: 'utf8', timeout: 120000 });
+    let result = null;
+    try { result = JSON.parse(run.stdout); } catch { result = null; }
+    const checks = [run.status === 0, result !== null, ['ok', 'skipped'].includes(result?.status)];
+    if (result?.status === 'ok') {
+      checks.push(typeof result.query_count === 'number', typeof result.false_hit_count === 'number', Array.isArray(result.false_hits));
+    }
+    return { ok: checks.every(Boolean), actual: result };
+  },
+
+  question_bank(testCase) {
+    const text = readFileSync(join(ROOT, 'report_template.md'), 'utf8');
+    const start = text.indexOf('<!-- question-bank:start -->');
+    const end = text.indexOf('<!-- question-bank:end -->');
+    const block = start >= 0 && end > start ? text.slice(start, end) : '';
+    const rows = block.split(/\r?\n/).filter((line) => /^\|\s*Q-\d{2}/.test(line.trim()));
+    const banned = ['verify', 'investigat', 'background check', 'scam', 'fraud', '核实身份', '调查'];
+    const countryData = /(\b\d{2,3}\s*V\b|\b\d{2,3}\s*Hz\b|\bRoHS\b|\bUL\b|\bCCC\b)/;
+    const checks = [rows.length >= 9];
+    for (const row of rows) {
+      const cells = row.split('|').map((cell) => cell.trim());
+      checks.push(cells.length >= 6 && cells[2].length > 0 && cells[3].length > 0 && cells[4].length > 0);
+      const lower = row.toLowerCase();
+      for (const word of banned) checks.push(!lower.includes(word));
+      checks.push(!countryData.test(row));
+    }
+    return { ok: checks.every(Boolean), actual: { rows: rows.length, banned, block_length: block.length } };
+  },
+
+  follow_up_invariance(testCase) {
+    const rules = loadRules();
+    const python = findPython();
+    const base = testCase.input.fixture_data ? cloneJson(testCase.input.fixture_data) : loadFixture(testCase.input.fixture);
+    const render = (evidence) => (renderCard ? renderCard(evidence, rules) : pyRenderEvidence(python, evidence));
+    const signalsPool = [
+      [],
+      ['offers_seo_web_marketing'],
+      ['states_end_use_project', 'names_product_model'],
+      ['mentions_resale_or_distribution', 'names_product_model'],
+      ['contains_login_or_download_link'],
+      ['student_or_research_purpose'],
+    ];
+    const flagsPool = [[], ['RF-CORP-005'], ['RF-DOM-002', 'RF-CORP-005'], ['RF-PAY-001'], ['RF-DOM-001']];
+    const identityPool = [
+      null,
+      { candidates: [{ name: 'Ana Example', country: 'BR', registry_id: 'X1', strength: 'strong', match_keys: ['legal_name', 'domain'] }] },
+      { candidates: [
+        { name: 'Ana Example', country: 'BR', registry_id: 'X1', strength: 'strong', match_keys: ['legal_name', 'domain'] },
+        { name: 'Ana Example', country: 'AR', registry_id: 'X2', strength: 'strong', match_keys: ['legal_name', 'domain'] },
+      ] },
+    ];
+    const anchorsPool = [{ count: 3 }, { count: 1 }];
+    const runs = testCase.input.runs || 200;
+    let failures = 0;
+    const samples = [];
+    for (let index = 0; index < runs; index += 1) {
+      const withSignals = cloneJson(base);
+      withSignals.intake = withSignals.intake && typeof withSignals.intake === 'object' ? withSignals.intake : {};
+      withSignals.intake.lead_signals = cloneJson(signalsPool[index % signalsPool.length]);
+      withSignals.flags = cloneJson(flagsPool[index % flagsPool.length]);
+      withSignals.anchors = cloneJson(anchorsPool[index % anchorsPool.length]);
+      const identity = identityPool[index % identityPool.length];
+      if (identity) withSignals.identity = cloneJson(identity);
+      const withoutSignals = cloneJson(withSignals);
+      delete withoutSignals.intake.lead_signals;
+      delete withoutSignals.identity;
+      const a = render(withSignals);
+      const b = render(withoutSignals);
+      const ok = a.status === 'ok' && b.status === 'ok'
+        && a.risk_score === b.risk_score && a.level === b.level && a.confidence === b.confidence
+        && a.credit?.score === b.credit?.score && a.credit?.tier === b.credit?.tier;
+      if (!ok) failures += 1;
+      if (index < 3) samples.push({ index, with: { risk_score: a.risk_score, level: a.level, confidence: a.confidence, credit: a.credit }, without: { risk_score: b.risk_score, level: b.level, confidence: b.confidence, credit: b.credit } });
+    }
+    return { ok: failures === 0 && runs === 200, actual: { runs, failures, samples } };
+  },
+
+  hub_regression(testCase) {
+    if (!existsSync(FIXTURES_DIR) && !existsSync(CASES_DIR)) {
+      return { skipped: true, actual: 'fixtures not shipped in lean bundle' };
+    }
+    const rules = loadRules();
+    const python = findPython();
+    const render = (evidence) => (renderCard ? renderCard(evidence, rules) : pyRenderEvidence(python, evidence));
+    const packs = [];
+    for (const name of readdirSync(FIXTURES_DIR).filter((item) => item.endsWith('.json')).sort()) {
+      try {
+        const data = JSON.parse(readFileSync(join(FIXTURES_DIR, name), 'utf8'));
+        if (JSON.stringify(data).includes('RF-CORP-005')) packs.push({ name, data });
+      } catch {
+        // ignore non-JSON fixtures
+      }
+    }
+    if (existsSync(CASES_DIR)) {
+      for (const name of readdirSync(CASES_DIR).filter((item) => item.endsWith('.json')).sort()) {
+        try {
+          const data = JSON.parse(readFileSync(join(CASES_DIR, name), 'utf8'));
+          if (data.input?.fixture_data && JSON.stringify(data.input.fixture_data).includes('RF-CORP-005')) {
+            packs.push({ name: `${name}#fixture_data`, data: data.input.fixture_data });
+          }
+        } catch {
+          // ignore malformed case files
+        }
+      }
+    }
+    const outcomes = packs.map((item) => {
+      const result = render(cloneJson(item.data));
+      return {
+        name: item.name,
+        status: result.status,
+        risk_score: result.risk_score,
+        hub_exception: result.computed?.hub_exception ?? null,
+        phone_country: (item.data.intake || {}).phone_country ?? null,
+      };
+    });
+    const changed = outcomes.filter((item) => item.status !== 'ok' || item.hub_exception !== null);
+    return { ok: changed.length === 0, actual: { scanned: packs.length, changed, outcomes } };
   },
 
   render_card_deterministic(testCase) {

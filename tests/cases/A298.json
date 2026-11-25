@@ -1,0 +1,7 @@
+{
+  "id": "A298",
+  "title": "K-10 来源核实：第十五节每条来源都有 terms_checked 与 verified_at",
+  "type": "sources_table",
+  "input": { "file": "data-sources/global.md" },
+  "expect": { "all_pass": true }
+}

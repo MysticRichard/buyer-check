@@ -1,0 +1,11 @@
+{
+  "id": "A278",
+  "title": "K-05 隐私：search_variants 不进入卡片，文档明确“只用于检索、不进卡片”",
+  "type": "phone_privacy",
+  "input": {
+    "fixture": "follow_up_base.json",
+    "number": "+44 20 7946 0958",
+    "variants": ["2079460958", "79460958", "7946-0958", "7946 0958", "9460958"]
+  },
+  "expect": { "all_pass": true }
+}

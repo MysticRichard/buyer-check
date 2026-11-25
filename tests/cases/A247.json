@@ -1,0 +1,20 @@
+{
+  "id": "A247",
+  "title": "K-01 跟进分级 D（依据为类别）：自动提交，暂不投入且不打开链接附件",
+  "type": "lead_matrix",
+  "input": {
+    "fixture": "follow_up_base.json",
+    "cases": [
+      {
+        "name": "grade-d-class",
+        "form_meta": { "honeypot_triggered": true },
+        "expect_class": "automated_submission",
+        "expect_follow_up_grade": "D",
+        "expect_follow_up_basis": ["lead_class:automated_submission"],
+        "expect_follow_up_advice": "这条提交需要谨慎：先不回复，也不要打开其中的链接或附件。",
+        "expect_card_includes_follow_up": "D"
+      }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

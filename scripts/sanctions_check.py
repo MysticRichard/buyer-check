@@ -126,22 +126,21 @@ def parse_csv_line(line: str) -> list:
 def load_entries(path: str, name_column: int) -> list:
     entries = []
     with open(path, "r", encoding="utf-8", errors="replace") as handle:
-        for line in handle:
-            line = line.rstrip("\n").rstrip("\r")
-            if not line.strip():
-                continue
-            fields = parse_csv_line(line)
-            if len(fields) <= name_column:
-                continue
-            name = fields[name_column].strip()
-            if name:
-                entries.append({
-                    "raw": name,
-                    "normalized": normalize(name),
-                    "tokens": name_tokens(name),
-                    "matched_on": "primary",
-                    "alias_of": None,
-                })
+        text = handle.read()
+    for fields in csv.reader(io.StringIO(text)):
+        if not fields or not any(cell.strip() for cell in fields):
+            continue
+        if len(fields) <= name_column:
+            continue
+        name = fields[name_column].strip()
+        if name:
+            entries.append({
+                "raw": name,
+                "normalized": normalize(name),
+                "tokens": name_tokens(name),
+                "matched_on": "primary",
+                "alias_of": None,
+            })
     return entries
 
 
@@ -149,19 +148,19 @@ def load_uk_entries(path: str) -> list:
     rows = []
     header_seen = False
     with open(path, "r", encoding="utf-8", errors="replace") as handle:
-        for line in handle:
-            fields = parse_csv_line(line.rstrip("\n").rstrip("\r"))
-            if not header_seen:
-                if "name type" in [field.strip().lower() for field in fields]:
-                    header_seen = True
-                continue
-            if len(fields) < 11:
-                continue
-            group = fields[2].strip()
-            name = " ".join(field.strip() for field in [fields[4]] + fields[5:10] if field.strip()).strip()
-            if not name:
-                continue
-            rows.append((group, name, fields[10].strip().lower()))
+        text = handle.read()
+    for fields in csv.reader(io.StringIO(text)):
+        if not header_seen:
+            if "name type" in [field.strip().lower() for field in fields]:
+                header_seen = True
+            continue
+        if len(fields) < 11:
+            continue
+        group = fields[2].strip()
+        name = " ".join(field.strip() for field in [fields[4]] + fields[5:10] if field.strip()).strip()
+        if not name:
+            continue
+        rows.append((group, name, fields[10].strip().lower()))
     primary = {}
     for group, name, entry_type in rows:
         if "primary" in entry_type and group not in primary:

@@ -1,0 +1,20 @@
+{
+  "id": "A262",
+  "title": "K-02 枢纽例外只剔除 RF-CORP-005：其他红旗照常计分，等级与置信度规则不受影响",
+  "type": "lead_matrix",
+  "input": {
+    "fixture": "follow_up_base.json",
+    "cases": [
+      {
+        "name": "hub-with-other-flag",
+        "flags": ["RF-CORP-005", "RF-DOM-002"],
+        "intake": { "phone_country": "AE" },
+        "expect_hub_exception": { "flag": "RF-CORP-005", "phone_country": "AE" },
+        "expect_risk_score": 27,
+        "expect_level": "低",
+        "expect_confidence": "高"
+      }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

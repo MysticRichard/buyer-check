@@ -60,6 +60,23 @@ export function lineType(entry, national) {
   return 'fixed_or_unknown';
 }
 
+export function searchVariants(national) {
+  const digits = String(national || '').replace(/\D/g, '');
+  const variants = [];
+  const add = (value) => {
+    if (value.length >= 7 && !variants.includes(value) && variants.length < 6) variants.push(value);
+  };
+  add(digits);
+  if (digits.length > 8) {
+    const tail = digits.slice(-8);
+    add(tail);
+    add(`${tail.slice(0, 4)}-${tail.slice(4)}`);
+    add(`${tail.slice(0, 4)} ${tail.slice(4)}`);
+  }
+  if (digits.length > 7) add(digits.slice(-7));
+  return variants;
+}
+
 function loadEnricher() {
   try {
     const lib = require('libphonenumber-js');
@@ -106,6 +123,7 @@ export function analyse(raw, claimed, data) {
     claimed_country: claimed ? String(claimed).toUpperCase() : null,
     matches_claimed_country: null,
     format_hint: null,
+    search_variants: [],
   };
 
   if (!digits) {
@@ -149,6 +167,8 @@ export function analyse(raw, claimed, data) {
   }
 
   result.line_type = lineType(entry, national);
+  result.search_variants = searchVariants(national);
+  if (result.line_type === 'fixed_or_unknown') result.landline_hint = true;
   result.format_hint = 'prefers E.164 (+<code><national>)';
   if (used00) result.format_hint = 'converted 00 prefix to +';
 

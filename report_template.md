@@ -143,6 +143,53 @@
 
 **出口合规自查提示（仅报告）**：目的国、最终用户、用途、产品是否属于管制物项；`ship_to.country` 命中 `risk_background` 时写明具体项目名与来源，未核实（`null`）不输出。固定声明：**以中国及目的国主管部门规定为准；本 Skill 不判定是否适用，不构成法律意见。**
 
+### 1.5 跟进等级与依据（v0.13.0）
+
+**跟进等级**：`<computed.follow_up_grade>`（A / B / C / D 之一）
+
+**固定建议**：<`computed.follow_up_advice` 原句，不改写>
+
+**命中依据**（逐条列出 `computed.follow_up_grade_basis`）：`<lead_class:…>`、`<risk:…>`、`<concrete_signal:…>`、`<confidence:…>`、`<identity:…>`
+
+**建议投入**：A 档约 20–30 分钟深查并定制首封回复；B 档先用轻量问题补信息；C 档用标准模板礼貌回复；D 档先不回复、不打开链接或附件。
+
+**固定声明**：等级只由已算出的类别、风险等级、置信度、身份状态与信号推出，不改变风险分、等级、置信度与覆盖；等级字母不是第三个分数。
+
+### 1.6 首封回复切入点（v0.13.0，通用问题库）
+
+**角色匹配**（按 `buyer_type` 选首轮主打；只补缺口，不重写已有措辞）：
+
+| buyer_type | 首轮主打 |
+| --- | --- |
+| `distributor` | 价格梯度与现货 |
+| `oem_manufacturer` | 技术参数与定制能力 |
+| `contractor_epc` | 资质与项目交付案例 |
+| `wholesaler_retailer` | 价格、包装与产品线宽度 |
+| `trading_intermediary` | 价格、交期与起订量 |
+| `end_user` / `unknown` | 按实际询盘内容，只问缺口，不套模板 |
+
+**产品挂钩**：点出对方官网或社媒正在主推的关联品类；必须来自证据，不得编造。
+
+**区域适配：该问什么**（只问缺口；英文示例可润色；语气委婉，不暴露背调意图）：
+
+<!-- question-bank:start -->
+| 编号 | 触发条件（缺什么才问） | 英文问法 | 中文含义 |
+| --- | --- | --- | --- |
+| Q-01 | 没有目的港/收货地 | Which destination port or city should we quote for, so the price is accurate? | 报价要对准哪个目的港或城市？ |
+| Q-02 | 没有贸易术语 | Do you prefer FOB, CIF or another term for this order? | 偏好 FOB、CIF 还是其他术语？ |
+| Q-03 | 没有适用标准/认证 | Are there any certification or standard requirements in your market we should follow? | 您的市场有哪些认证或标准要求？ |
+| Q-04 | 没有技术规格 | Could you share the specifications your market usually uses, so we match the right version? | 方便给一下当地常用规格吗？ |
+| Q-05 | 没有包装/标签要求 | Any packaging or labeling requirements, such as language or brand? | 有包装或标签要求吗？ |
+| Q-06 | 不清楚是单次还是长期 | Is this a one-time order or a regular program? | 是一次性订单还是长期需求？ |
+| Q-07 | 不清楚现状 | What are you using at the moment, and is there anything you'd like to improve? | 目前用什么，有哪些想改进的？ |
+| Q-08 | 不清楚用途 | Is it for a specific project or for resale? | 是项目用还是转售？ |
+| Q-09 | 没有收货人信息 | To prepare the documents correctly, could you confirm the consignee details? | 为了单证准确，方便确认收货人信息吗？ |
+<!-- question-bank:end -->
+
+**B 档追问**：按缺口从问题库选 1–2 条，仍受“话术 ≤3 条”约束。
+
+**边界**：问题库不含任何逐国数据（电压、插头、认证机构名称），这些不写入仓库。
+
 ## 2. 调查方法与范围
 
 ### 2.1 方法论（五步流程 + 红旗清单版本 + 证据纪律声明）
@@ -213,6 +260,33 @@
 | 账号活动跨度 | <X 年> | 仅公开字段；不可见写「未公开」 |
 | 内容厚度 | 厚实 / 一般 / 单薄 / 未知 | 多年内容、场景/人物照片、评论/标记、原创度 |
 | 近期改动 | 是 / 否 / 未知 | 改名/改公司/改头像/语言地区突变（不计分） |
+
+### 2.4 海关画像（v0.13.0，可选；只进报告）
+
+仅当证据包有 `customs_profile` 时输出；查不到写「未查到」，**不写「无采购能力」**。四项指标来自 `render_card --json` 的 `customs_profile`：
+
+| 指标 | 结果 |
+| --- | --- |
+| 近 12 个月采购频次 | `<freq_12m>`（none / low / medium / high / unknown） |
+| 单次规模 | `<shipment_size>`（fcl / lcl / mixed / unknown） |
+| 核心 HS 编码 | `<main_hs>`（≤3 个，6 位数字；非法值已丢弃，`main_hs_ignored` 计数） |
+| 现有供应商来源 | `<supplier_origins>`（≤5 个 ISO2） |
+| 来源 | `<source_url>` · `<observed_at>` |
+
+**跟进提示**（固定模板，不计分、不判定）：`<customs_profile.follow_up_hint>`；为空则整句省略。
+
+**声明**：海关记录反映申报与公开数据，不等于实际采购能力；与询盘品类的 HS 比对沿用现有流程，不新增红旗。
+
+### 2.5 官网活跃度与人物层级线索（v0.13.0，只作线索，不计分）
+
+| 项目 | 结果 | 固定提示 |
+| --- | --- | --- |
+| 官网最后更新 | `<site_activity.site_last_updated>`（YYYY-MM） | 早于 12 个月：「官网久未更新：可结合社媒近况判断活跃度，不计分。」 |
+| 官网栏目 | `<site_activity.site_sections_seen>` | 见 `site_activity.hints`（品牌/项目提示） |
+| 人物层级 | `<person_role.role_level>` | `assistant_intern`：「对方可能只负责收集资料，决策人可能另有其人」 |
+| 近期跳槽 | `<person_role.recent_job_change>` | `true`：「对方刚到新公司，可能在重建供应商库，是切入机会，需自行确认。」 |
+
+提示原句直接取自 `--json` 的 `site_activity.hints` 与 `person_role.hints`，不改变风险分、等级、置信度与卡片。**隐私**：只使用公开可见的职业资料（职位、任职公司、行业），不看家庭、住址、私人照片。
 
 ## 3. 详细调查发现（每个维度独立小节，统一格式）
 

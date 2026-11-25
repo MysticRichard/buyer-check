@@ -1,0 +1,15 @@
+{
+  "id": "A253",
+  "title": "K-01 旧证据包（无 lead_signals）卡片字节与 v0.12.0 一致，--json 仍给出跟进等级",
+  "type": "render_card",
+  "input": { "fixture": "card_harbor.json" },
+  "expect": {
+    "status": "ok",
+    "card_file": "card_harbor.expected.txt",
+    "card_excludes": [" · 跟进："],
+    "follow_up_grade": "B",
+    "follow_up_grade_ignored": 0,
+    "line_count_max": 50,
+    "first_screen_max": 14
+  }
+}

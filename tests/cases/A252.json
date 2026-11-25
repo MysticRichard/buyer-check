@@ -1,0 +1,7 @@
+{
+  "id": "A252",
+  "title": "K-01 INV-16 遍历：200 个合成证据包，开关等级输入后风险分/等级/置信度/核实度逐项相同",
+  "type": "follow_up_invariance",
+  "input": { "fixture": "follow_up_base.json", "runs": 200 },
+  "expect": { "all_pass": true }
+}

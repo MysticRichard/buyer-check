@@ -1,0 +1,16 @@
+{
+  "id": "A291",
+  "title": "K-07 Node 流式中止：超过 2 MiB 立即中止，不先读完整个响应",
+  "type": "safe_fetch",
+  "input": {
+    "cases": [
+      {
+        "name": "node-stream-abort",
+        "runtime": "node",
+        "code": "import { safeFetch } from './scripts/identity_check.mjs';\nconst noValidate = async () => {};\nconst types = new Set(['text/html']);\nconst total = 3 * 1024 * 1024;\nlet produced = 0;\nconst stream = new ReadableStream({\n  pull(controller) {\n    if (produced >= total) { controller.close(); return; }\n    const chunk = new Uint8Array(64 * 1024);\n    produced += chunk.length;\n    controller.enqueue(chunk);\n  },\n});\nconst fakeFetch = async () => new Response(stream, { headers: { 'content-type': 'text/html' } });\ntry {\n  await safeFetch('https://example.com/', 1000, types, fakeFetch, noValidate);\n  console.log(JSON.stringify({ status: 'ok' }));\n} catch (error) {\n  console.log(JSON.stringify({ status: 'unsafe', reason: error.reason, bytes_read: produced, total }));\n}",
+        "expect": { "status": "unsafe", "reason": "too-large", "bytes_lt_total": 3145728 }
+      }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

@@ -134,11 +134,16 @@ class _SafeRedirectHandler(HTTPRedirectHandler):
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
-def safe_open(url: str, timeout: float = 10.0, content_types=None, opener=None) -> bytes:
-    """Open a URL with SSRF, redirect, content-type and size guards."""
+def safe_open(url: str, timeout: float = 10.0, content_types=None, opener=None, total_timeout=None) -> bytes:
+    """Open a URL with SSRF, redirect, content-type and size guards.
+
+    ``total_timeout`` caps the whole read (defaults to 3x the single-hop
+    timeout) so a slow-drip response cannot extend the fetch indefinitely.
+    """
     validate_url(url)
     allowed = {item.lower() for item in (content_types or HTML_CONTENT_TYPES)}
     opener = opener or build_opener(_SafeRedirectHandler())
+    deadline = time.monotonic() + (total_timeout if total_timeout is not None else timeout * 3)
     request = Request(url, headers={"User-Agent": USER_AGENT, "Accept": "text/html"})
     try:
         response = opener.open(request, timeout=timeout)
@@ -147,12 +152,16 @@ def safe_open(url: str, timeout: float = 10.0, content_types=None, opener=None) 
             raise UnsafeUrl("too-many-redirects")
         raise
     with response:
+        if time.monotonic() > deadline:
+            raise UnsafeUrl("total-timeout")
         content_type = (response.headers.get("Content-Type") or "").split(";")[0].strip().lower()
         if allowed and content_type not in allowed:
             raise UnsafeUrl("content-type")
         chunks = []
         total = 0
         while True:
+            if time.monotonic() > deadline:
+                raise UnsafeUrl("total-timeout")
             chunk = response.read(65536)
             if not chunk:
                 break
@@ -526,6 +535,8 @@ def google_map(args, key):
     params = urlencode({"query": query, "key": key})
     try:
         payload = fetch_json(f"{GOOGLE_TEXTSEARCH}?{params}", args.timeout)
+    except UnsafeUrl as exc:
+        return {"status": "unsafe_url", "command": "map", "source": "google_places", "reason": exc.reason}
     except Exception:
         return {"status": "unavailable", "command": "map", "source": "google_places", "error": "request-failed"}
     status = payload.get("status") if isinstance(payload, dict) else None
@@ -539,6 +550,8 @@ def osm_map(args):
     params = urlencode({"q": query, "format": "jsonv2", "addressdetails": 1, "limit": args.limit})
     try:
         payload = fetch_json(f"{OSM_SEARCH}?{params}", args.timeout)
+    except UnsafeUrl as exc:
+        return {"status": "unsafe_url", "command": "map", "source": "osm_nominatim", "reason": exc.reason}
     except Exception:
         return {"status": "unavailable", "command": "map", "source": "osm_nominatim", "error": "request-failed"}
     if not isinstance(payload, list):
@@ -707,6 +720,8 @@ def registry_command(args):
     elif args.online:
         try:
             payload = fetch_json(registry_url, args.timeout)
+        except UnsafeUrl as exc:
+            return {"status": "unsafe_url", "command": "registry", "registry_url": registry_url, "reason": exc.reason}
         except HTTPError as exc:
             return registry_error(company, registry_url, f"http-{exc.code}")
         except (TimeoutError, socket.timeout):

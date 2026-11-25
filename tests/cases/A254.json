@@ -1,0 +1,19 @@
+{
+  "id": "A254",
+  "title": "K-01 模型自填 follow_up_grade 被忽略并计数，等级仍由脚本规则算出",
+  "type": "lead_matrix",
+  "input": {
+    "fixture": "follow_up_base.json",
+    "cases": [
+      {
+        "name": "model-filled-grade",
+        "follow_up_grade_input": "D",
+        "expect_class": "target_end_user",
+        "expect_follow_up_grade": "A",
+        "expect_follow_up_ignored": 1,
+        "expect_card_includes_follow_up": "A"
+      }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

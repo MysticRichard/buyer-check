@@ -1,0 +1,18 @@
+{
+  "id": "A257",
+  "title": "K-02 号码来自 NG、自称 BR：非枢纽国照常 +2",
+  "type": "lead_matrix",
+  "input": {
+    "fixture": "follow_up_base.json",
+    "cases": [
+      {
+        "name": "non-hub-ng",
+        "flags": ["RF-CORP-005"],
+        "intake": { "phone_country": "NG" },
+        "expect_hub_exception": null,
+        "expect_risk_score": 18
+      }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

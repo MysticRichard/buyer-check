@@ -44,6 +44,53 @@ const SOURCES = {
   'UK Sanctions List': { urls: [UK_URL], file: 'uk_sanctions_list.csv', status: 'configured' },
 };
 
+function parseCsv(text = '') {
+  const rows = [];
+  const source = String(text);
+  let row = [];
+  let field = '';
+  let inQuotes = false;
+  for (let i = 0; i < source.length; i += 1) {
+    const char = source[i];
+    if (inQuotes) {
+      if (char === '"') {
+        if (source[i + 1] === '"') {
+          field += '"';
+          i += 1;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        field += char;
+      }
+    } else if (char === '"') {
+      inQuotes = true;
+    } else if (char === ',') {
+      row.push(field);
+      field = '';
+    } else if (char === '\n') {
+      row.push(field);
+      rows.push(row);
+      row = [];
+      field = '';
+    } else if (char === '\r') {
+      if (source[i + 1] !== '\n') {
+        row.push(field);
+        rows.push(row);
+        row = [];
+        field = '';
+      }
+    } else {
+      field += char;
+    }
+  }
+  if (field !== '' || row.length > 0) {
+    row.push(field);
+    rows.push(row);
+  }
+  return rows;
+}
+
 function parseCsvLine(line = '') {
   const fields = [];
   let field = '';
@@ -80,7 +127,7 @@ export function validateUk(buffer) {
   if (!buffer || buffer.length === 0) return { ok: false, detail: 'empty' };
   const head = buffer.subarray(0, 300).toString('utf8').trimStart().toLowerCase();
   if (head.startsWith('<') || head.includes('<html') || head.includes('<!doctype')) return { ok: false, detail: 'not-csv' };
-  const rows = buffer.toString('utf8').split(/\r?\n/).map((line) => parseCsvLine(line));
+  const rows = parseCsv(buffer.toString('utf8'));
   let headerIndex = -1;
   for (let i = 0; i < Math.min(6, rows.length); i += 1) {
     if (rows[i].map((field) => field.trim().toLowerCase()).includes('name type')) { headerIndex = i; break; }
@@ -97,7 +144,7 @@ export function validateSdn(buffer) {
   if (!buffer || buffer.length === 0) return { ok: false, detail: 'empty' };
   const head = buffer.subarray(0, 300).toString('utf8').trimStart().toLowerCase();
   if (head.startsWith('<') || head.includes('<html') || head.includes('<!doctype')) return { ok: false, detail: 'not-csv' };
-  const rows = buffer.toString('utf8').split(/\r?\n/).map((line) => parseCsvLine(line)).filter((row) => row.some((cell) => cell.trim()));
+  const rows = parseCsv(buffer.toString('utf8')).filter((row) => row.some((cell) => cell.trim()));
   if (rows.length < MIN_SDN_ROWS) return { ok: false, detail: `too-few-rows:${rows.length}` };
   if (rows[0].length < SDN_COLUMNS) return { ok: false, detail: 'missing-columns' };
   const goodWidth = rows.filter((row) => row.length >= SDN_COLUMNS).length;

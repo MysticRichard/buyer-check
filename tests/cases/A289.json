@@ -1,0 +1,16 @@
+{
+  "id": "A289",
+  "title": "K-07 完整流程：4 跳重定向按 too-many-redirects 拒绝",
+  "type": "safe_fetch",
+  "input": {
+    "cases": [
+      {
+        "name": "too-many-redirects",
+        "runtime": "python",
+        "code": "import sys, json, urllib.error\nsys.path.insert(0, 'scripts')\nimport identity_check as ic\nic.validate_url = lambda url, resolver=None: None\nclass Opener:\n    def open(self, req, timeout=None):\n        raise urllib.error.HTTPError(req.full_url, 301, 'moved', {}, None)\ntry:\n    ic.safe_open('https://example.com/', opener=Opener())\n    print(json.dumps({'status': 'ok'}))\nexcept ic.UnsafeUrl as exc:\n    print(json.dumps({'status': 'unsafe', 'reason': exc.reason}))",
+        "expect": { "status": "unsafe", "reason": "too-many-redirects" }
+      }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

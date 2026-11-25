@@ -1,6 +1,30 @@
 # 更新日志
 
-本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与语义化版本。迭代方案见 [docs/iteration_plan.md](docs/iteration_plan.md)（v0.4.1–v0.6.0）、[docs/iteration_plan_v0.7.md](docs/iteration_plan_v0.7.md)（v0.7.0）、[docs/iteration_plan_v0.8.md](docs/iteration_plan_v0.8.md)（v0.8.0）、[docs/iteration_plan_v0.9.md](docs/iteration_plan_v0.9.md)（v0.9.0，含 v0.8.1）、[docs/iteration_plan_v0.10.md](docs/iteration_plan_v0.10.md)（v0.10.0 / v0.10.1，事后整理）、[docs/iteration_plan_v0.11.md](docs/iteration_plan_v0.11.md)（v0.11.0）与 [docs/iteration_plan_v0.12.md](docs/iteration_plan_v0.12.md)（v0.12.0）。
+本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与语义化版本。迭代方案见 [docs/iteration_plan.md](docs/iteration_plan.md)（v0.4.1–v0.6.0）、[docs/iteration_plan_v0.7.md](docs/iteration_plan_v0.7.md)（v0.7.0）、[docs/iteration_plan_v0.8.md](docs/iteration_plan_v0.8.md)（v0.8.0）、[docs/iteration_plan_v0.9.md](docs/iteration_plan_v0.9.md)（v0.9.0，含 v0.8.1）、[docs/iteration_plan_v0.10.md](docs/iteration_plan_v0.10.md)（v0.10.0 / v0.10.1，事后整理）、[docs/iteration_plan_v0.11.md](docs/iteration_plan_v0.11.md)（v0.11.0）与 [docs/iteration_plan_v0.12.md](docs/iteration_plan_v0.12.md)（v0.12.0）、[docs/iteration_plan_v0.13.md](docs/iteration_plan_v0.13.md)（v0.13.0）。
+
+## [0.13.0] - 2026-11-25
+
+### 新增
+
+- **K-01 跟进分级 A/B/C/D**：由已算出的 `lead_class`、风险等级、置信度、`identity.status` 与 `lead_signals` 推出，只显示字母（` · 跟进：A`），完整建议句在报告 1.5；`--json` 增加 `computed.follow_up_grade` / `follow_up_advice` / `follow_up_grade_basis` / `follow_up_grade_ignored`；`--batch` 表增加“跟进”列；模型自填值被忽略并计数。
+- **K-02 转口枢纽例外**：`intake.phone_country ∈ {AE, TR, SG, HK}` 且与自称所在国不同时，`RF-CORP-005` 在 `flag_ids_of` 层剔除、不计分，`computed.hub_exception` 记录，联系方式维度追加固定短句；该类不一致不算 `RF-CORP-001` 的独立字段。**权重（2）与编号不变**，是唯一红旗触发条件变更。
+- **K-03 首封回复切入点**：`report_template.md` 新增 1.6 节，含角色匹配、产品挂钩与 9 条通用问题库（每条英文+中文）；不含逐国数据。
+- **K-04 海关画像**：可选 `customs_profile`（`freq_12m` / `shipment_size` / `main_hs` / `supplier_origins`），非法 HS 丢弃并计数；只进完整报告，按供应商来源给固定跟进提示，不计分。
+- **K-05 号码线索**：`phone_check.py/.mjs` 输出 `search_variants[]`（≤6，去重）与固定电话 `landline_hint`；`data-sources/global.md` 增加即时通讯地区表（每行标“待核实”）与号码反查服务边界。
+- **K-06 官网活跃度与人物层级**：`layers.company.site_last_updated` / `site_sections_seen`、`layers.person_company_link.role_level` / `recent_job_change`；只作线索，进完整报告，不计分。
+- **K-07 抓取安全收口**：Python `safe_open` 增加跨读取总时限（默认 3× 单次超时）；Node `safeFetch` 改为流式读取、超 2 MiB 立即中止，并支持注入 fetch/validate；map 与 registry 命令返回结构化 `status: "unsafe_url"` + `reason`。TOCTOU 仅做到“每次校验使用当前解析结果”，残余风险如实记录。
+- **K-08 名单解析**：Python 与 Node 的 OFAC/UK CSV 解析改为状态机，支持引号内换行；新增 `tests/false_positive_measure.mjs`（只读本地缓存，缺失时 skipped）。
+- **K-10 来源登记**：`data-sources/global.md` 增加 ImportYeti；条款与免费程度仍标“待核实”。
+- **K-11**：README 增加“业务员 5 分钟初筛清单”，不修改 `--guide` 文本。
+- **E-02**：评测语料 115 → **135 条**（E116–E135），评分器新增跟进等级混淆矩阵与 `hub_exception` 指标；`--self` 通过，不作为 CI 门槛。
+- 验收用例 A1–**A299**；精简包仍 **28 文件**；风险公式、分档、31 条红旗编号与权重、覆盖分母 8、置信度 R1–R5 未改（唯一例外为 K-02 的 `RF-CORP-005` 触发条件）；新增字段全部可选，旧证据包卡片字节不变。
+- **两轮真实询盘验收（2026-11-25）**：菲律宾农业贸易（公司名+个人+手机+Gmail）与巴西个人（仅姓名+手机）均输出 ⚪ 需人工核实（风险 0/待核实、核实度 10/100、跟进 B），覆盖 4/8 与 2/8；无红旗、无误报；未发现新的功能性阻断。真实数据只存本地 `reports/`。
+
+### 未完成 / 需负责人本地执行
+
+- **K-08 真实名单实测**：已完成（本地 `.cache/sanctions/`，不进仓库）：OFAC 19,599 行、UK 58,779 行（含 117 处引号内换行），Py/Node 行数一致；查询 1.5–2.2 秒（低于 5 秒阈值，无需索引）；21 个合成名误报 0。Node 解析 RSS ≈1.56 GB，仅作对照实现。
+- **K-09 校准与走查**：已完成 80 条脱敏真实 FB 表单线索校准（A 0/6、B 62/62、C 0/7、D 0/5；lead_class 12 条多选被归 target；红旗 0 阳性样本），只写建议未改阈值；p08 业务员走查仍需真实业务员；`render_card.py` 已完成文件内分区注释整理（10 个分区、不拆文件、不改行为）。
+- **K-10**：已实际打开 CSL、ImportYeti、VIES、GLEIF、SEC EDGAR、Companies House 与 Made-in-China 页面：CSL 的免费 API/无需 key/每日更新已核对；ImportYeti 需免费注册登录（额度/覆盖未展开）；GLEIF terms 页与 Companies House API 指引页 404、SEC EDGAR 访问页 403、VIES 条款未渲染，均如实保留待核实。
 
 ## [0.12.0] - 2026-11-23
 

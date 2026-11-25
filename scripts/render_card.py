@@ -37,6 +37,8 @@ ID_NUM_RE = re.compile(r"(?<![A-Za-z0-9])[0-9]{10,}(?![A-Za-z0-9])")
 V010_KEYS = ("capabilities", "footprint", "id_checks", "doc_checks", "search_log", "match_keys", "previous", "country_discovery", "terms_advice")
 
 
+# ---- 文本与脱敏 ----
+
 def id_leak(value):
     compact = re.sub(r"[\s\-_./•*]", "", text(value))
     if GSTIN_RE.search(compact):
@@ -146,6 +148,8 @@ def video_script_info(evidence, level):
 IDENTITY_STRENGTH = {"strong": 3, "medium": 2, "weak": 1, "none": 0}
 IDENTITY_QUESTION = "请提供注册号或国家"
 
+
+# ---- 身份、收货与交易背景 ----
 
 def identity_info(evidence):
     raw = evidence.get("identity") if isinstance(evidence.get("identity"), dict) else {}
@@ -385,6 +389,15 @@ LEAD_CLASS_CONCLUSION = {
     "individual_research": "看起来是个人或调研需求：低优先级，按标准资料回复即可。",
 }
 LEAD_NON_TARGET = {"automated_submission", "phishing_like", "vendor_solicitation", "competitor_probe", "individual_research"}
+FOLLOW_UP_ADVICE = {
+    "A": "高潜力：建议投入深查，并按对方角色定制首封回复。",
+    "B": "信息还不够：先边聊边了解，用轻量问题补信息，暂不做深度背调。",
+    "C": "低优先级：用标准模板礼貌回复，不投入深查。",
+    "D": "这条提交需要谨慎：先不回复，也不要打开其中的链接或附件。",
+}
+FOLLOW_UP_ADVICE_RISK = "风险较高：先暂缓投入，通过独立渠道确认疑点后再决定。"
+HUB_COUNTRIES = {"AE", "TR", "SG", "HK"}
+HUB_CONTACT_NOTE = "号码来自转口枢纽国家，与自称所在国不同较常见：不计分，建议礼貌确认业务所在地与收货地。"
 RISKY_ATTACHMENT_EXTS = {"exe", "scr", "js", "jar", "iso", "img", "html", "htm", "hta", "lnk", "vbs", "msi", "bat", "cmd"}
 CHANNEL_SET = {"alibaba", "facebook", "whatsapp", "website_form", "email", "linkedin", "trade_show", "made_in_china", "social_media", "other", "unknown"}
 
@@ -601,9 +614,11 @@ def flag_ids_of(evidence):
     return result
 
 
-def compute_credit(evidence):
+# ---- 核实度与评分 ----
+
+def compute_credit(evidence, ids=None):
     layers = evidence.get("layers") or {}
-    ids = flag_ids_of(evidence)
+    ids = flag_ids_of(evidence) if ids is None else ids
 
     company_cred = layer_value(layers, "company", "credibility")
     company_tenths = {"high": 10, "medium": 6, "low": 0, "unknown": 0}.get(company_cred, 0)
@@ -675,6 +690,8 @@ def compute_credit(evidence):
         dim["bar"] = dim_bar(dim["tenths"])
     return {"score": credit, "tier": tier, "dims": dims, "contact_thirds": contact_thirds, "compliance_halves": compliance_halves, "scale_halves": scale_halves}
 
+
+# ---- 动作阶梯与结论句 ----
 
 def normalize_level(level):
     return level if level in ("低", "中", "高", "需人工核实") else "需人工核实"
@@ -853,6 +870,8 @@ def contains_full_phone(value):
         return True
     return False
 
+
+# ---- 显示契约与校验 ----
 
 def validate_display(evidence, rules):
     display = evidence.get("display")
@@ -1108,6 +1127,8 @@ def risky_attachment_name(name):
     return len(parts) >= 2 and any(part in RISKY_ATTACHMENT_EXTS for part in parts[1:])
 
 
+# ---- 询盘信号、类别与跟进等级 ----
+
 def lead_signals_of(evidence):
     intake = evidence.get("intake") or {}
     raw = intake.get("lead_signals")
@@ -1186,6 +1207,170 @@ def lead_class_of(evidence):
     }
 
 
+def follow_up_grade_of(evidence, lead, level, confidence, identity):
+    signals = set(lead.get("lead_signals") or [])
+    cls = lead.get("lead_class")
+    basis = []
+    advice = None
+    if cls in ("automated_submission", "phishing_like"):
+        grade = "D"
+        advice = FOLLOW_UP_ADVICE["D"]
+        basis = [f"lead_class:{cls}"]
+    elif level == "高":
+        grade = "D"
+        advice = FOLLOW_UP_ADVICE_RISK
+        basis = ["risk:高"]
+    elif cls in ("vendor_solicitation", "competitor_probe", "individual_research"):
+        grade = "C"
+        advice = FOLLOW_UP_ADVICE["C"]
+        basis = [f"lead_class:{cls}"]
+    elif cls in ("target_end_user", "reseller"):
+        concrete = sorted(signals & LEAD_CONCRETE_SIGNALS)
+        identity_ok = ("identity" not in evidence) or identity.get("status") in ("resolved", "probable")
+        if level == "低" and concrete and (confidence == "高" or identity_ok):
+            grade = "A"
+            advice = FOLLOW_UP_ADVICE["A"]
+        else:
+            grade = "B"
+            advice = FOLLOW_UP_ADVICE["B"]
+        basis = [f"lead_class:{cls}", f"risk:{level or '需人工核实'}"]
+        basis.extend(f"concrete_signal:{item}" for item in concrete)
+        basis.append(f"confidence:{confidence or '低'}")
+        if "identity" in evidence:
+            basis.append(f"identity:{identity.get('status') or 'unresolved'}")
+    else:
+        grade = "B"
+        advice = FOLLOW_UP_ADVICE["B"]
+        basis = [f"lead_class:{cls or 'unclear'}", f"risk:{level or '需人工核实'}"]
+        if signals:
+            basis.append("signals:" + ",".join(sorted(signals)))
+        basis.append(f"confidence:{confidence or '低'}")
+    return {"grade": grade, "advice": advice, "basis": basis}
+
+
+def follow_up_grade_ignored_of(evidence):
+    intake = evidence.get("intake") if isinstance(evidence.get("intake"), dict) else {}
+    computed = evidence.get("computed") if isinstance(evidence.get("computed"), dict) else {}
+    if any(value is not None for value in (evidence.get("follow_up_grade"), intake.get("follow_up_grade"), computed.get("follow_up_grade"))):
+        return 1
+    return 0
+
+
+def hub_exception_of(evidence, ids):
+    if "RF-CORP-005" not in ids:
+        return None
+    intake = evidence.get("intake") if isinstance(evidence.get("intake"), dict) else {}
+    phone_country = text(intake.get("phone_country")).upper()
+    claimed = text((evidence.get("subject") or {}).get("country") or intake.get("country")).upper()
+    if phone_country in HUB_COUNTRIES and claimed and claimed != phone_country:
+        return {"flag": "RF-CORP-005", "phone_country": phone_country}
+    return None
+
+
+CUSTOMS_FREQ = {"none", "low", "medium", "high", "unknown"}
+SHIPMENT_SIZES = {"fcl", "lcl", "mixed", "unknown"}
+SITE_SECTIONS = {"about", "products", "brands", "projects", "news"}
+ROLE_LEVELS = {"owner_director", "purchasing", "technical", "assistant_intern", "other", "unknown"}
+CUSTOMS_HINT_CN = "对方已有来自中国的供应商：首轮建议突出价格之外的差异，如交期、品控、认证。"
+CUSTOMS_HINT_OTHER = "对方当前供应商主要来自其他地区：可能存在替换或降本空间，需结合对方需求核实。"
+SHIPMENT_IGNORED = "未知"
+
+
+def _as_of_date(evidence):
+    parsed = parse_iso_date(evidence.get("as_of"))
+    if parsed is not None:
+        return parsed
+    retrieved = [parse_iso_date(item.get("retrieved_at")) for item in (evidence.get("evidence") or []) if isinstance(item, dict)]
+    retrieved = [value for value in retrieved if value is not None]
+    return max(retrieved) if retrieved else None
+
+
+def customs_profile_of(evidence):
+    raw = evidence.get("customs_profile")
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raw = {}
+    freq = text(raw.get("freq_12m")).lower()
+    freq = freq if freq in CUSTOMS_FREQ else "unknown"
+    size = text(raw.get("shipment_size")).lower()
+    size = size if size in SHIPMENT_SIZES else "unknown"
+    main_hs = []
+    main_hs_ignored = 0
+    for item in raw.get("main_hs") or []:
+        value = text(item).strip()
+        if re.fullmatch(r"\d{6}", value) and value not in main_hs and len(main_hs) < 3:
+            main_hs.append(value)
+        else:
+            main_hs_ignored += 1
+    origins = []
+    origins_ignored = 0
+    for item in raw.get("supplier_origins") or []:
+        value = text(item).strip().upper()
+        if re.fullmatch(r"[A-Z]{2}", value) and value not in origins and len(origins) < 5:
+            origins.append(value)
+        else:
+            origins_ignored += 1
+    hint = None
+    if origins:
+        hint = CUSTOMS_HINT_CN if "CN" in origins else CUSTOMS_HINT_OTHER
+    return {
+        "freq_12m": freq,
+        "shipment_size": size,
+        "main_hs": main_hs,
+        "main_hs_ignored": main_hs_ignored,
+        "supplier_origins": origins,
+        "supplier_origins_ignored": origins_ignored,
+        "source_url": text(raw.get("source_url")) or None,
+        "observed_at": text(raw.get("observed_at")) or None,
+        "follow_up_hint": hint,
+    }
+
+
+def site_activity_of(evidence):
+    layers = evidence.get("layers") if isinstance(evidence.get("layers"), dict) else {}
+    company = layers.get("company") if isinstance(layers.get("company"), dict) else {}
+    last = text(company.get("site_last_updated")).strip()
+    sections = []
+    for item in company.get("site_sections_seen") or []:
+        value = text(item).lower()
+        if value in SITE_SECTIONS and value not in sections:
+            sections.append(value)
+    if not last and not sections:
+        return None
+    hints = []
+    as_of = _as_of_date(evidence)
+    if re.fullmatch(r"\d{4}-\d{2}", last) and as_of is not None:
+        last_index = int(last[:4]) * 12 + int(last[5:7])
+        as_of_index = as_of.year * 12 + as_of.month
+        if as_of_index - last_index > 12:
+            hints.append("官网久未更新：可结合社媒近况判断活跃度，不计分。")
+    if "brands" in sections:
+        hints.append("可从代理品牌判断对品质与合规的要求")
+    if "projects" in sections:
+        hints.append("可判断是否为工程承包商")
+    return {"site_last_updated": last or None, "site_sections_seen": sections, "hints": hints}
+
+
+def person_role_of(evidence):
+    layers = evidence.get("layers") if isinstance(evidence.get("layers"), dict) else {}
+    link = layers.get("person_company_link") if isinstance(layers.get("person_company_link"), dict) else {}
+    role = text(link.get("role_level")).lower()
+    if role not in ROLE_LEVELS:
+        role = None
+    recent = link.get("recent_job_change")
+    if recent not in (True, False):
+        recent = None
+    if role is None and recent is None:
+        return None
+    hints = []
+    if role == "assistant_intern":
+        hints.append("对方可能只负责收集资料，决策人可能另有其人")
+    if recent is True:
+        hints.append("对方刚到新公司，可能在重建供应商库，是切入机会，需自行确认。")
+    return {"role_level": role, "recent_job_change": recent, "hints": hints}
+
+
 def validate_checks_incomplete(evidence):
     raw = evidence.get("checks_incomplete")
     if raw is None:
@@ -1258,6 +1443,8 @@ def grade_of(entry):
         return explicit
     return SOURCE_GRADE_DEFAULT.get(entry.get("source_type"), "self_declared")
 
+
+# ---- 证据契约与来源等级 ----
 
 def apply_evidence_rules(evidence, attention, verified, missing, attention_from_display, verified_from_display):
     def entry_grade(entry):
@@ -1597,6 +1784,8 @@ def _signed(value):
     return f"+{value}" if value > 0 else str(value)
 
 
+# ---- 复查对比、批量和去重 ----
+
 def diff_packs(old, new):
     old_keys = _match_key_set(old)
     new_keys = _match_key_set(new)
@@ -1766,6 +1955,7 @@ def batch_triage(packs, rules):
             "name": _batch_name(evidence, position + 1).replace("|", "/"),
             "level": level,
             "symbol": BATCH_SYMBOLS.get(level, "⚪"),
+            "follow_up": (result.get("computed") or {}).get("follow_up_grade"),
             "credit": credit,
             "risk": _batch_top_risk(evidence, rules).replace("|", "/"),
             "next": next_step,
@@ -1791,11 +1981,11 @@ def batch_triage(packs, rules):
 
     rows.sort(key=lambda row: (BATCH_RANK.get(row["next"], 1), row["risk_score"], -row["credit"], row["index"]))
     lines = [
-        "| # | 公司 / 邮箱域 | 等级 | 核实度 | 最大风险 | 建议 |",
-        "| --- | --- | --- | --- | --- | --- |",
+        "| # | 公司 / 邮箱域 | 等级 | 跟进 | 核实度 | 最大风险 | 建议 |",
+        "| --- | --- | --- | --- | --- | --- | --- |",
     ]
     for row in rows:
-        lines.append(f"| {row['index']} | {row['name']} | {row['symbol']} {row['level']} | {row['credit']} | {row['risk']} | {row['next']} |")
+        lines.append(f"| {row['index']} | {row['name']} | {row['symbol']} {row['level']} | {row['follow_up'] or '—'} | {row['credit']} | {row['risk']} | {row['next']} |")
     if hints:
         lines.append("")
         lines.extend(hints)
@@ -2056,6 +2246,8 @@ def mask_log_text(value):
     return raw
 
 
+# ---- 结论卡渲染主流程 ----
+
 def render_card(evidence, rules):
     contract_errors = validate_evidence_contract(evidence)
     if contract_errors:
@@ -2086,6 +2278,9 @@ def render_card(evidence, rules):
         return {"status": "invalid-input", "errors": conflict_errors}
 
     ids = flag_ids_of(evidence)
+    hub = hub_exception_of(evidence, ids)
+    if hub:
+        ids = [flag_id for flag_id in ids if flag_id != "RF-CORP-005"]
     derived_flags = derive_flags(evidence)
     ids = list(dict.fromkeys(ids + [item["id"] for item in derived_flags]))
     derived_map = {item["id"]: item for item in derived_flags}
@@ -2115,7 +2310,7 @@ def render_card(evidence, rules):
                 "actual": {"risk_score": recomputed["risk_score"], "level": recomputed["level"]},
             }
 
-    credit = compute_credit(evidence)
+    credit = compute_credit(evidence, ids)
     level = recomputed["level"]
     score = recomputed["risk_score"]
     confidence = recomputed.get("confidence") or evidence.get("confidence") or "低"
@@ -2158,6 +2353,10 @@ def render_card(evidence, rules):
     trade_background = trade_background_info(evidence)
     lead_conclusion = conclusion if level == "高" else LEAD_CLASS_CONCLUSION.get(lead["lead_class"], conclusion)
     lead_suffix = "" if lead["lead_class"] == "unclear" else f" · 类别：{lead['lead_class_label']}"
+    follow_up = follow_up_grade_of(evidence, lead, level, confidence, identity)
+    follow_up_ignored = follow_up_grade_ignored_of(evidence)
+    if lead_suffix and lead["lead_class_source"] == "signals":
+        lead_suffix += f" · 跟进：{follow_up['grade']}"
     verdict_text, verdict_warning = verdict_line(display, evidence, level, actions)
 
     dim_notes = display.get("dim_notes") or {}
@@ -2173,6 +2372,8 @@ def render_card(evidence, rules):
         if new_mode and dim["status"] == "未核实" and (not note or note == "暂未核实"):
             note = NEXT_STEPS_DIM.get(dim["key"], "人工补查一次")
         item["note"] = note or default_dim_note(dim["key"], dim["status"])
+        if hub and dim["key"] == "contact" and HUB_CONTACT_NOTE not in item["note"]:
+            item["note"] = f"{item['note']}；{HUB_CONTACT_NOTE}" if item["note"] else HUB_CONTACT_NOTE
         dims.append(item)
     behavior_note = "发现异常交易要求" if behavior_status == "有异常" else "没发现异常交易要求" if behavior_status == "无异常" else "没有询盘原文"
     behavior_display = text(dim_notes.get("behavior"))
@@ -2197,6 +2398,8 @@ def render_card(evidence, rules):
     raw_attention = display.get("attention")
     if isinstance(raw_attention, list) and raw_attention:
         attention = [dict(item) for item in raw_attention]
+        if hub:
+            attention = [item for item in attention if not (item.get("kind") == "flag" and item.get("flag_id") == "RF-CORP-005")]
     elif "evidence" in evidence:
         flag_entries = {
             text(item.get("id")): item
@@ -2474,7 +2677,7 @@ def render_card(evidence, rules):
     if any(id_leak(line) or numeric_leak(line) for line in lines):
         return {"status": "invalid-input", "errors": [{"code": "plaintext-id", "field": "card"}]}
 
-    return {
+    result = {
         "status": "ok",
         "credit": {"score": credit["score"], "tier": credit["tier"]},
         "level": level,
@@ -2495,6 +2698,11 @@ def render_card(evidence, rules):
             "lead_signals_ignored": lead["lead_signals_ignored"],
             "lead_class_source": lead["lead_class_source"],
             "identity_status": identity["status"],
+            "follow_up_grade": follow_up["grade"],
+            "follow_up_advice": follow_up["advice"],
+            "follow_up_grade_basis": follow_up["basis"],
+            "follow_up_grade_ignored": follow_up_ignored,
+            "hub_exception": hub,
         },
         "identity": identity,
         "form_meta_anomalies": form_meta["anomalies"],
@@ -2508,7 +2716,19 @@ def render_card(evidence, rules):
         "first_screen_lines": first_screen_lines,
         "card": neutralize_markdown("\n".join(lines)),
     }
+    customs = customs_profile_of(evidence)
+    if customs is not None:
+        result["customs_profile"] = customs
+    site_activity = site_activity_of(evidence)
+    if site_activity is not None:
+        result["site_activity"] = site_activity
+    person_role = person_role_of(evidence)
+    if person_role is not None:
+        result["person_role"] = person_role
+    return result
 
+
+# ---- 阶梯枚举与 CLI ----
 
 def ladder_combinations():
     levels = ["低", "中", "高", "需人工核实"]

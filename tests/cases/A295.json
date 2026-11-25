@@ -1,0 +1,11 @@
+{
+  "id": "A295",
+  "title": "K-08 OFAC 合成 CSV（引号内含换行）Python 与 Node 解析一致",
+  "type": "sanctions_csv",
+  "input": {
+    "mode": "entries",
+    "name_column": 1,
+    "csv": "9001,\"KHALIL, AHMED\",individual\n9002,\"GLOBAL STAR\nTRADING CO\",-0-\n"
+  },
+  "expect": { "all_pass": true, "count": 2, "names": ["KHALIL, AHMED", "GLOBAL STAR\nTRADING CO"] }
+}

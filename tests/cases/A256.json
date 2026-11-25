@@ -1,0 +1,20 @@
+{
+  "id": "A256",
+  "title": "K-02 号码来自 AE、自称 BR：RF-CORP-005 不计分，联系方式备注固定短句，记录 hub_exception",
+  "type": "lead_matrix",
+  "input": {
+    "fixture": "follow_up_base.json",
+    "cases": [
+      {
+        "name": "hub-ae-claimed-br",
+        "flags": ["RF-CORP-005"],
+        "intake": { "phone_country": "AE" },
+        "expect_hub_exception": { "flag": "RF-CORP-005", "phone_country": "AE" },
+        "expect_risk_score": 0,
+        "expect_level": "低",
+        "expect_card_includes": ["号码来自转口枢纽国家，与自称所在国不同较常见：不计分，建议礼貌确认业务所在地与收货地。"]
+      }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

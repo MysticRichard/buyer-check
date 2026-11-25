@@ -1,0 +1,10 @@
+{
+  "id": "A292",
+  "title": "K-08 UK 合成 CSV：引号内换行时 Python 与 Node 解析行数/名称一致",
+  "type": "sanctions_csv",
+  "input": {
+    "mode": "uk",
+    "csv": "g1,1,GroupA,ref,name1,name2,name3,name4,name5,type,Name type\ng2,2,GroupB,ref,\"Acme Multi\nLine Two\",,,,,,Primary\n"
+  },
+  "expect": { "all_pass": true, "count": 1, "names": ["Acme Multi\nLine Two"] }
+}

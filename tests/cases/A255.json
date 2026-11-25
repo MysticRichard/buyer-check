@@ -1,0 +1,15 @@
+{
+  "id": "A255",
+  "title": "K-01 Python 与 Node 在跟进等级/依据/卡片上输出一致",
+  "type": "render_card_parity",
+  "input": {
+    "fixture": "follow_up_base.json",
+    "mutate_flags": ["RF-DOM-002", "RF-CORP-005"],
+    "mutate_identity": {
+      "candidates": [
+        { "name": "Ana Example", "country": "BR", "registry_id": "X1", "strength": "strong", "match_keys": ["legal_name", "domain"] }
+      ]
+    }
+  },
+  "expect": { "all_pass": true }
+}

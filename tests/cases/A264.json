@@ -1,0 +1,7 @@
+{
+  "id": "A264",
+  "title": "K-03 首封回复问题库：每条都有英文问法与中文含义",
+  "type": "question_bank",
+  "input": {},
+  "expect": { "all_pass": true }
+}

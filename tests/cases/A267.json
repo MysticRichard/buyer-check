@@ -1,0 +1,33 @@
+{
+  "id": "A267",
+  "title": "K-03 追问话术仍受“≤3 条”约束（超过即 invalid-display/too_many，B 档从问题库选 1–2 条也不例外）",
+  "type": "render_card",
+  "input": {
+    "fixture_data": {
+      "subject": { "company": "Acme Example Trading", "country": "BR", "domain": "acme.example" },
+      "intake": {
+        "inquiry_text": "We need 500 units of model X for our project.",
+        "lead_signals": ["states_end_use_project", "names_product_model"]
+      },
+      "coverage": { "checked": 8, "total": 8, "uncovered": [] },
+      "anchors": { "count": 3 },
+      "layers": {
+        "company": { "credibility": "high" },
+        "person_company_link": { "strength": "strong" },
+        "person_authenticity": { "level": "unknown" }
+      },
+      "display": {
+        "customer_label": "Acme Example Trading",
+        "inquiry_type": "general",
+        "scripts": [
+          { "en": "Script one: which destination port should we quote?", "zh": "话术一：报价对准哪个目的港？" },
+          { "en": "Script two: any certification requirements?", "zh": "话术二：有认证要求吗？" },
+          { "en": "Script three: is this a one-time order?", "zh": "话术三：是一次性订单吗？" },
+          { "en": "Script four: should not appear.", "zh": "话术四：不应出现。" },
+          { "en": "Script five: should not appear.", "zh": "话术五：不应出现。" }
+        ]
+      }
+    }
+  },
+  "expect": { "status": "invalid-display", "error_codes": ["too_many"] }
+}

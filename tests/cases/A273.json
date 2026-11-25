@@ -1,0 +1,17 @@
+{
+  "id": "A273",
+  "title": "K-04 Python 与 Node 在海关画像字段与提示上输出一致",
+  "type": "render_card_parity",
+  "input": {
+    "fixture": "follow_up_base.json",
+    "mutate_customs_profile": {
+      "freq_12m": "medium",
+      "shipment_size": "fcl",
+      "main_hs": ["850110", "12345"],
+      "supplier_origins": ["CN", "DE", "1A"],
+      "source_url": "https://importyeti.example/acme",
+      "observed_at": "2026-10-01"
+    }
+  },
+  "expect": { "all_pass": true }
+}

@@ -1,0 +1,32 @@
+{
+  "id": "A245",
+  "title": "K-01 跟进分级 B：目标终端用户但风险中（域名过新 + 号码国不一致），不进 A 档",
+  "type": "lead_matrix",
+  "input": {
+    "fixture": "follow_up_base.json",
+    "cases": [
+      {
+        "name": "grade-b",
+        "flags": ["RF-DOM-002", "RF-CORP-005"],
+        "identity": {
+          "candidates": [
+            { "name": "Ana Example", "country": "BR", "registry_id": "X1", "strength": "strong", "match_keys": ["legal_name", "domain"] }
+          ]
+        },
+        "expect_class": "target_end_user",
+        "expect_follow_up_grade": "B",
+        "expect_follow_up_basis": [
+          "lead_class:target_end_user",
+          "risk:中",
+          "concrete_signal:names_product_model",
+          "concrete_signal:states_end_use_project",
+          "confidence:高",
+          "identity:resolved"
+        ],
+        "expect_risk_score": 43,
+        "expect_card_includes_follow_up": "B"
+      }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

@@ -1,0 +1,23 @@
+{
+  "id": "A248",
+  "title": "K-01 target_end_user + 风险中 → B，不是 A",
+  "type": "lead_matrix",
+  "input": {
+    "fixture": "follow_up_base.json",
+    "cases": [
+      {
+        "name": "target-medium",
+        "flags": ["RF-DOM-001"],
+        "identity": {
+          "candidates": [
+            { "name": "Ana Example", "country": "BR", "registry_id": "X1", "strength": "strong", "match_keys": ["legal_name", "domain"] }
+          ]
+        },
+        "expect_class": "target_end_user",
+        "expect_follow_up_grade": "B",
+        "expect_risk_score": 35
+      }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

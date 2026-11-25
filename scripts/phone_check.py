@@ -66,6 +66,30 @@ def line_type(entry: Optional[dict], national: str) -> str:
     return "fixed_or_unknown"
 
 
+def search_variants(national: str) -> list:
+    """Common search forms for the same number (at most 6, deduplicated).
+
+    Variants shorter than 7 digits are dropped. Only the script JSON carries
+    the full forms; cards and reports must show a masked number.
+    """
+    digits = re.sub(r"\D", "", national or "")
+    variants = []
+
+    def add(value: str) -> None:
+        if len(value) >= 7 and value not in variants and len(variants) < 6:
+            variants.append(value)
+
+    add(digits)
+    if len(digits) > 8:
+        tail = digits[-8:]
+        add(tail)
+        add(f"{tail[:4]}-{tail[4:]}")
+        add(f"{tail[:4]} {tail[4:]}")
+    if len(digits) > 7:
+        add(digits[-7:])
+    return variants
+
+
 def _phonenumbers_version() -> str:
     try:
         import importlib.metadata as metadata
@@ -131,6 +155,7 @@ def analyse(raw: str, claimed: Optional[str], data: dict) -> dict:
         "claimed_country": (claimed or "").upper() or None,
         "matches_claimed_country": None,
         "format_hint": None,
+        "search_variants": [],
     }
 
     if not digits:
@@ -169,6 +194,9 @@ def analyse(raw: str, claimed: Optional[str], data: dict) -> dict:
         result["invalid_reason"] = "length rule not covered for this country"
 
     result["line_type"] = line_type(entry, national)
+    result["search_variants"] = search_variants(national)
+    if result["line_type"] == "fixed_or_unknown":
+        result["landline_hint"] = True
     result["format_hint"] = "prefers E.164 (+<code><national>)"
     if used_00:
         result["format_hint"] = "converted 00 prefix to +"

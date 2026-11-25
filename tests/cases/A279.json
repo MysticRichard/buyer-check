@@ -1,0 +1,10 @@
+{
+  "id": "A279",
+  "title": "K-05 即时通讯地区表：每行都有“依据”或标“待核实”",
+  "type": "messenger_table",
+  "input": {
+    "file": "data-sources/global.md",
+    "names": ["Viber", "Telegram", "Zalo", "Line", "KakaoTalk", "微信"]
+  },
+  "expect": { "all_pass": true }
+}

@@ -1,0 +1,19 @@
+{
+  "id": "A258",
+  "title": "K-02 自称 AE、号码来自 NG：自称国是枢纽也不豁免，照常 +2",
+  "type": "lead_matrix",
+  "input": {
+    "fixture": "follow_up_base.json",
+    "cases": [
+      {
+        "name": "claimed-hub-phone-ng",
+        "flags": ["RF-CORP-005"],
+        "country": "AE",
+        "intake": { "phone_country": "NG" },
+        "expect_hub_exception": null,
+        "expect_risk_score": 18
+      }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

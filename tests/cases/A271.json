@@ -1,0 +1,20 @@
+{
+  "id": "A271",
+  "title": "K-04 海关画像：非 6 位数字与重复的 main_hs 被丢弃并计数",
+  "type": "render_card",
+  "input": {
+    "fixture": "follow_up_base.json",
+    "mutate_customs_profile": {
+      "freq_12m": "low",
+      "shipment_size": "mixed",
+      "main_hs": ["123456", "12345", "ABC123", "123456"],
+      "supplier_origins": ["CN"]
+    }
+  },
+  "expect": {
+    "status": "ok",
+    "main_hs": ["123456"],
+    "main_hs_ignored": 3,
+    "risk_score": 0
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "id": "A281",
+  "title": "K-06 人物层级：assistant_intern 时提示决策人可能另有其人",
+  "type": "render_card",
+  "input": {
+    "fixture": "follow_up_base.json",
+    "mutate_layers": {
+      "person_company_link": { "role_level": "assistant_intern" }
+    }
+  },
+  "expect": {
+    "status": "ok",
+    "person_hint_includes": "对方可能只负责收集资料，决策人可能另有其人",
+    "risk_score": 0
+  }
+}

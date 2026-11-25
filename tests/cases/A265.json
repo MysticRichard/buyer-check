@@ -1,0 +1,7 @@
+{
+  "id": "A265",
+  "title": "K-03 问题库不含禁用词（verify / investigat / background check / scam / fraud / 核实身份 / 调查）",
+  "type": "question_bank",
+  "input": {},
+  "expect": { "all_pass": true }
+}

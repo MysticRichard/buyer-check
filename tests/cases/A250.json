@@ -1,0 +1,26 @@
+{
+  "id": "A250",
+  "title": "K-01 风险高 + target_end_user → D（依据为风险），建议先暂缓",
+  "type": "lead_matrix",
+  "input": {
+    "fixture": "follow_up_base.json",
+    "cases": [
+      {
+        "name": "target-high-risk",
+        "flags": ["RF-PAY-001"],
+        "identity": {
+          "candidates": [
+            { "name": "Ana Example", "country": "BR", "registry_id": "X1", "strength": "strong", "match_keys": ["legal_name", "domain"] }
+          ]
+        },
+        "expect_level": "高",
+        "expect_risk_score": 70,
+        "expect_follow_up_grade": "D",
+        "expect_follow_up_basis": ["risk:高"],
+        "expect_follow_up_advice": "风险较高：先暂缓投入，通过独立渠道确认疑点后再决定。",
+        "expect_card_includes_follow_up": "D"
+      }
+    ]
+  },
+  "expect": { "all_pass": true }
+}
