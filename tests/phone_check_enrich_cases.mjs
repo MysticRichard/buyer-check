@@ -2,7 +2,8 @@
 /**
  * Acceptance checks for the optional phone_check enrichment (H1-H6, v0.7.0).
  *
- * H1 without the optional library the output keys match v0.6.0 exactly.
+ * H1 without the optional library the output keys match v0.6.0 plus the
+ * v0.13.0 base key search_variants (optional enrichment keys still must not appear).
  * H2 with the library the optional fields appear.
  * H3 numbers without "+"/"00" never guess a country.
  * H4 VOIP / premium / toll-free numbers never change the risk score.
@@ -29,7 +30,7 @@ const PY_SCRIPT = join(SCRIPTS, 'phone_check.py');
 const BASE_KEYS = [
   'input', 'normalized', 'valid', 'invalid_reason', 'country_code', 'country',
   'country_name', 'line_type', 'claimed_country', 'matches_claimed_country',
-  'format_hint', 'status',
+  'format_hint', 'status', 'search_variants',
 ];
 const ENRICH_KEYS = ['number_type', 'carrier', 'carrier_note', 'timezones', 'enriched_by'];
 
