@@ -56,6 +56,53 @@ export function nameTokens(name = '') {
   return normalize(name).split(' ').filter((token) => token && !LEGAL_SUFFIXES.has(token));
 }
 
+export function parseCsv(text = '') {
+  const rows = [];
+  const source = String(text);
+  let row = [];
+  let field = '';
+  let inQuotes = false;
+  for (let i = 0; i < source.length; i += 1) {
+    const char = source[i];
+    if (inQuotes) {
+      if (char === '"') {
+        if (source[i + 1] === '"') {
+          field += '"';
+          i += 1;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        field += char;
+      }
+    } else if (char === '"') {
+      inQuotes = true;
+    } else if (char === ',') {
+      row.push(field);
+      field = '';
+    } else if (char === '\n') {
+      row.push(field);
+      rows.push(row);
+      row = [];
+      field = '';
+    } else if (char === '\r') {
+      if (source[i + 1] !== '\n') {
+        row.push(field);
+        rows.push(row);
+        row = [];
+        field = '';
+      }
+    } else {
+      field += char;
+    }
+  }
+  if (field !== '' || row.length > 0) {
+    row.push(field);
+    rows.push(row);
+  }
+  return rows;
+}
+
 export function parseCsvLine(line = '') {
   const fields = [];
   let field = '';
@@ -91,9 +138,8 @@ export function parseCsvLine(line = '') {
 export function loadEntries(path, nameColumn) {
   const entries = [];
   const text = readFileSync(path, 'utf8');
-  for (const rawLine of text.split(/\r?\n/)) {
-    if (!rawLine.trim()) continue;
-    const fields = parseCsvLine(rawLine);
+  for (const fields of parseCsv(text)) {
+    if (!fields.some((cell) => cell.trim())) continue;
     if (fields.length <= nameColumn) continue;
     const name = fields[nameColumn].trim();
     if (name) entries.push({ raw: name, normalized: normalize(name), tokens: nameTokens(name), matched_on: 'primary', alias_of: null });
@@ -104,8 +150,7 @@ export function loadEntries(path, nameColumn) {
 export function loadUkEntries(path) {
   const rows = [];
   let headerSeen = false;
-  for (const rawLine of readFileSync(path, 'utf8').split(/\r?\n/)) {
-    const fields = parseCsvLine(rawLine);
+  for (const fields of parseCsv(readFileSync(path, 'utf8'))) {
     if (!headerSeen) {
       if (fields.map((field) => field.trim().toLowerCase()).includes('name type')) headerSeen = true;
       continue;

@@ -56,6 +56,21 @@
 | 号码负面检索 | 号码多格式 + scam/fraud |
 | 号码与名称强关联 | 号码与公司名出现在同一来源（官网联系页/地图商家/B2B 平台）才算 |
 
+**号码搜索变体（v0.13.0）**：号码在网页上写法不统一，`phone_check.py/.mjs` 输出的 `search_variants[]` 给出同一号码的常见写法（完整国内号、后 8 位、4-4 分组连字符/空格、后 7 位，≤6 条、去重）。变体**只用于检索**，不进卡片与报告，报告只显示掩码（INV-07）。`line_type` 为固定电话时脚本输出 `landline_hint: true`：**固话可直接搜地址与地图标注**，是核对公司地址的捷径；`line_type` 为 `unknown` 时不输出该提示，不猜测。
+
+**即时通讯地区表（每行依据待核实）**
+
+| 地区/场景 | 常见即时通讯工具 | 依据 |
+| --- | --- | --- |
+| 东欧与中东部分地区 | Viber | 通用地区常识，待核实 |
+| 俄语区 | Telegram | 通用地区常识，待核实 |
+| 越南 | Zalo | 通用地区常识，待核实 |
+| 日本、泰国、台湾 | Line | 通用地区常识，待核实（台湾以 Line 为主较常见；日本、泰国需按当地实际确认） |
+| 韩国 | KakaoTalk | 通用地区常识，待核实（不要与 Line 混用） |
+| 中文区 | 微信 | 通用地区常识，待核实 |
+
+**号码反查类服务（人工线索，不自动调用）**：Truecaller 一类服务需登录，其数据来自用户通讯录众包，备注名可能不准，**不能当作证据**；只作人工线索，注意隐私与当地法规。仓库不调用、不抓取、不绕过登录（INV-10）。
+
 ## 六、地图 / 海关 / 社媒的实际查询通道（v0.7.0 起）
 
 | 维度 | 先查（免费、可自动） | 判定规则 | 禁止 |
@@ -65,6 +80,8 @@
 | 社媒 | **名称 + 电话双匹配**：`"<公司名>" "<E.164>"`、`"<公司名>" "<域名>"`、`site:linkedin.com/facebook.com/instagram.com "<公司名>"`；公共页能读则看绑定信息 | 只有「名称 + 电话（或域名）+ 主页绑定公司名/域名」同时匹配，才记「社媒已验证」；仅同名 → `name-only-match`，不算真实；无结果 → `no-double-match`；登录墙 → `login-wall` | 把同名别家账号当客户；仅凭名称相同就判定真实；绕过登录 |
 
 **判定纪律**：地图双向、海关多平台、社媒双匹配都执行后，才允许标 `not-covered`；未覆盖原因必须写**实际查询结果**（如「按电话找不到」「Volza 只返回同名别家」），不是一句「未覆盖」。同名不同公司不得合并。
+
+**海关画像要看四指标（v0.13.0）**：近 12 个月采购频次（`none` / `low` / `medium` / `high` / `unknown`）、单次规模（整柜 `fcl` / 拼箱 `lcl` / 混合 `mixed` / 未知）、核心 HS 编码（≤3 个 6 位数字）、现有供应商来源（≤5 个 ISO2，用于判断是否已从中国采购）。只记录平台公开可见字段，不推测具体金额与次数；查不到写「未查到」而不是「无采购能力」。ImportYeti（美国进口记录，首页称 7.15 亿条、每日更新、需免费注册登录）可作为补充入口；其免费额度与覆盖范围答案未展开，**待核实**（见 `docs/validation.md` 的 K-10 核实记录）。
 
 ## 七、降级做法（查不到时）
 
@@ -168,7 +185,7 @@
 | `email` | 邮件头（`email_header_check`）、Reply-To、发件域 DMARC/SPF；显示原始邮件的方法因邮箱而异，不写死菜单路径 |
 | `linkedin` | 对方主页现任职公司与自称是否一致、主页创建时间、是否模板化群发私信；不登录、不绕验证码 |
 | `trade_show` | 参展商名录里是否有该公司；名片上的公司名、域名、电话是否一致 |
-| `made_in_china` | 平台会员等级、认证标识、账号注册时长：**具体字段名待核实**；平台标识只作线索，不证明身份 |
+| `made_in_china` | 平台会员等级、认证标识、账号注册时长：首页可见 **Secured Trading Service / Leading Factory / Selected Supplier** 等标识（2026-11-25 复核）；会员等级字段名仍待核实；平台标识只作线索，不证明身份 |
 | `social_media` | Instagram/TikTok/Telegram 等私信：优先按现有头像与账号时长人工核对清单；名称 + 电话/域名双匹配后再看主页是否绑定公司 |
 
 **纪律**：渠道只决定先查什么，不作为可信度证据；不打开对方发来的链接和附件，只比对链接域名与附件扩展名；完整 IP 只保留网段（IPv4 /24、IPv6 /48）。
@@ -178,10 +195,11 @@
 
 | 来源 | 用途 | 入口 | 免费 / Key | terms_checked | verified_at | 提醒 |
 | --- | --- | --- | --- | --- | --- | --- |
-| GLEIF（LEI 库） | 全球法人识别号查询 | https://www.gleif.org/en/lei/search/ | 免费网页；公开 API 免 key（以官方条款为准） | 页面可访问；自动化条款待逐条核实 | 2026-11-23 | 只覆盖有 LEI 的主体，小买家查不到不扣分 |
-| EU VIES | 欧盟增值税号有效性 | https://ec.europa.eu/taxation_customs/vies/ | 免费网页；无需 key | 页面可访问；条款待核实 | 2026-11-23 | 号码有效 ≠ 正在经营 ≠ 与询盘人有关；只在客户给了 VAT 号时用 |
-| SEC EDGAR | 美国上市公司 | https://www.sec.gov/edgar/search/ | 免费；SEC 要求可识别的 User-Agent 与访问频率 | 页面可访问；User-Agent 与频率要求已记录，细则待复核 | 2026-11-23 | 只覆盖美国上市公司 |
-| trade.gov CSL | 美国多部门限制名单汇总 | https://www.trade.gov/consolidated-screening-list | 免费网页；API key / 下载方式待核实 | 页面可访问；是否需 key 待核实 | 2026-11-23 | 只写“疑似命中，需人工核实”，不计分 |
-| UK Companies House | 英国公司登记 | https://find-and-update.company-information.service.gov.uk/ | 网页免费；API 需要 key（待核实） | 页面可访问；API 条款待核实 | 2026-11-23 | 默认只给链接，不自动查询 |
+| GLEIF（LEI 库） | 全球法人识别号查询 | https://www.gleif.org/en/lei/search/ | 免费网页；公开 API 免 key（以官方条款为准） | 2026-11-25 复核：搜索页可达；`/en/about-lei/terms-of-use` 与 `/en/legal-notice` 均返回 404，自动化条款待核实 | 2026-11-25 | 只覆盖有 LEI 的主体，小买家查不到不扣分 |
+| EU VIES | 欧盟增值税号有效性 | https://ec.europa.eu/taxation_customs/vies/ | 免费网页；无需 key | 2026-11-25 复核：页面可达（JS 应用）；条款未在页面呈现，待核实 | 2026-11-25 | 号码有效 ≠ 正在经营 ≠ 与询盘人有关；只在客户给了 VAT 号时用 |
+| SEC EDGAR | 美国上市公司 | https://www.sec.gov/edgar/search/ | 免费；SEC 要求可识别的 User-Agent 与访问频率 | 2026-11-25 复核：`/os/accessing-edgar-data` 返回 403（机器人拦截）；User-Agent/频率要求已知，细则待核实 | 2026-11-25 | 只覆盖美国上市公司 |
+| trade.gov CSL | 美国多部门限制名单汇总 | https://www.trade.gov/consolidated-screening-list | 免费网页；CSV/TSV/JSON 下载与 API 均可免费访问，无需 key（2026-11-25 页面说明） | 2026-11-25 复核：页面可达；API 免费、无需 key；每日 5:00 ET 更新；使用以联邦官方发布为准 | 2026-11-25 | 只写“疑似命中，需人工核实”，不计分 |
+| UK Companies House | 英国公司登记 | https://find-and-update.company-information.service.gov.uk/ | 网页免费；API 需要 key（待核实） | 2026-11-25 复核：登记查询页可达；`/guidance/companies-house-api` 返回 404，API 条款待核实 | 2026-11-25 | 默认只给链接，不自动查询 |
+| ImportYeti | 美国进口记录补充 | https://www.importyeti.com/ | 免费注册（Sign up free），需登录；首页称 7.15 亿条记录、每日更新 | 2026-11-25 复核：首页与 FAQ 可达；免费额度与覆盖范围答案未展开，待核实 | 2026-11-25 | 只作海关画像补充，覆盖范围与条款未核实前不自动查询 |
 
 **纪律**：查不到只写“未覆盖/未查到”，不扣分；新增来源不得改变风险分、等级、置信度与覆盖分母；`check_sources` 的 `verified_at` / `terms_checked` 字段必须保留，自动化能力另立版本。

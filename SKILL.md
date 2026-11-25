@@ -212,7 +212,7 @@ metadata:
 
 ### 名称 + 电话的起手流程（首个询盘常只有这两项）
 
-1. **电话号码**：`scripts/phone_check` 解析国家区号、有效性、线路类型，与自称国家比对（纯本地计算）。若环境自行安装了 `phonenumbers`（Python）或 `libphonenumber-js`（Node），会额外输出 `number_type`、`carrier`、`carrier_note`、`timezones`、`enriched_by`；这些是**可选依赖，不写入必要安装步骤**，未安装时输出与 v0.6.0 完全一致。号码类型（VOIP / 高费率）与运营商只作线索，**不新增红旗、不计分**（D7）；输入不带 `+` 或 `00` 时仍不猜国家。
+1. **电话号码**：`scripts/phone_check` 解析国家区号、有效性、线路类型，与自称国家比对（纯本地计算）。若环境自行安装了 `phonenumbers`（Python）或 `libphonenumber-js`（Node），会额外输出 `number_type`、`carrier`、`carrier_note`、`timezones`、`enriched_by`；这些是**可选依赖，不写入必要安装步骤**，未安装时输出与 v0.6.0 完全一致。号码类型（VOIP / 高费率）与运营商只作线索，**不新增红旗、不计分**（D7）；输入不带 `+` 或 `00` 时仍不猜国家。v0.13.0 起另输出 `search_variants[]`（≤6 条同一号码的常见写法，只用于检索，**不进卡片与报告**，报告只显示掩码）；`line_type` 为固定电话时输出 `landline_hint: true`，**固话可直接搜地址与地图标注**，是核对公司地址的捷径；`unknown` 时不输出该提示。
 2. **社媒资料**：按 `collection_checklists.md` 的 WhatsApp/Facebook 清单采集（商业资料/头像/简介/页面创建时间/管理员国家）。
 3. **公开检索**：号码多格式 + scam/fraud；号码是否出现在 B2B 平台、地图商家页、官网联系页；公司名查名录或 LinkedIn 公开摘要。**号码与名称出现在同一来源，才算强关联。**
 4. **回流**：一旦查到官网或邮箱域名，现有的域名与邮箱检查全部启用。
@@ -308,6 +308,8 @@ metadata:
 **地图 / 海关 / 社媒不直接标未覆盖**：先按 `data-sources/global.md` 第六节实际查询——地图必须**双向**（按电话 + 按公司名）；海关至少查 2 个免费平台（ImportGenius、Volza，Panjiva/Trademo/52wmb/ExportGenius 可达时）；社媒必须**名称 + 电话（或域名）双匹配**，再看主页是否绑定公司名/域名。只有「名称 + 电话/域名 + 绑定公司名」同时匹配，才记「社媒已验证」；仅同名记 `name-only-match`，不算真实。通道执行后仍无结果才标 `not-covered`，并在卡片写**实际结果**。同名不同公司（名称/电话/网站任一不同）不得合并。
 
 **官网画像优先**：一旦有公司名或工作邮箱，先找官网——**邮箱域名不一定是官网**（如邮箱 `@example.com`，官网可能是 `company.example`）。用公司名 + 国家/城市搜索并检查域名变体；抓主页 / About / Products / Contact，提取公司简介、主营产品、目标市场、成立年份、地址、电话、邮箱；用官网联系页的**姓名 + 电话**与客户提供交叉验证。官网匹配 → 提升置信度；邮箱域名不同但姓名/电话/公司名一致 → 标注「邮箱域名与官网不同，需确认」，不直接判伪。
+
+**转口枢纽的号码不一致（v0.13.0）**：`phone_check` 给出的号码国为阿联酋（AE）、土耳其（TR）、新加坡（SG）、香港（HK）且与自称所在国不同时，属常见转口情形，**不计分**——由 `render_card` 在 `flag_ids_of` 层剔除 `RF-CORP-005` 并记录 `computed.hub_exception`，在「联系方式」备注一句委婉确认（业务所在地与收货地）。这类不一致**不算独立字段**，`RF-CORP-001` 需另有至少 2 个独立矛盾字段才命中。自称国是枢纽国、号码来自非枢纽国时不豁免；没有 `intake.phone_country` 的旧证据包行为不变。模型把 `phone_check` 的 `country` 抄入 `intake.phone_country`（ISO2），不得自行改写为豁免。
 
 ### 检查模块明细
 
@@ -489,9 +491,9 @@ metadata:
 - `scripts/ip_check.py/.mjs` — 邮件来源 IP 分类（默认离线，输出脱敏网段）
 - `scripts/identity_check.py` — 官网画像/社媒回链/头像比对/地图 POI/注册库（v0.9，精简包）
 - `scripts/render_card.py` — 结论卡确定性渲染（v0.9，精简包；Node 对照在仓库）
-- `tests/cases/` — 验收用例 A1–A243
-- `tests/eval/` — 行为评测集（115 条合成询盘 + 评分器）
+- `tests/cases/` — 验收用例 A1–A299
+- `tests/eval/` — 行为评测集（135 条合成询盘 + 评分器）
 - `examples/` — 脱敏样例报告
 - `docs/development.md` — 开发文档
 - `docs/iteration_plan.md` — 迭代方案（v0.4.1–v0.6.0）
-- `docs/iteration_plan_v0.7.md`、`docs/iteration_plan_v0.8.md`、`docs/iteration_plan_v0.9.md`、`docs/iteration_plan_v0.10.md`、`docs/iteration_plan_v0.11.md`、`docs/iteration_plan_v0.12.md` — 后续迭代方案（v0.7.0 / v0.8.0 / v0.9.0 / v0.10.0 / v0.11.0 / v0.12.0）
+- `docs/iteration_plan_v0.7.md`、`docs/iteration_plan_v0.8.md`、`docs/iteration_plan_v0.9.md`、`docs/iteration_plan_v0.10.md`、`docs/iteration_plan_v0.11.md`、`docs/iteration_plan_v0.12.md`、`docs/iteration_plan_v0.13.md` — 后续迭代方案（v0.7.0 / v0.8.0 / v0.9.0 / v0.10.0 / v0.11.0 / v0.12.0 / v0.13.0）

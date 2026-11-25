@@ -1,0 +1,7 @@
+{
+  "id": "A261",
+  "title": "K-02 INV-02 旧证据包回归：扫描全部夹具与内嵌包，含 RF-CORP-005 的旧包均不产生豁免",
+  "type": "hub_regression",
+  "input": { "fixture": "follow_up_base.json" },
+  "expect": { "all_pass": true }
+}

@@ -1,0 +1,16 @@
+{
+  "id": "A285",
+  "title": "K-07 Python 总时限：慢速响应在跨重定向总时限内被中止",
+  "type": "safe_fetch",
+  "input": {
+    "cases": [
+      {
+        "name": "total-timeout",
+        "runtime": "python",
+        "code": "import sys, json, time\nsys.path.insert(0, 'scripts')\nimport identity_check as ic\nic.validate_url = lambda url, resolver=None: None\nclass Headers:\n    def get(self, key):\n        return 'text/html'\nclass Resp:\n    def __init__(self):\n        self.headers = Headers()\n    def __enter__(self):\n        return self\n    def __exit__(self, *a):\n        return False\n    def read(self, n):\n        time.sleep(0.02)\n        return b'x'\nclass Opener:\n    def open(self, req, timeout=None):\n        return Resp()\ntry:\n    ic.safe_open('https://example.com/', timeout=1, opener=Opener(), total_timeout=0.01)\n    print(json.dumps({'status': 'ok'}))\nexcept ic.UnsafeUrl as exc:\n    print(json.dumps({'status': 'unsafe', 'reason': exc.reason}))",
+        "expect": { "status": "unsafe", "reason": "total-timeout" }
+      }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

@@ -1,0 +1,7 @@
+{
+  "id": "A266",
+  "title": "K-03 问题库不含逐国数据（电压/频率/认证机构名称）",
+  "type": "question_bank",
+  "input": {},
+  "expect": { "all_pass": true }
+}

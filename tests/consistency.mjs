@@ -116,16 +116,16 @@ const beforeV011 = failures;
 const readmeText = readFileSync(join(docRoot, 'README.md'), 'utf8');
 const skillText = readFileSync(join(docRoot, 'SKILL.md'), 'utf8');
 const manifest = JSON.parse(readFileSync(join(docRoot, 'submission.manifest.json'), 'utf8'));
-if (manifest.version !== '0.12.0') fail(`manifest version ${manifest.version} != 0.12.0`);
-if (!readmeText.includes('v0.12.0')) fail('README.md: missing v0.12.0');
-if (!readmeText.includes('A1–A243')) fail('README.md: missing A1–A243');
-if (!skillText.includes('A1–A243')) fail('SKILL.md: missing A1–A243');
-if (!skillText.includes('115 条合成询盘')) fail('SKILL.md: missing 115 条合成询盘');
+if (manifest.version !== '0.13.0') fail(`manifest version ${manifest.version} != 0.13.0`);
+if (!readmeText.includes('v0.13.0')) fail('README.md: missing v0.12.0');
+if (!readmeText.includes('A1–A299')) fail('README.md: missing A1–A299');
+if (!skillText.includes('A1–A299')) fail('SKILL.md: missing A1–A299');
+if (!skillText.includes('135 条合成询盘')) fail('SKILL.md: missing 135 条合成询盘');
 const caseCount = readdirSync(join(docRoot, 'tests', 'cases')).filter((name) => /^A\d+\.json$/.test(name)).length;
-if (caseCount !== 243) fail(`tests/cases: ${caseCount} cases != 243`);
+if (caseCount !== 299) fail(`tests/cases: ${caseCount} cases != 299`);
 const evalLines = readFileSync(join(docRoot, 'tests', 'eval', 'inquiries.jsonl'), 'utf8')
   .split(/\r?\n/).filter((line) => line.trim()).length;
-if (evalLines !== 115) fail(`tests/eval/inquiries.jsonl: ${evalLines} lines != 115`);
+if (evalLines !== 135) fail(`tests/eval/inquiries.jsonl: ${evalLines} lines != 135`);
 
 const guideBlocks = [...cardText.matchAll(/```text\r?\n([\s\S]*?)```/g)]
   .map((match) => match[1].replace(/\r\n/g, '\n').replace(/\n$/, ''));

@@ -1,0 +1,22 @@
+{
+  "id": "A276",
+  "title": "K-05 固话输出 landline_hint: true；线路类型未知时不出该提示",
+  "type": "phone_variants",
+  "input": {
+    "cases": [
+      {
+        "name": "fixed-line",
+        "number": "+44 20 7946 0958",
+        "country": "GB",
+        "expect": { "landline_hint": true }
+      },
+      {
+        "name": "unknown-line",
+        "number": "+1 555 0100",
+        "country": "US",
+        "expect": { "landline_hint": null }
+      }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

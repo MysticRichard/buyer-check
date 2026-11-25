@@ -1,0 +1,16 @@
+{
+  "id": "A288",
+  "title": "K-07 完整流程：重定向目标解析到内网时拒绝",
+  "type": "safe_fetch",
+  "input": {
+    "cases": [
+      {
+        "name": "redirect-to-internal",
+        "runtime": "python",
+        "code": "import sys, json\nfrom urllib.request import Request\nsys.path.insert(0, 'scripts')\nimport identity_check as ic\nhandler = ic._SafeRedirectHandler()\norig = ic.validate_url\ndef fake(url, resolver=None):\n    return orig(url, resolver=lambda *a, **k: [(2, 1, 6, '', ('10.0.0.5', 0))])\nic.validate_url = fake\ntry:\n    handler.redirect_request(Request('https://example.com/'), None, 302, '', {}, 'https://evil.example/')\n    print(json.dumps({'status': 'ok'}))\nexcept ic.UnsafeUrl as exc:\n    print(json.dumps({'status': 'unsafe', 'reason': exc.reason}))",
+        "expect": { "status": "unsafe", "reason": "non-global-address" }
+      }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

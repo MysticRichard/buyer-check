@@ -1,0 +1,21 @@
+{
+  "id": "A283",
+  "title": "K-06 Python 与 Node 在官网活跃度与人物层级字段上输出一致",
+  "type": "render_card_parity",
+  "input": {
+    "fixture": "follow_up_base.json",
+    "mutate_layers": {
+      "company": {
+        "credibility": "high",
+        "site_last_updated": "2024-01",
+        "site_sections_seen": ["brands", "projects", "news"]
+      },
+      "person_company_link": {
+        "strength": "strong",
+        "role_level": "assistant_intern",
+        "recent_job_change": true
+      }
+    }
+  },
+  "expect": { "all_pass": true }
+}

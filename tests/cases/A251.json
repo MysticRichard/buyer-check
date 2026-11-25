@@ -1,0 +1,20 @@
+{
+  "id": "A251",
+  "title": "K-01 phishing_like + 风险低 → D（依据为类别）",
+  "type": "lead_matrix",
+  "input": {
+    "fixture": "follow_up_base.json",
+    "cases": [
+      {
+        "name": "phishing-low-risk",
+        "signals": ["contains_login_or_download_link"],
+        "expect_class": "phishing_like",
+        "expect_level": "低",
+        "expect_follow_up_grade": "D",
+        "expect_follow_up_basis": ["lead_class:phishing_like"],
+        "expect_follow_up_advice": "这条提交需要谨慎：先不回复，也不要打开其中的链接或附件。"
+      }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

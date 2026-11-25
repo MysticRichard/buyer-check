@@ -1,0 +1,10 @@
+{
+  "id": "A293",
+  "title": "K-08 索引文件存在与不存在时制裁查询关键字段完全一致",
+  "type": "sanctions_deterministic",
+  "input": {
+    "name": "GLOBAL STAR TRADING CO",
+    "csv": "9001,\"KHALIL, AHMED\",individual,\"TEST-PROGRAM\",-0-,-0-,-0-,-0-,-0-,-0-,-0-,-0-\n9002,\"DELGADO, MARCUS\",individual,\"TEST-PROGRAM\",-0-,-0-,-0-,-0-,-0-,-0-,-0-,-0-\n9003,\"GLOBAL STAR TRADING CO\",-0-,\"TEST-PROGRAM\",-0-,-0-,-0-,-0-,-0-,-0-,-0-,-0-\n9004,\"DOE, JOHN\",individual,\"TEST-PROGRAM\",-0-,-0-,-0-,-0-,-0-,-0-,-0-,-0-\n"
+  },
+  "expect": { "all_pass": true, "match_count": 1 }
+}

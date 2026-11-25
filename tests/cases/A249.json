@@ -1,0 +1,38 @@
+{
+  "id": "A249",
+  "title": "K-01 reseller + 低风险 + 具体信号 + 身份 ambiguous + 置信度中 → B",
+  "type": "lead_matrix",
+  "input": {
+    "fixture": "follow_up_base.json",
+    "cases": [
+      {
+        "name": "reseller-ambiguous",
+        "signals": ["mentions_resale_or_distribution", "names_product_model"],
+        "anchors": { "count": 1 },
+        "layers": {
+          "company": { "credibility": "high" },
+          "person_company_link": { "strength": "medium" },
+          "person_authenticity": { "level": "unknown" }
+        },
+        "identity": {
+          "candidates": [
+            { "name": "Ana Example", "country": "BR", "registry_id": "X1", "strength": "strong", "match_keys": ["legal_name", "domain"] },
+            { "name": "Ana Example", "country": "AR", "registry_id": "X2", "strength": "strong", "match_keys": ["legal_name", "domain"] }
+          ]
+        },
+        "expect_class": "reseller",
+        "expect_identity_status": "ambiguous",
+        "expect_confidence": "中",
+        "expect_follow_up_grade": "B",
+        "expect_follow_up_basis": [
+          "lead_class:reseller",
+          "risk:低",
+          "concrete_signal:names_product_model",
+          "confidence:中",
+          "identity:ambiguous"
+        ]
+      }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

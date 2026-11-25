@@ -104,6 +104,8 @@
 - `form_meta`：官网表单提交信息，见 2.2。只接收用户粘贴，不采集、不植入追踪。
 - `ship_to`：收货信息，见 2.2。
 - v0.12.0 交易背景（全部可选）：`end_use`（≤80 字）、`end_user`、`payer`、`consignee`（自然人姓名按 INV-07 脱敏）、`buyer_type`（`distributor`/`wholesaler_retailer`/`oem_manufacturer`/`contractor_epc`/`end_user`/`trading_intermediary`/`unknown`）。付款方或收货方与买家不同只给固定提示「付款方/收货方与买家不同：请书面确认关系与授权」，不计分、不加红旗、不进卡片行。
+- v0.13.0 新增可选字段（全部可选；旧证据包不带时渲染字节与 v0.12.0 一致）：
+  - `intake.phone_country`：`phone_check` 输出的号码国 ISO2，由模型原样抄入。与 `RF-CORP-005` 配合：号码国属**转口枢纽** `AE / TR / SG / HK` 且与自称所在国不同时，脚本在 `flag_ids_of` 层剔除该红旗（不计分），`computed.hub_exception` 记录 `{flag, phone_country}`，并在「联系方式」备注一句委婉确认。该号码不一致**不算独立字段**，不参与 `RF-CORP-001` 的独立矛盾计数。自称国是枢纽国、号码来自非枢纽国时不豁免。
 
 **`display`（模型填文字，脚本渲染）**：`customer_label`、`inquiry_type`、`dim_notes{company, link, contact, behavior, compliance, scale}`、`attention[]`、`verified[]`、`missing[]`、`open_questions[]`、`scripts[]`。
 

@@ -1,0 +1,32 @@
+{
+  "id": "A268",
+  "title": "K-04 海关画像：供应商含 CN 时输出“已有中国供应商”固定提示，不计分",
+  "type": "render_card",
+  "input": {
+    "fixture": "follow_up_base.json",
+    "mutate_customs_profile": {
+      "freq_12m": "medium",
+      "shipment_size": "fcl",
+      "main_hs": ["850110", "850440"],
+      "supplier_origins": ["CN", "DE"],
+      "source_url": "https://importyeti.example/acme",
+      "observed_at": "2026-10-01"
+    }
+  },
+  "expect": {
+    "status": "ok",
+    "customs_hint": "对方已有来自中国的供应商：首轮建议突出价格之外的差异，如交期、品控、认证。",
+    "customs_profile": {
+      "freq_12m": "medium",
+      "shipment_size": "fcl",
+      "main_hs": ["850110", "850440"],
+      "main_hs_ignored": 0,
+      "supplier_origins": ["CN", "DE"],
+      "supplier_origins_ignored": 0,
+      "source_url": "https://importyeti.example/acme",
+      "observed_at": "2026-10-01",
+      "follow_up_hint": "对方已有来自中国的供应商：首轮建议突出价格之外的差异，如交期、品控、认证。"
+    },
+    "risk_score": 0
+  }
+}

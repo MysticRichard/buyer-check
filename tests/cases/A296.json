@@ -1,0 +1,7 @@
+{
+  "id": "A296",
+  "title": "K-08 误报测量脚本可复现：只依赖本地缓存，缓存缺失时跳过而不失败",
+  "type": "false_positive",
+  "input": {},
+  "expect": { "all_pass": true }
+}

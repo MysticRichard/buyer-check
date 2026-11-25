@@ -47,6 +47,7 @@ const NON_TARGET_CLASSES = new Set([
   'individual_research',
 ]);
 const IDENTITY_STATUSES = ['resolved', 'probable', 'ambiguous', 'unresolved'];
+const FOLLOW_UP_GRADES = ['A', 'B', 'C', 'D'];
 
 function loadCorpus() {
   const lines = readFileSync(CORPUS, 'utf8').split(/\r?\n/).filter((l) => l.trim());
@@ -102,6 +103,8 @@ function evaluate(corpus, predictions) {
   const coveredFlags = [...flagStats.keys()];
   const lead = evaluateLeadClasses(corpus, byId);
   const identity = evaluateIdentityStatuses(corpus, byId);
+  const followUp = evaluateFollowUpGrades(corpus, byId);
+  const hub = evaluateHubExceptions(corpus, byId);
   return {
     inquiries: corpus.length,
     normal_inquiries: normalTotal,
@@ -111,6 +114,8 @@ function evaluate(corpus, predictions) {
     per_flag: perFlag,
     lead,
     identity,
+    follow_up: followUp,
+    hub,
   };
 }
 
@@ -235,6 +240,71 @@ function evaluateLeadClasses(corpus, byId) {
   };
 }
 
+function evaluateFollowUpGrades(corpus, byId) {
+  const labeled = corpus.filter((item) => FOLLOW_UP_GRADES.includes(item.expected_follow_up_grade));
+  const predictedCount = labeled.filter((item) => FOLLOW_UP_GRADES.includes((byId.get(item.id) || {}).follow_up_grade)).length;
+  const base = {
+    labeled_inquiries: labeled.length,
+    predicted_inquiries: predictedCount,
+    evaluated: predictedCount > 0,
+    classes: FOLLOW_UP_GRADES,
+  };
+  if (predictedCount === 0) return base;
+
+  const confusion = {};
+  const stats = new Map();
+  for (const grade of FOLLOW_UP_GRADES) {
+    confusion[grade] = {};
+    for (const predicted of FOLLOW_UP_GRADES) confusion[grade][predicted] = 0;
+    stats.set(grade, { tp: 0, fn: 0, fp: 0, support: 0 });
+  }
+  for (const item of labeled) {
+    const expected = item.expected_follow_up_grade;
+    const predicted = (byId.get(item.id) || {}).follow_up_grade;
+    if (!FOLLOW_UP_GRADES.includes(predicted)) continue;
+    confusion[expected][predicted] += 1;
+    stats.get(expected).support += 1;
+    if (expected === predicted) {
+      stats.get(expected).tp += 1;
+    } else {
+      stats.get(expected).fn += 1;
+      stats.get(predicted).fp += 1;
+    }
+  }
+  const perClass = {};
+  for (const grade of FOLLOW_UP_GRADES) {
+    const s = stats.get(grade);
+    const recall = s.tp + s.fn === 0 ? null : s.tp / (s.tp + s.fn);
+    const precision = s.tp + s.fp === 0 ? null : s.tp / (s.tp + s.fp);
+    perClass[grade] = {
+      support: s.support,
+      tp: s.tp,
+      fn: s.fn,
+      fp: s.fp,
+      recall: recall === null ? 'n/a' : Math.round(recall * 1000) / 1000,
+      precision: precision === null ? 'n/a' : Math.round(precision * 1000) / 1000,
+    };
+  }
+  return { ...base, per_class: perClass, confusion };
+}
+
+function evaluateHubExceptions(corpus, byId) {
+  const labeled = corpus.filter((item) => typeof item.expected_hub_exception === 'boolean');
+  const predictedCount = labeled.filter((item) => typeof (byId.get(item.id) || {}).hub_exception === 'boolean').length;
+  const base = { labeled_inquiries: labeled.length, predicted_inquiries: predictedCount, evaluated: predictedCount > 0 };
+  if (predictedCount === 0) return base;
+  const confusion = { true: { true: 0, false: 0 }, false: { true: 0, false: 0 } };
+  let correct = 0;
+  for (const item of labeled) {
+    const expected = item.expected_hub_exception;
+    const predicted = (byId.get(item.id) || {}).hub_exception;
+    if (typeof predicted !== 'boolean') continue;
+    confusion[String(expected)][String(predicted)] += 1;
+    if (expected === predicted) correct += 1;
+  }
+  return { ...base, confusion, correct, accuracy: predictedCount === 0 ? 'n/a' : Math.round((correct / predictedCount) * 1000) / 1000 };
+}
+
 function main() {
   const args = process.argv.slice(2);
   const corpus = loadCorpus();
@@ -246,6 +316,8 @@ function main() {
       flags: item.expected_flags,
       lead_class: item.expected_lead_class,
       identity_status: item.expected_identity_status,
+      follow_up_grade: item.expected_follow_up_grade,
+      hub_exception: item.expected_hub_exception,
     }));
     console.log('mode: self-check (expectations used as predictions — must be perfect)');
   } else if (args[0]) {
@@ -302,6 +374,28 @@ function main() {
     console.log('\nidentity-status metrics: skipped (no identity_status in predictions)');
   }
 
+  if (result.follow_up.evaluated) {
+    console.log(`\nfollow-up grade metrics (${result.follow_up.predicted_inquiries}/${result.follow_up.labeled_inquiries} labeled inquiries have a prediction):`);
+    for (const [name, m] of Object.entries(result.follow_up.per_class)) {
+      console.log(`  ${name}  recall=${m.recall}  precision=${m.precision}  support=${m.support}  (tp ${m.tp} / fn ${m.fn} / fp ${m.fp})`);
+    }
+    console.log('\nfollow-up confusion matrix (expected -> predicted):');
+    const header = `  ${'expected'.padEnd(10)}${result.follow_up.classes.map((name) => name.padStart(8)).join('')}`;
+    console.log(header);
+    for (const expected of result.follow_up.classes) {
+      const row = result.follow_up.classes.map((predicted) => String(result.follow_up.confusion[expected]?.[predicted] ?? 0).padStart(8)).join('');
+      console.log(`  ${expected.padEnd(10)}${row}`);
+    }
+  } else {
+    console.log('\nfollow-up grade metrics: skipped (no follow_up_grade in predictions)');
+  }
+
+  if (result.hub.evaluated) {
+    console.log(`\nhub-exception metrics: ${result.hub.correct}/${result.hub.predicted_inquiries} correct (accuracy ${result.hub.accuracy})`);
+  } else {
+    console.log('\nhub-exception metrics: skipped (no hub_exception in predictions)');
+  }
+
   if (args[0] === '--self') {
     const imperfect = Object.values(result.per_flag).some((m) => m.recall !== 1 || m.fp !== 0);
     const classImperfect = result.lead.evaluated && Object.entries(result.lead.per_class).some(
@@ -310,7 +404,11 @@ function main() {
     const identityImperfect = result.identity.evaluated && Object.entries(result.identity.per_status).some(
       ([, m]) => m.support > 0 && (m.recall !== 1 || m.fp !== 0),
     );
-    if (imperfect || classImperfect || identityImperfect || result.false_alarms_on_normal > 0 || (result.lead.evaluated && !result.lead.target_met)) {
+    const followUpImperfect = result.follow_up.evaluated && Object.entries(result.follow_up.per_class).some(
+      ([, m]) => m.support > 0 && (m.recall !== 1 || m.fp !== 0),
+    );
+    const hubImperfect = result.hub.evaluated && result.hub.correct !== result.hub.predicted_inquiries;
+    if (imperfect || classImperfect || identityImperfect || followUpImperfect || hubImperfect || result.false_alarms_on_normal > 0 || (result.lead.evaluated && !result.lead.target_met)) {
       console.log('\nself-check FAILED: scorer or corpus is inconsistent');
       process.exit(1);
     }

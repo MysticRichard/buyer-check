@@ -1,0 +1,16 @@
+{
+  "id": "A287",
+  "title": "K-07 注册库命令：抓取被 SSRF 校验拒绝时返回结构化 unsafe_url 与 reason",
+  "type": "safe_fetch",
+  "input": {
+    "cases": [
+      {
+        "name": "registry-unsafe",
+        "runtime": "python",
+        "code": "import sys, json\nfrom types import SimpleNamespace\nsys.path.insert(0, 'scripts')\nimport identity_check as ic\ndef boom(*a, **k):\n    raise ic.UnsafeUrl('non-global-address')\nic.fetch_json = boom\nargs = SimpleNamespace(company='Acme AS', country='NO', claimed_country=None, online=True, fixture_json=None, timeout=1)\nprint(json.dumps(ic.registry_command(args)))",
+        "expect": { "status": "unsafe_url", "reason": "non-global-address" }
+      }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

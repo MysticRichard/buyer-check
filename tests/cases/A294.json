@@ -1,0 +1,10 @@
+{
+  "id": "A294",
+  "title": "K-08 UK 合成夹具（引号内含逗号）Python 与 Node 解析一致",
+  "type": "sanctions_csv",
+  "input": {
+    "mode": "uk",
+    "csv": "g,1,GroupA,ref,name1,name2,name3,name4,name5,type,Name type\ng,2,GroupA,ref,\"Acme, Line One\",,,,,\"Alias, Line\",alias,Name type\ng,3,GroupB,ref,,Acme Two,,,,,primary,Name type\n"
+  },
+  "expect": { "all_pass": true, "count": 2, "names": ["Acme, Line One Alias, Line", "Acme Two"] }
+}

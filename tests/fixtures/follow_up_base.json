@@ -1,0 +1,15 @@
+{
+  "subject": { "company": "Acme Example Trading", "country": "BR", "domain": "acme.example" },
+  "intake": {
+    "inquiry_text": "We need 500 units of model X for our project.",
+    "lead_signals": ["states_end_use_project", "names_product_model"]
+  },
+  "coverage": { "checked": 8, "total": 8, "uncovered": [] },
+  "anchors": { "count": 3 },
+  "layers": {
+    "company": { "credibility": "high" },
+    "person_company_link": { "strength": "strong" },
+    "person_authenticity": { "level": "unknown" }
+  },
+  "display": { "customer_label": "Acme Example Trading", "inquiry_type": "general" }
+}

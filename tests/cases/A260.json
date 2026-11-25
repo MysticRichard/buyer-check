@@ -1,0 +1,10 @@
+{
+  "id": "A260",
+  "title": "K-02 文档一致：转口枢纽国的号码不一致不算 RF-CORP-001 的独立字段（三处文档同步）",
+  "type": "doc_contains",
+  "input": {
+    "files": ["red_flags.md", "SKILL.md", "card_template.md"],
+    "needles": ["转口枢纽", "不算独立字段", "RF-CORP-005"]
+  },
+  "expect": { "all_pass": true }
+}

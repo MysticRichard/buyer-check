@@ -1,0 +1,13 @@
+{
+  "id": "A272",
+  "title": "K-04 旧证据包不含 customs_profile：卡片字节一致，JSON 不新增该键",
+  "type": "render_card",
+  "input": { "fixture": "card_harbor.json" },
+  "expect": {
+    "status": "ok",
+    "card_file": "card_harbor.expected.txt",
+    "customs_profile": null,
+    "line_count_max": 50,
+    "first_screen_max": 14
+  }
+}

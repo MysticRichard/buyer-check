@@ -414,6 +414,15 @@ const LEAD_CLASS_CONCLUSION = {
   competitor_probe: '这条更像了解行情：只发标准目录和公开价，不发底价和客户信息。',
   individual_research: '看起来是个人或调研需求：低优先级，按标准资料回复即可。',
 };
+const FOLLOW_UP_ADVICE = {
+  A: '高潜力：建议投入深查，并按对方角色定制首封回复。',
+  B: '信息还不够：先边聊边了解，用轻量问题补信息，暂不做深度背调。',
+  C: '低优先级：用标准模板礼貌回复，不投入深查。',
+  D: '这条提交需要谨慎：先不回复，也不要打开其中的链接或附件。',
+};
+const FOLLOW_UP_ADVICE_RISK = '风险较高：先暂缓投入，通过独立渠道确认疑点后再决定。';
+const HUB_COUNTRIES = new Set(['AE', 'TR', 'SG', 'HK']);
+const HUB_CONTACT_NOTE = '号码来自转口枢纽国家，与自称所在国不同较常见：不计分，建议礼貌确认业务所在地与收货地。';
 const RISKY_ATTACHMENT_EXTS = new Set(['exe', 'scr', 'js', 'jar', 'iso', 'img', 'html', 'htm', 'hta', 'lnk', 'vbs', 'msi', 'bat', 'cmd']);
 const CHANNEL_SET = new Set(['alibaba', 'facebook', 'whatsapp', 'website_form', 'email', 'linkedin', 'trade_show', 'made_in_china', 'social_media', 'other', 'unknown']);
 
@@ -617,19 +626,19 @@ function flagIdsOf(evidence) {
     .filter(Boolean);
 }
 
-export function computeCredit(evidence) {
+export function computeCredit(evidence, ids = null) {
   const layers = evidence.layers || {};
-  const ids = flagIdsOf(evidence);
+  const effectiveIds = ids === null ? flagIdsOf(evidence) : ids;
 
   const companyCred = layerValue(layers, 'company', 'credibility');
   let companyTenths = { high: 10, medium: 6, low: 0, unknown: 0 }[companyCred] ?? 0;
-  let companyContra = hasFlag(ids, COMPANY_CONTRA);
+  let companyContra = hasFlag(effectiveIds, COMPANY_CONTRA);
   if (companyContra) companyTenths = 0;
 
   let linkTenths = { strong: 10, medium: 6, weak: 3, none: 0, contradiction: 0 }[layerValue(layers, 'person_company_link', 'strength')] ?? 0;
   const personLevel = layerValue(layers, 'person_authenticity', 'level');
   if (personLevel === 'high' && linkTenths < 10) linkTenths = Math.min(10, linkTenths + 1);
-  const linkContra = layerValue(layers, 'person_company_link', 'strength') === 'contradiction' || hasFlag(ids, LINK_CONTRA);
+  const linkContra = layerValue(layers, 'person_company_link', 'strength') === 'contradiction' || hasFlag(effectiveIds, LINK_CONTRA);
   if (linkContra) linkTenths = 0;
 
   const contact = layers.contact || {};
@@ -637,7 +646,7 @@ export function computeCredit(evidence) {
   const contactEmail = contact.business_email === undefined ? checkNormal(evidence, 'email') : contact.business_email === true;
   const contactDomain = contact.domain_aged === undefined ? checkNormal(evidence, 'domain') : contact.domain_aged === true;
   let contactThirds = [contactPhone, contactEmail, contactDomain].filter(Boolean).length;
-  const contactContra = hasFlag(ids, CONTACT_CONTRA);
+  const contactContra = hasFlag(effectiveIds, CONTACT_CONTRA);
   if (contactContra) contactThirds = 0;
 
   const compliance = layers.compliance || {};
@@ -655,7 +664,7 @@ export function computeCredit(evidence) {
   let scaleHalves = 0;
   if (mapVerdict === 'matched') scaleHalves += 1;
   if (customsVerdict === 'consistent') scaleHalves += 1;
-  const scaleContra = hasFlag(ids, SCALE_CONTRA);
+  const scaleContra = hasFlag(effectiveIds, SCALE_CONTRA);
   if (scaleContra) scaleHalves = 0;
 
   const creditTenths = 40 * companyTenths + 25 * linkTenths + 50 * contactThirds + 50 * complianceHalves + 50 * scaleHalves;
@@ -1149,6 +1158,155 @@ function leadClassOf(evidence) {
     lead_signals_ignored: ignored,
     lead_class_source: 'signals',
   };
+}
+
+function followUpGradeOf(evidence, lead, level, confidence, identity) {
+  const signals = new Set(lead.lead_signals || []);
+  const cls = lead.lead_class;
+  let basis = [];
+  let advice = null;
+  let grade;
+  if (cls === 'automated_submission' || cls === 'phishing_like') {
+    grade = 'D';
+    advice = FOLLOW_UP_ADVICE.D;
+    basis = [`lead_class:${cls}`];
+  } else if (level === '高') {
+    grade = 'D';
+    advice = FOLLOW_UP_ADVICE_RISK;
+    basis = ['risk:高'];
+  } else if (cls === 'vendor_solicitation' || cls === 'competitor_probe' || cls === 'individual_research') {
+    grade = 'C';
+    advice = FOLLOW_UP_ADVICE.C;
+    basis = [`lead_class:${cls}`];
+  } else if (cls === 'target_end_user' || cls === 'reseller') {
+    const concrete = [...signals].filter((item) => LEAD_CONCRETE_SIGNALS.has(item)).sort();
+    const identityOk = !('identity' in evidence) || ['resolved', 'probable'].includes(identity.status);
+    if (level === '低' && concrete.length > 0 && (confidence === '高' || identityOk)) {
+      grade = 'A';
+      advice = FOLLOW_UP_ADVICE.A;
+    } else {
+      grade = 'B';
+      advice = FOLLOW_UP_ADVICE.B;
+    }
+    basis = [`lead_class:${cls}`, `risk:${level || '需人工核实'}`];
+    basis.push(...concrete.map((item) => `concrete_signal:${item}`));
+    basis.push(`confidence:${confidence || '低'}`);
+    if ('identity' in evidence) basis.push(`identity:${identity.status || 'unresolved'}`);
+  } else {
+    grade = 'B';
+    advice = FOLLOW_UP_ADVICE.B;
+    basis = [`lead_class:${cls || 'unclear'}`, `risk:${level || '需人工核实'}`];
+    if (signals.size > 0) basis.push(`signals:${[...signals].sort().join(',')}`);
+    basis.push(`confidence:${confidence || '低'}`);
+  }
+  return { grade, advice, basis };
+}
+
+function followUpGradeIgnoredOf(evidence) {
+  const intake = evidence.intake && typeof evidence.intake === 'object' && !Array.isArray(evidence.intake) ? evidence.intake : {};
+  const computed = evidence.computed && typeof evidence.computed === 'object' && !Array.isArray(evidence.computed) ? evidence.computed : {};
+  return [evidence.follow_up_grade, intake.follow_up_grade, computed.follow_up_grade].some((value) => value !== undefined && value !== null) ? 1 : 0;
+}
+
+function hubExceptionOf(evidence, ids) {
+  if (!ids.includes('RF-CORP-005')) return null;
+  const intake = evidence.intake && typeof evidence.intake === 'object' && !Array.isArray(evidence.intake) ? evidence.intake : {};
+  const phoneCountry = text(intake.phone_country).toUpperCase();
+  const claimed = text((evidence.subject || {}).country || intake.country).toUpperCase();
+  if (HUB_COUNTRIES.has(phoneCountry) && claimed && claimed !== phoneCountry) {
+    return { flag: 'RF-CORP-005', phone_country: phoneCountry };
+  }
+  return null;
+}
+
+const CUSTOMS_FREQ = new Set(['none', 'low', 'medium', 'high', 'unknown']);
+const SHIPMENT_SIZES = new Set(['fcl', 'lcl', 'mixed', 'unknown']);
+const SITE_SECTIONS = new Set(['about', 'products', 'brands', 'projects', 'news']);
+const ROLE_LEVELS = new Set(['owner_director', 'purchasing', 'technical', 'assistant_intern', 'other', 'unknown']);
+const CUSTOMS_HINT_CN = '对方已有来自中国的供应商：首轮建议突出价格之外的差异，如交期、品控、认证。';
+const CUSTOMS_HINT_OTHER = '对方当前供应商主要来自其他地区：可能存在替换或降本空间，需结合对方需求核实。';
+
+function asOfDate(evidence) {
+  const parsed = parseIsoDate(evidence.as_of);
+  if (parsed) return parsed;
+  const retrieved = (evidence.evidence || [])
+    .filter((item) => item && typeof item === 'object')
+    .map((item) => parseIsoDate(item.retrieved_at))
+    .filter(Boolean);
+  return retrieved.length > 0 ? new Date(Math.max(...retrieved.map((item) => item.getTime()))) : null;
+}
+
+function customsProfileOf(evidence) {
+  const raw = evidence.customs_profile;
+  if (raw === undefined || raw === null) return null;
+  const data = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+  let freq = text(data.freq_12m).toLowerCase();
+  if (!CUSTOMS_FREQ.has(freq)) freq = 'unknown';
+  let size = text(data.shipment_size).toLowerCase();
+  if (!SHIPMENT_SIZES.has(size)) size = 'unknown';
+  const mainHs = [];
+  let mainHsIgnored = 0;
+  for (const item of data.main_hs || []) {
+    const value = text(item).trim();
+    if (/^\d{6}$/.test(value) && !mainHs.includes(value) && mainHs.length < 3) mainHs.push(value);
+    else mainHsIgnored += 1;
+  }
+  const origins = [];
+  let originsIgnored = 0;
+  for (const item of data.supplier_origins || []) {
+    const value = text(item).trim().toUpperCase();
+    if (/^[A-Z]{2}$/.test(value) && !origins.includes(value) && origins.length < 5) origins.push(value);
+    else originsIgnored += 1;
+  }
+  let hint = null;
+  if (origins.length > 0) hint = origins.includes('CN') ? CUSTOMS_HINT_CN : CUSTOMS_HINT_OTHER;
+  return {
+    freq_12m: freq,
+    shipment_size: size,
+    main_hs: mainHs,
+    main_hs_ignored: mainHsIgnored,
+    supplier_origins: origins,
+    supplier_origins_ignored: originsIgnored,
+    source_url: text(data.source_url) || null,
+    observed_at: text(data.observed_at) || null,
+    follow_up_hint: hint,
+  };
+}
+
+function siteActivityOf(evidence) {
+  const layers = evidence.layers && typeof evidence.layers === 'object' ? evidence.layers : {};
+  const company = layers.company && typeof layers.company === 'object' ? layers.company : {};
+  const last = text(company.site_last_updated).trim();
+  const sections = [];
+  for (const item of company.site_sections_seen || []) {
+    const value = text(item).toLowerCase();
+    if (SITE_SECTIONS.has(value) && !sections.includes(value)) sections.push(value);
+  }
+  if (!last && sections.length === 0) return null;
+  const hints = [];
+  const asOf = asOfDate(evidence);
+  if (/^\d{4}-\d{2}$/.test(last) && asOf) {
+    const lastIndex = Number(last.slice(0, 4)) * 12 + Number(last.slice(5, 7));
+    const asOfIndex = asOf.getUTCFullYear() * 12 + (asOf.getUTCMonth() + 1);
+    if (asOfIndex - lastIndex > 12) hints.push('官网久未更新：可结合社媒近况判断活跃度，不计分。');
+  }
+  if (sections.includes('brands')) hints.push('可从代理品牌判断对品质与合规的要求');
+  if (sections.includes('projects')) hints.push('可判断是否为工程承包商');
+  return { site_last_updated: last || null, site_sections_seen: sections, hints };
+}
+
+function personRoleOf(evidence) {
+  const layers = evidence.layers && typeof evidence.layers === 'object' ? evidence.layers : {};
+  const link = layers.person_company_link && typeof layers.person_company_link === 'object' ? layers.person_company_link : {};
+  let role = text(link.role_level).toLowerCase();
+  if (!ROLE_LEVELS.has(role)) role = null;
+  let recent = link.recent_job_change;
+  if (recent !== true && recent !== false) recent = null;
+  if (role === null && recent === null) return null;
+  const hints = [];
+  if (role === 'assistant_intern') hints.push('对方可能只负责收集资料，决策人可能另有其人');
+  if (recent === true) hints.push('对方刚到新公司，可能在重建供应商库，是切入机会，需自行确认。');
+  return { role_level: role, recent_job_change: recent, hints };
 }
 
 function validateChecksIncomplete(evidence) {
@@ -1677,8 +1835,9 @@ export function renderCard(evidence, rules) {
     : false;
 
   const baseIds = flagIdsOf(evidence);
+  const hub = hubExceptionOf(evidence, baseIds);
   const derivedFlags = deriveFlags(evidence);
-  const ids = [...new Set([...baseIds, ...derivedFlags.map((item) => item.id)])];
+  const ids = [...new Set([...baseIds.filter((id) => !(hub && id === 'RF-CORP-005')), ...derivedFlags.map((item) => item.id)])];
   const derivedMap = new Map(derivedFlags.map((item) => [item.id, item]));
   const flagIndex = new Map((rules.flags || []).map((flag) => [flag.id, flag]));
   const flagWeight = (id) => (flagIndex.get(id) || {}).weight || 0;
@@ -1708,7 +1867,7 @@ export function renderCard(evidence, rules) {
     }
   }
 
-  const credit = computeCredit(evidence);
+  const credit = computeCredit(evidence, ids);
   const level = recomputed.level;
   const score = recomputed.risk_score;
   let confidence = recomputed.confidence || evidence.confidence || '低';
@@ -1750,6 +1909,9 @@ export function renderCard(evidence, rules) {
   const tradeBackground = tradeBackgroundInfo(evidence);
   const leadConclusion = level === '高' ? conclusion : (LEAD_CLASS_CONCLUSION[lead.lead_class] || conclusion);
   const leadSuffix = lead.lead_class === 'unclear' ? '' : ` · 类别：${lead.lead_class_label}`;
+  const followUp = followUpGradeOf(evidence, lead, level, confidence, identity);
+  const followUpIgnored = followUpGradeIgnoredOf(evidence);
+  const finalLeadSuffix = leadSuffix && lead.lead_class_source === 'signals' ? `${leadSuffix} · 跟进：${followUp.grade}` : leadSuffix;
   const verdict = verdictLine(display, evidence, level, actions);
 
   const dimNotes = display.dim_notes || {};
@@ -1760,7 +1922,11 @@ export function renderCard(evidence, rules) {
   const dims = credit.dims.map((dim) => {
     let note = text(dimNotes[dim.key]);
     if (newMode && dim.status === '未核实' && (!note || note === '暂未核实')) note = NEXT_STEPS_DIM[dim.key] || '人工补查一次';
-    return { ...dim, note: note || defaultDimNote(dim.key, dim.status) };
+    let resolved = note || defaultDimNote(dim.key, dim.status);
+    if (hub && dim.key === 'contact' && !resolved.includes(HUB_CONTACT_NOTE)) {
+      resolved = resolved ? `${resolved}；${HUB_CONTACT_NOTE}` : HUB_CONTACT_NOTE;
+    }
+    return { ...dim, note: resolved };
   });
   let behaviorNote = text(dimNotes.behavior);
   if (newMode && behaviorStatus === '未核实' && (!behaviorNote || behaviorNote === '暂未核实')) behaviorNote = NEXT_STEPS_DIM.behavior;
@@ -1781,6 +1947,7 @@ export function renderCard(evidence, rules) {
   let attention = [];
   if (Array.isArray(display.attention) && display.attention.length > 0) {
     attention = display.attention.map((item) => ({ ...item }));
+    if (hub) attention = attention.filter((item) => !(item.kind === 'flag' && item.flag_id === 'RF-CORP-005'));
   } else if ('evidence' in evidence) {
     const flagEntries = new Map((evidence.flags || []).filter((item) => item && typeof item === 'object' && text(item.id)).map((item) => [text(item.id), item]));
     attention = [];
@@ -1919,7 +2086,7 @@ export function renderCard(evidence, rules) {
     lines.push(`⚠ 本次未完成：${details}`);
   }
   if (verdict.text) lines.push(verdict.text);
-  lines.push(`**结论：${leadConclusion}** 客户：${customerLabel(evidence, display)} · ${inquiryLabel(evidence, display)}${leadSuffix}`);
+  lines.push(`**结论：${leadConclusion}** 客户：${customerLabel(evidence, display)} · ${inquiryLabel(evidence, display)}${finalLeadSuffix}`);
   lines.push('');
   lines.push('| 动作 | 建议 | 条件 |');
   lines.push('| --- | --- | --- |');
@@ -2062,7 +2229,7 @@ export function renderCard(evidence, rules) {
     return { status: 'invalid-input', errors: [{ code: 'plaintext-id', field: 'card' }] };
   }
 
-  return {
+  const result = {
     status: 'ok',
     credit: { score: credit.score, tier: credit.tier },
     level,
@@ -2083,6 +2250,11 @@ export function renderCard(evidence, rules) {
       lead_signals_ignored: lead.lead_signals_ignored,
       lead_class_source: lead.lead_class_source,
       identity_status: identity.status,
+      follow_up_grade: followUp.grade,
+      follow_up_advice: followUp.advice,
+      follow_up_grade_basis: followUp.basis,
+      follow_up_grade_ignored: followUpIgnored,
+      hub_exception: hub,
     },
     identity,
     form_meta_anomalies: formMeta.anomalies,
@@ -2096,6 +2268,13 @@ export function renderCard(evidence, rules) {
     first_screen_lines: firstScreenLines,
     card: neutralizeMarkdown(lines.join('\n')),
   };
+  const customs = customsProfileOf(evidence);
+  if (customs !== null) result.customs_profile = customs;
+  const siteActivity = siteActivityOf(evidence);
+  if (siteActivity !== null) result.site_activity = siteActivity;
+  const personRole = personRoleOf(evidence);
+  if (personRole !== null) result.person_role = personRole;
+  return result;
 }
 
 export function ladderCombinations() {
@@ -2321,6 +2500,7 @@ const result = renderCard({ ...evidence, quick_check: true }, rules);
       name: batchName(evidence, position + 1).replace(/\|/g, '/'),
       level,
       symbol: BATCH_SYMBOLS[level] || '⚪',
+      follow_up: (result.computed || {}).follow_up_grade,
       credit,
       risk: batchTopRisk(evidence, rules).replace(/\|/g, '/'),
       next,
@@ -2353,10 +2533,10 @@ const result = renderCard({ ...evidence, quick_check: true }, rules);
     return a.index - b.index;
   });
   const lines = [
-    '| # | 公司 / 邮箱域 | 等级 | 核实度 | 最大风险 | 建议 |',
-    '| --- | --- | --- | --- | --- | --- |',
+    '| # | 公司 / 邮箱域 | 等级 | 跟进 | 核实度 | 最大风险 | 建议 |',
+    '| --- | --- | --- | --- | --- | --- | --- |',
   ];
-  for (const row of rows) lines.push(`| ${row.index} | ${row.name} | ${row.symbol} ${row.level} | ${row.credit} | ${row.risk} | ${row.next} |`);
+  for (const row of rows) lines.push(`| ${row.index} | ${row.name} | ${row.symbol} ${row.level} | ${row.follow_up || '—'} | ${row.credit} | ${row.risk} | ${row.next} |`);
   if (hints.length) {
     lines.push('');
     lines.push(...hints);

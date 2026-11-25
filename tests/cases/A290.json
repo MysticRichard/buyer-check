@@ -1,0 +1,30 @@
+{
+  "id": "A290",
+  "title": "K-07 完整流程：响应超过 2 MiB 与内容类型不符时拒绝",
+  "type": "safe_fetch",
+  "input": {
+    "cases": [
+      {
+        "name": "too-large",
+        "runtime": "python",
+        "code": "import sys, json\nsys.path.insert(0, 'scripts')\nimport identity_check as ic\nic.validate_url = lambda url, resolver=None: None\nclass Headers:\n    def get(self, key):\n        return 'text/html'\nclass Resp:\n    def __init__(self):\n        self.headers = Headers()\n        self.sent = False\n    def __enter__(self):\n        return self\n    def __exit__(self, *a):\n        return False\n    def read(self, n):\n        if self.sent:\n            return b''\n        self.sent = True\n        return b'x' * (ic.MAX_FETCH_BYTES + 1)\nclass Opener:\n    def open(self, req, timeout=None):\n        return Resp()\ntry:\n    ic.safe_open('https://example.com/', opener=Opener())\n    print(json.dumps({'status': 'ok'}))\nexcept ic.UnsafeUrl as exc:\n    print(json.dumps({'status': 'unsafe', 'reason': exc.reason}))",
+        "expect": {
+          "status": "unsafe",
+          "reason": "too-large"
+        }
+      },
+      {
+        "name": "wrong-content-type",
+        "runtime": "python",
+        "code": "import sys, json\nsys.path.insert(0, 'scripts')\nimport identity_check as ic\nic.validate_url = lambda url, resolver=None: None\nclass Headers:\n    def get(self, key):\n        return 'image/png'\nclass Resp:\n    def __init__(self):\n        self.headers = Headers()\n        self.sent = False\n    def __enter__(self):\n        return self\n    def __exit__(self, *a):\n        return False\n    def read(self, n):\n        if self.sent:\n            return b''\n        self.sent = True\n        return b'x'\nclass Opener:\n    def open(self, req, timeout=None):\n        return Resp()\ntry:\n    ic.safe_open('https://example.com/', opener=Opener())\n    print(json.dumps({'status': 'ok'}))\nexcept ic.UnsafeUrl as exc:\n    print(json.dumps({'status': 'unsafe', 'reason': exc.reason}))",
+        "expect": {
+          "status": "unsafe",
+          "reason": "content-type"
+        }
+      }
+    ]
+  },
+  "expect": {
+    "all_pass": true
+  }
+}

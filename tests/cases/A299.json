@@ -1,0 +1,7 @@
+{
+  "id": "A299",
+  "title": "K-10 check_sources 不因新增来源条目失败（离线空配置可运行）",
+  "type": "check_sources_offline",
+  "input": {},
+  "expect": { "all_pass": true }
+}

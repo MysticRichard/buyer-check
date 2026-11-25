@@ -1,0 +1,17 @@
+{
+  "id": "A259",
+  "title": "K-02 phone_country 缺失：旧证据包不豁免，照常 +2",
+  "type": "lead_matrix",
+  "input": {
+    "fixture": "follow_up_base.json",
+    "cases": [
+      {
+        "name": "no-phone-country",
+        "flags": ["RF-CORP-005"],
+        "expect_hub_exception": null,
+        "expect_risk_score": 18
+      }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

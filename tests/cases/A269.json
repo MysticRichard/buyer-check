@@ -1,0 +1,19 @@
+{
+  "id": "A269",
+  "title": "K-04 海关画像：供应商不含 CN 时输出“替换或降本空间”固定提示",
+  "type": "render_card",
+  "input": {
+    "fixture": "follow_up_base.json",
+    "mutate_customs_profile": {
+      "freq_12m": "high",
+      "shipment_size": "lcl",
+      "main_hs": ["850110"],
+      "supplier_origins": ["DE", "TR"]
+    }
+  },
+  "expect": {
+    "status": "ok",
+    "customs_hint": "对方当前供应商主要来自其他地区：可能存在替换或降本空间，需结合对方需求核实。",
+    "risk_score": 0
+  }
+}

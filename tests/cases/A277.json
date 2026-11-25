@@ -1,0 +1,19 @@
+{
+  "id": "A277",
+  "title": "K-05 旧输出键不变，Python 与 Node 输出逐字段一致",
+  "type": "phone_variants",
+  "input": {
+    "cases": [
+      {
+        "name": "legacy-keys",
+        "number": "+971 52 555 0100",
+        "country": "AE",
+        "expect": {
+          "legacy_keys": ["input", "normalized", "valid", "invalid_reason", "country_code", "country", "country_name", "line_type", "claimed_country", "matches_claimed_country", "format_hint"],
+          "variants_count_max": 6
+        }
+      }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

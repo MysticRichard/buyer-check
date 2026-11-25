@@ -1,0 +1,21 @@
+{
+  "id": "A274",
+  "title": "K-05 号码搜索变体：10 位国内号码给出完整/后 8 位/两种 4-4 分组/后 7 位，去重且 ≤6 条",
+  "type": "phone_variants",
+  "input": {
+    "cases": [
+      {
+        "name": "ten-digit-gb-landline",
+        "number": "+44 20 7946 0958",
+        "country": "GB",
+        "expect": {
+          "variants_include": ["2079460958", "79460958", "7946-0958", "7946 0958", "9460958"],
+          "variants_count_max": 6,
+          "variants_unique": true,
+          "all_variants_min_length": 7
+        }
+      }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

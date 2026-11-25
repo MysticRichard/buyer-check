@@ -1,0 +1,20 @@
+{
+  "id": "A246",
+  "title": "K-01 跟进分级 C：供应商推销，低优先级标准回复",
+  "type": "lead_matrix",
+  "input": {
+    "fixture": "follow_up_base.json",
+    "cases": [
+      {
+        "name": "grade-c",
+        "signals": ["offers_seo_web_marketing"],
+        "expect_class": "vendor_solicitation",
+        "expect_follow_up_grade": "C",
+        "expect_follow_up_basis": ["lead_class:vendor_solicitation"],
+        "expect_follow_up_advice": "低优先级：用标准模板礼貌回复，不投入深查。",
+        "expect_card_includes_follow_up": "C"
+      }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

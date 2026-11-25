@@ -1,0 +1,22 @@
+{
+  "id": "A297",
+  "title": "K-08 INV-15 回归：制裁命中不自动计分，也不派生 RF-SAN-001",
+  "type": "render_card",
+  "input": {
+    "fixture_data": {
+      "subject": { "company": "Acme Example Trading", "country": "BR", "domain": "acme.example" },
+      "intake": { "inquiry_text": "We need 500 units of model X for our project.", "lead_signals": ["states_end_use_project", "names_product_model"] },
+      "coverage": { "checked": 8, "total": 8, "uncovered": [] },
+      "anchors": { "count": 3 },
+      "checks": [{ "id": "sanctions", "result": "matched" }],
+      "layers": {
+        "company": { "credibility": "high" },
+        "person_company_link": { "strength": "strong" },
+        "person_authenticity": { "level": "unknown" },
+        "compliance": { "sanctions": "unchecked", "negative": "unchecked" }
+      },
+      "display": { "customer_label": "Acme Example Trading", "inquiry_type": "general" }
+    }
+  },
+  "expect": { "status": "ok", "risk_score": 0, "derived_flags": [] }
+}

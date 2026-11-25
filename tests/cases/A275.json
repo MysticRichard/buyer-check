@@ -1,0 +1,16 @@
+{
+  "id": "A275",
+  "title": "K-05 号码过短：少于 7 位的变体被丢弃，search_variants 为空",
+  "type": "phone_variants",
+  "input": {
+    "cases": [
+      {
+        "name": "short-number",
+        "number": "+65 1234",
+        "country": "SG",
+        "expect": { "variants_empty": true }
+      }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

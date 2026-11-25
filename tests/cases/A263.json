@@ -1,0 +1,16 @@
+{
+  "id": "A263",
+  "title": "K-02 Python 与 Node 在枢纽例外（HK 号码、自称 CN）上输出一致",
+  "type": "render_card_parity",
+  "input": {
+    "fixture": "follow_up_base.json",
+    "mutate_flags": ["RF-CORP-005"],
+    "mutate_intake": { "phone_country": "HK" },
+    "mutate_identity": {
+      "candidates": [
+        { "name": "Ana Example", "country": "CN", "registry_id": "X1", "strength": "strong", "match_keys": ["legal_name", "domain"] }
+      ]
+    }
+  },
+  "expect": { "all_pass": true }
+}

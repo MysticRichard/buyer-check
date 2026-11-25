@@ -1,0 +1,16 @@
+{
+  "id": "A284",
+  "title": "K-07 TOCTOU：每次校验都用当前解析结果，第二次解析到内网即拒绝（残余风险见报告）",
+  "type": "safe_fetch",
+  "input": {
+    "cases": [
+      {
+        "name": "revalidate",
+        "runtime": "python",
+        "code": "import sys, json\nsys.path.insert(0, 'scripts')\nimport identity_check as ic\ncalls = []\ndef resolver(host, port, *a, **k):\n    calls.append(host)\n    if len(calls) > 1:\n        return [(2, 1, 6, '', ('10.0.0.5', 0))]\n    return [(2, 1, 6, '', ('93.184.216.34', 0))]\ntry:\n    ic.validate_url('https://example.com/', resolver=resolver)\n    ic.validate_url('https://example.com/', resolver=resolver)\n    print(json.dumps({'status': 'ok', 'calls': len(calls)}))\nexcept ic.UnsafeUrl as exc:\n    print(json.dumps({'status': 'unsafe', 'reason': exc.reason, 'calls': len(calls)}))",
+        "expect": { "status": "unsafe", "reason": "non-global-address", "calls": 2 }
+      }
+    ]
+  },
+  "expect": { "all_pass": true }
+}

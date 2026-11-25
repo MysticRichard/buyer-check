@@ -1,0 +1,10 @@
+{
+  "id": "A270",
+  "title": "K-04 海关画像：供应商来源为空时不输出跟进提示",
+  "type": "render_card",
+  "input": {
+    "fixture": "follow_up_base.json",
+    "mutate_customs_profile": { "freq_12m": "unknown", "shipment_size": "unknown", "main_hs": [], "supplier_origins": [] }
+  },
+  "expect": { "status": "ok", "customs_hint": null, "risk_score": 0 }
+}

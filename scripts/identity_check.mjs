@@ -102,15 +102,15 @@ export async function validateUrl(url, resolver = null) {
   return parsed;
 }
 
-async function safeFetch(url, timeoutMs, allowedTypes) {
+export async function safeFetch(url, timeoutMs, allowedTypes, fetchImpl = fetch, validateImpl = validateUrl) {
   let current = url;
   for (let hop = 0; hop <= SAFE_REDIRECTS; hop += 1) {
-    await validateUrl(current);
+    await validateImpl(current);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     let response;
     try {
-      response = await fetch(current, {
+      response = await fetchImpl(current, {
         headers: { 'User-Agent': USER_AGENT, Accept: allowedTypes.has('application/json') ? 'application/json' : 'text/html' },
         redirect: 'manual',
         signal: controller.signal,
@@ -130,9 +130,25 @@ async function safeFetch(url, timeoutMs, allowedTypes) {
     if (!response.ok) return null;
     const contentType = (response.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
     if (allowedTypes.size && !allowedTypes.has(contentType)) throw new UnsafeUrl('content-type');
-    const buffer = Buffer.from(await response.arrayBuffer());
-    if (buffer.length > MAX_FETCH_BYTES) throw new UnsafeUrl('too-large');
-    return buffer;
+    const reader = response.body && typeof response.body.getReader === 'function' ? response.body.getReader() : null;
+    if (!reader) {
+      const buffer = Buffer.from(await response.arrayBuffer());
+      if (buffer.length > MAX_FETCH_BYTES) throw new UnsafeUrl('too-large');
+      return buffer;
+    }
+    const chunks = [];
+    let total = 0;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.length;
+      if (total > MAX_FETCH_BYTES) {
+        try { await reader.cancel(); } catch { /* already aborted */ }
+        throw new UnsafeUrl('too-large');
+      }
+      chunks.push(Buffer.from(value));
+    }
+    return Buffer.concat(chunks);
   }
   throw new UnsafeUrl('too-many-redirects');
 }
@@ -517,7 +533,8 @@ async function googleMap(args, key) {
   let payload;
   try {
     payload = await fetchJson(`${GOOGLE_TEXTSEARCH}?${params.toString()}`, args.timeout * 1000);
-  } catch {
+  } catch (error) {
+    if (error instanceof UnsafeUrl) return { status: 'unsafe_url', command: 'map', source: 'google_places', reason: error.reason };
     return { status: 'unavailable', command: 'map', source: 'google_places', error: 'request-failed' };
   }
   const status = payload.status;
@@ -533,7 +550,8 @@ async function osmMap(args) {
   let payload;
   try {
     payload = await fetchJson(`${OSM_SEARCH}?${params.toString()}`, args.timeout * 1000);
-  } catch {
+  } catch (error) {
+    if (error instanceof UnsafeUrl) return { status: 'unsafe_url', command: 'map', source: 'osm_nominatim', reason: error.reason };
     return { status: 'unavailable', command: 'map', source: 'osm_nominatim', error: 'request-failed' };
   }
   if (!Array.isArray(payload)) {
@@ -708,6 +726,9 @@ async function registryCommand(args) {
     try {
       payload = await fetchJson(registryUrl, args.timeout * 1000);
     } catch (error) {
+      if (error instanceof UnsafeUrl) {
+        return { status: 'unsafe_url', command: 'registry', registry_url: registryUrl, reason: error.reason };
+      }
       const message = error && error.name === 'AbortError' ? 'timeout' : (error && error.code) || 'fetch-failed';
       return registryError(company, registryUrl, message);
     }
